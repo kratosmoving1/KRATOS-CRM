@@ -2,7 +2,6 @@
 
 import { Bell, Search, LogOut, Menu } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 
 interface HeaderProps {
   onMobileMenuToggle?: () => void
@@ -10,9 +9,11 @@ interface HeaderProps {
 
 export default function Header({ onMobileMenuToggle }: HeaderProps) {
   const router = useRouter()
-  const supabase = createClient()
 
   async function handleSignOut() {
+    // Lazy-import so the Supabase client is never created during SSR
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/admin/login')
     router.refresh()
@@ -52,7 +53,6 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-kratos" />
         </button>
 
-        {/* Avatar */}
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-kratos text-xs font-semibold text-slate-900 select-none">
           KM
         </div>
