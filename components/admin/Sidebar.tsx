@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -14,7 +15,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -46,14 +46,19 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center border-b border-slate-700 px-4">
+      <div className="flex h-16 items-center border-b border-slate-700 px-3">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-kratos text-slate-900">
-            <Truck size={16} strokeWidth={2.5} />
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Kratos"
+            width={32}
+            height={32}
+            className="shrink-0 object-contain"
+          />
           {!collapsed && (
-            <span className="whitespace-nowrap text-sm font-semibold tracking-tight text-white">
-              Kratos CRM
+            <span className="whitespace-nowrap text-sm font-semibold tracking-tight">
+              <span className="text-kratos">Kratos</span>
+              <span className="text-white"> CRM</span>
             </span>
           )}
         </div>

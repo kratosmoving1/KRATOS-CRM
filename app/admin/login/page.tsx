@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Truck, Loader2 } from 'lucide-react'
+import Image from 'next/image'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function LoginPage() {
@@ -36,12 +37,19 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-kratos shadow-lg shadow-kratos/30">
-            <Truck size={22} strokeWidth={2.5} className="text-slate-900" />
-          </div>
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <Image
+            src="/logo.png"
+            alt="Kratos Moving"
+            width={80}
+            height={80}
+            className="object-contain"
+          />
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-kratos">KRATOS CRM</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              <span className="text-kratos">Kratos</span>
+              <span className="text-slate-800"> CRM</span>
+            </h1>
             <p className="mt-1 text-xs text-slate-500 tracking-wide">Kratos Moving Inc.</p>
           </div>
         </div>

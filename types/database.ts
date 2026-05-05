@@ -41,6 +41,9 @@ export type Database = {
           full_name: string
           email: string | null
           phone: string | null
+          phone_type: string | null
+          secondary_phone: string | null
+          secondary_phone_type: string | null
           notes: string | null
           company_id: string | null
           created_at: string
@@ -59,12 +62,35 @@ export type Database = {
           lead_source_id: string | null
           service_type: 'local' | 'long_distance' | 'commercial' | 'packing' | 'storage' | 'international'
           status: 'new_lead' | 'contacted' | 'quote_sent' | 'accepted' | 'booked' | 'completed' | 'cancelled' | 'lost'
+          move_size: string | null
           total_amount: number
           estimated_cost: number
           service_date: string | null
           pickup_city: string | null
           dropoff_city: string | null
           notes: string | null
+          origin_address_1: string | null
+          origin_address_2: string | null
+          origin_city: string | null
+          origin_province: string | null
+          origin_postal_code: string | null
+          origin_dwelling_type: string | null
+          origin_floor: number | null
+          origin_has_elevator: boolean | null
+          origin_stairs: number | null
+          origin_long_carry: boolean | null
+          origin_parking_notes: string | null
+          dest_address_1: string | null
+          dest_address_2: string | null
+          dest_city: string | null
+          dest_province: string | null
+          dest_postal_code: string | null
+          dest_dwelling_type: string | null
+          dest_floor: number | null
+          dest_has_elevator: boolean | null
+          dest_stairs: number | null
+          dest_long_carry: boolean | null
+          dest_parking_notes: string | null
           contacted_at: string | null
           quote_sent_at: string | null
           accepted_at: string | null
@@ -92,6 +118,41 @@ export type Database = {
         }
         Insert: Omit<Database['public']['Tables']['audit_log']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['audit_log']['Insert']>
+      }
+      tasks: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          due_date: string | null
+          due_time: string | null
+          priority: 'low' | 'normal' | 'high' | 'urgent'
+          assigned_to_id: string | null
+          created_by_id: string | null
+          opportunity_id: string | null
+          status: 'pending' | 'completed' | 'cancelled'
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['tasks']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['tasks']['Insert']>
+      }
+      follow_ups: {
+        Row: {
+          id: string
+          follow_up_date: string
+          follow_up_time: string | null
+          type: 'call' | 'email' | 'sms' | 'in_person' | 'other'
+          notes: string | null
+          assigned_to_id: string | null
+          created_by_id: string | null
+          opportunity_id: string | null
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['follow_ups']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['follow_ups']['Insert']>
       }
     }
   }

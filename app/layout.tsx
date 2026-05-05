@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { Toaster } from 'sonner'
 import './globals.css'
 
 const inter = Inter({
@@ -9,8 +10,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Kratos CRM',
+  title: { default: 'Kratos CRM', template: '%s | Kratos CRM' },
   description: 'Internal CRM for Kratos Moving Inc.',
+  icons: { icon: '/logo.png', shortcut: '/logo.png', apple: '/logo.png' },
 }
 
 export default function RootLayout({
@@ -20,7 +22,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster position="bottom-right" richColors />
+      </body>
     </html>
   )
 }
