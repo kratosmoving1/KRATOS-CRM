@@ -47,7 +47,9 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
     if (!form.customer_phone.trim()) errs.customer_phone = 'Required'
     else if (form.customer_phone.replace(/\D/g,'').length !== 10) errs.customer_phone = 'Must be 10 digits'
     if (form.customer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.customer_email)) errs.customer_email = 'Invalid email'
-    if (!form.lead_source_id) errs.lead_source_id = 'Required'
+    if (!form.service_date_tbd && !form.service_date) errs.service_date = 'Set a date or check TBD'
+    if (!form.move_size) errs.move_size = 'Required'
+    // lead_source_id is optional
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -63,7 +65,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({
           ...form,
           customer_phone: form.customer_phone.replace(/\D/g,''),
-          status: 'new_lead',
+          status: 'opportunity',
         }),
       })
       const json = await res.json()
@@ -132,7 +134,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
         <div>
           <Input label="Move Date" type="date" required={!form.service_date_tbd}
             value={form.service_date} onChange={e => update('service_date', e.target.value)}
-            disabled={form.service_date_tbd} />
+            disabled={form.service_date_tbd} error={errors.service_date} />
           <label className="mt-2 flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={form.service_date_tbd}
               onChange={e => update('service_date_tbd', e.target.checked)}
@@ -143,12 +145,12 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-4">
           <Select label="Type of Service" value={form.service_type} onChange={e => update('service_type', e.target.value)}
             options={SERVICE_TYPES.map(s => ({ value: s.value, label: s.label }))} />
-          <Select label="Move Size" placeholder="Select…" value={form.move_size}
-            onChange={e => update('move_size', e.target.value)}
+          <Select label="Move Size" required placeholder="Select…" value={form.move_size}
+            onChange={e => update('move_size', e.target.value)} error={errors.move_size}
             options={MOVE_SIZES.map(s => ({ value: s.value, label: s.label }))} />
         </div>
-        <Select label="Referral Source" required placeholder="Select source…" value={form.lead_source_id}
-          onChange={e => update('lead_source_id', e.target.value)} error={errors.lead_source_id}
+        <Select label="Referral Source" placeholder="Select source…" value={form.lead_source_id}
+          onChange={e => update('lead_source_id', e.target.value)}
           options={leadSources.map(ls => ({ value: ls.id, label: ls.name }))} />
       </div>
     </ModalShell>

@@ -71,35 +71,42 @@ export const FOLLOW_UP_TYPES = [
 ] as const
 
 export const OPP_STATUSES = [
-  { value: 'new_lead',   label: 'New Lead',    color: 'blue' },
-  { value: 'contacted',  label: 'Contacted',   color: 'cyan' },
-  { value: 'quote_sent', label: 'Quote Sent',  color: 'purple' },
-  { value: 'accepted',   label: 'Accepted',    color: 'amber' },
-  { value: 'booked',     label: 'Booked',      color: 'green' },
-  { value: 'completed',  label: 'Completed',   color: 'emerald' },
-  { value: 'cancelled',  label: 'Cancelled',   color: 'slate' },
-  { value: 'lost',       label: 'Lost',        color: 'red' },
+  { value: 'opportunity', label: 'Opportunity', color: 'green' },
+  { value: 'booked',      label: 'Booked',      color: 'orange' },
+  { value: 'completed',   label: 'Completed',   color: 'blue' },
+  { value: 'closed',      label: 'Closed',      color: 'slate' },
+  { value: 'cancelled',   label: 'Cancelled',   color: 'red' },
 ] as const
 
 export type OppStatus = typeof OPP_STATUSES[number]['value']
 
 export const STATUS_TRANSITIONS: Record<OppStatus, OppStatus[]> = {
-  new_lead:   ['contacted', 'quote_sent', 'lost'],
-  contacted:  ['quote_sent', 'accepted', 'lost'],
-  quote_sent: ['accepted', 'booked', 'cancelled', 'lost'],
-  accepted:   ['booked', 'cancelled', 'lost'],
-  booked:     ['completed', 'cancelled'],
-  completed:  [],
-  cancelled:  ['new_lead'],
-  lost:       ['new_lead'],
+  opportunity: ['booked', 'cancelled'],
+  booked:      ['completed', 'cancelled'],
+  completed:   ['closed', 'cancelled'],
+  closed:      [],
+  cancelled:   ['opportunity'],
 }
 
 export const STATUS_TIMESTAMP_MAP: Partial<Record<OppStatus, string>> = {
-  contacted:  'contacted_at',
-  quote_sent: 'quote_sent_at',
-  accepted:   'accepted_at',
-  booked:     'booked_at',
-  completed:  'completed_at',
-  cancelled:  'cancelled_at',
-  lost:       'lost_at',
+  booked:    'booked_at',
+  completed: 'completed_at',
+  closed:    'closed_at',
+  cancelled: 'cancelled_at',
+}
+
+export const MOVE_SIZE_VOLUME: Record<string, { cuft: number; lbs: number }> = {
+  studio:        { cuft: 250,  lbs: 1750 },
+  '1_bed':       { cuft: 500,  lbs: 3500 },
+  '2_bed':       { cuft: 800,  lbs: 5600 },
+  '3_bed':       { cuft: 1100, lbs: 7700 },
+  '4_bed':       { cuft: 1400, lbs: 9800 },
+  '5_bed_plus':  { cuft: 1700, lbs: 11900 },
+  small_office:  { cuft: 500,  lbs: 3500 },
+  medium_office: { cuft: 900,  lbs: 6300 },
+  large_office:  { cuft: 1400, lbs: 9800 },
+  pod:           { cuft: 200,  lbs: 1400 },
+  partial:       { cuft: 300,  lbs: 2100 },
+  few_items:     { cuft: 100,  lbs: 700  },
+  other:         { cuft: 500,  lbs: 3500 },
 }

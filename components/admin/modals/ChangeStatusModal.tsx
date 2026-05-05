@@ -21,7 +21,7 @@ export default function ChangeStatusModal({ opportunityId, currentStatus, onClos
   const [error, setError] = useState<string | null>(null)
 
   const available = STATUS_TRANSITIONS[currentStatus] ?? []
-  const requiresReason = selected === 'lost' || selected === 'cancelled'
+  const requiresReason = selected === 'cancelled'
 
   async function handleSubmit() {
     if (!selected) { setError('Please select a status'); return }

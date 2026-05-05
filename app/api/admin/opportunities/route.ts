@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Build opportunity payload — only include session-2 cols if they exist
-  const status = (body.status ?? 'new_lead') as OppStatus
+  const status = (body.status ?? 'opportunity') as OppStatus
   const nowIso = new Date().toISOString()
   const tsKey  = STATUS_TIMESTAMP_MAP[status]
 

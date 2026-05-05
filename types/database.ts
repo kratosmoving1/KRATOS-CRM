@@ -61,7 +61,7 @@ export type Database = {
           sales_agent_id: string | null
           lead_source_id: string | null
           service_type: 'local' | 'long_distance' | 'commercial' | 'packing' | 'storage' | 'international'
-          status: 'new_lead' | 'contacted' | 'quote_sent' | 'accepted' | 'booked' | 'completed' | 'cancelled' | 'lost'
+          status: 'opportunity' | 'booked' | 'completed' | 'closed' | 'cancelled'
           move_size: string | null
           total_amount: number
           estimated_cost: number
@@ -91,13 +91,10 @@ export type Database = {
           dest_stairs: number | null
           dest_long_carry: boolean | null
           dest_parking_notes: string | null
-          contacted_at: string | null
-          quote_sent_at: string | null
-          accepted_at: string | null
           booked_at: string | null
           completed_at: string | null
+          closed_at: string | null
           cancelled_at: string | null
-          lost_at: string | null
           company_id: string | null
           created_at: string
           updated_at: string
@@ -153,6 +150,27 @@ export type Database = {
         }
         Insert: Omit<Database['public']['Tables']['follow_ups']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['follow_ups']['Insert']>
+      }
+      communications: {
+        Row: {
+          id: string
+          opportunity_id: string | null
+          customer_id: string | null
+          type: 'note' | 'email' | 'call' | 'sms'
+          direction: 'inbound' | 'outbound' | 'internal' | null
+          subject: string | null
+          body: string
+          call_outcome: 'connected' | 'voicemail' | 'no_answer' | 'wrong_number' | 'busy' | null
+          call_duration_seconds: number | null
+          email_to: string | null
+          email_cc: string | null
+          created_by: string | null
+          company_id: string | null
+          created_at: string
+          is_deleted: boolean
+        }
+        Insert: Omit<Database['public']['Tables']['communications']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['communications']['Insert']>
       }
     }
   }

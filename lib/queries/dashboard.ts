@@ -7,14 +7,14 @@ export interface DashboardData {
   avgProfitPerCustomer: number
   avgMoveValueThisMonth: number
   activity: {
-    today: { leads: number; quotesSent: number; booked: number; cancellations: number }
-    week:  { leads: number; quotesSent: number; booked: number; cancellations: number }
-    month: { leads: number; quotesSent: number; booked: number; cancellations: number }
+    today: { leads: number; opportunities: number; booked: number; cancellations: number }
+    week:  { leads: number; opportunities: number; booked: number; cancellations: number }
+    month: { leads: number; opportunities: number; booked: number; cancellations: number }
   }
   openItems: {
     unassignedLeads: number
     newLeads: number
-    acceptedNotBooked: number
+    bookedToday: number
     staleOpportunities: number
   }
   salesLeaders: Array<{

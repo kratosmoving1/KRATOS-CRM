@@ -6,6 +6,7 @@ import { Loader2, Plus, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import ModalShell from '@/components/ui/ModalShell'
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/FormField'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import {
   SERVICE_TYPES, MOVE_SIZES, PHONE_TYPES, DWELLING_TYPES,
   CANADIAN_PROVINCES,
@@ -105,7 +106,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     if (!s1.service_date_tbd && !s1.service_date) errs.service_date = 'Set a date or check TBD'
     if (!s1.service_type) errs.service_type = 'Required'
     if (!s1.move_size)    errs.move_size    = 'Required'
-    if (!s1.lead_source_id) errs.lead_source_id = 'Required'
+    // lead_source_id is optional
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -346,11 +347,9 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
 
           <Select
             label="Referral Source"
-            required
             placeholder="Select source…"
             value={s1.lead_source_id}
             onChange={e => updateS1('lead_source_id', e.target.value)}
-            error={errors.lead_source_id}
             options={leadSources.map(ls => ({ value: ls.id, label: ls.name }))}
           />
         </div>
@@ -367,10 +366,19 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{prefix}</p>
 
-            <Input
+            <AddressAutocomplete
               label="Address Line 1"
               value={addr.address_1}
-              onChange={e => updateAddr(side, setAddr, 'address_1', e.target.value)}
+              onChange={v => updateAddr(side, setAddr, 'address_1', v)}
+              onSelect={parts => {
+                setAddr(prev => ({
+                  ...prev,
+                  address_1:   parts.address_1  || prev.address_1,
+                  city:        parts.city        || prev.city,
+                  province:    parts.province    || prev.province,
+                  postal_code: parts.postal_code || prev.postal_code,
+                }))
+              }}
               placeholder="123 Main St"
             />
             <Input
