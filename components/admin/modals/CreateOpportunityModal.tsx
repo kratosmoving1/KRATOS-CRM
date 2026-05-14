@@ -20,14 +20,14 @@ const STEPS = [
 ]
 
 type AddressForm = {
-  address_1: string; address_2: string; city: string; province: string
+  address_line1: string; address_line2: string; city: string; province: string
   postal_code: string; place_id: string; dwelling_type: string; floor: string
-  has_elevator: boolean; stairs: string; long_carry: boolean; parking_notes: string
+  has_elevator: boolean; stairs_count: string; long_carry: boolean; parking_notes: string
 }
 
 const emptyAddress = (): AddressForm => ({
-  address_1: '', address_2: '', city: '', province: '', postal_code: '', place_id: '',
-  dwelling_type: '', floor: '', has_elevator: false, stairs: '', long_carry: false, parking_notes: '',
+  address_line1: '', address_line2: '', city: '', province: '', postal_code: '', place_id: '',
+  dwelling_type: '', floor: '', has_elevator: false, stairs_count: '', long_carry: false, parking_notes: '',
 })
 
 type Step1Form = {
@@ -125,8 +125,8 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     service_type:                s1.service_type,
     move_size:                   s1.move_size || null,
     lead_source_id:              s1.lead_source_id || null,
-    origin_address_line1:  origin.address_1    || null,
-    origin_address_line2:  origin.address_2    || null,
+    origin_address_line1:  origin.address_line1 || null,
+    origin_address_line2:  origin.address_line2 || null,
     origin_city:           origin.city         || null,
     origin_province:       origin.province     || null,
     origin_postal_code:    origin.postal_code  || null,
@@ -134,11 +134,11 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     origin_dwelling_type:  origin.dwelling_type || null,
     origin_floor:          origin.floor ? parseInt(origin.floor) : null,
     origin_has_elevator:   origin.has_elevator || null,
-    origin_stairs:         origin.stairs ? parseInt(origin.stairs) : null,
+    origin_stairs_count:   origin.stairs_count ? parseInt(origin.stairs_count) : null,
     origin_long_carry:     origin.long_carry   || null,
     origin_parking_notes:  origin.parking_notes || null,
-    dest_address_line1:    dest.address_1      || null,
-    dest_address_line2:    dest.address_2      || null,
+    dest_address_line1:    dest.address_line1  || null,
+    dest_address_line2:    dest.address_line2  || null,
     dest_city:             dest.city           || null,
     dest_province:         dest.province       || null,
     dest_postal_code:      dest.postal_code    || null,
@@ -146,7 +146,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     dest_dwelling_type:    dest.dwelling_type  || null,
     dest_floor:            dest.floor ? parseInt(dest.floor) : null,
     dest_has_elevator:     dest.has_elevator   || null,
-    dest_stairs:           dest.stairs ? parseInt(dest.stairs) : null,
+    dest_stairs_count:     dest.stairs_count ? parseInt(dest.stairs_count) : null,
     dest_long_carry:       dest.long_carry     || null,
     dest_parking_notes:    dest.parking_notes  || null,
   }), [s1, origin, dest])
@@ -367,7 +367,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
         function applyParsed(parsed: ParsedAddress) {
           setAddr(prev => ({
             ...prev,
-            address_1:   parsed.addressLine1 || prev.address_1,
+            address_line1: parsed.addressLine1 || prev.address_line1,
             city:        parsed.city         || prev.city,
             province:    parsed.province     || prev.province,
             postal_code: parsed.postalCode   || prev.postal_code,
@@ -384,10 +384,10 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
                 Address
               </label>
               <AddressAutocomplete
-                value={addr.address_1}
+                value={addr.address_line1}
                 onChange={v => {
-                  setAddr(prev => ({ ...prev, address_1: v, city: '', province: '', postal_code: '', place_id: '' }))
-                  setErrors(e => { const n = { ...e }; delete n[`${side}_address_1`]; return n })
+                  setAddr(prev => ({ ...prev, address_line1: v, city: '', province: '', postal_code: '', place_id: '' }))
+                  setErrors(e => { const n = { ...e }; delete n[`${side}_address_line1`]; return n })
                 }}
                 onSelect={applyParsed}
                 hasSelected={Boolean(addr.city)}
@@ -403,8 +403,8 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
 
             <Input
               label="Apt / Unit / Suite"
-              value={addr.address_2}
-              onChange={e => updateAddr(side, setAddr, 'address_2', e.target.value)}
+              value={addr.address_line2}
+              onChange={e => updateAddr(side, setAddr, 'address_line2', e.target.value)}
               placeholder="Unit 4B (optional)"
               autoComplete="off"
             />
@@ -442,8 +442,8 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
                 label="Number of Stairs"
                 type="number"
                 min={0}
-                value={addr.stairs}
-                onChange={e => updateAddr(side, setAddr, 'stairs', e.target.value)}
+                value={addr.stairs_count}
+                onChange={e => updateAddr(side, setAddr, 'stairs_count', e.target.value)}
                 placeholder="0"
               />
               <div className="flex items-end pb-2">

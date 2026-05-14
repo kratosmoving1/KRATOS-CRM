@@ -78,7 +78,7 @@ export type Database = {
           origin_dwelling_type: string | null
           origin_floor: number | null
           origin_has_elevator: boolean | null
-          origin_stairs: number | null
+          origin_stairs_count: number | null
           origin_long_carry: boolean | null
           origin_parking_notes: string | null
           dest_address_line1: string | null
@@ -90,13 +90,17 @@ export type Database = {
           dest_dwelling_type: string | null
           dest_floor: number | null
           dest_has_elevator: boolean | null
-          dest_stairs: number | null
+          dest_stairs_count: number | null
           dest_long_carry: boolean | null
           dest_parking_notes: string | null
           booked_at: string | null
+          contacted_at: string | null
+          quote_sent_at: string | null
+          accepted_at: string | null
           completed_at: string | null
           closed_at: string | null
           cancelled_at: string | null
+          lost_at: string | null
           company_id: string | null
           created_at: string
           updated_at: string

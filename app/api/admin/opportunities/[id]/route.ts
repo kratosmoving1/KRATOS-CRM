@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
+import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -60,10 +61,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Update pickup_city/dropoff_city when origin/dest cities change
   if (body.origin_city !== undefined) body.pickup_city  = body.origin_city
   if (body.dest_city   !== undefined) body.dropoff_city = body.dest_city
+  if (body.move_size !== undefined) body.move_size = normalizeMoveSizeForDb(body.move_size)
+
+  const updatePayload = stripUnknownOpportunityColumns(body)
 
   const { data, error } = await supabase
     .from('opportunities')
-    .update(body)
+    .update(updatePayload)
     .eq('id', params.id)
     .select()
     .single()
@@ -76,7 +80,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const action = isStatusChange ? 'status_change' : 'update'
   const diff = isStatusChange
     ? { from: current?.status, to: body.status, reason: body._reason ?? null }
-    : body
+    : updatePayload
 
   await supabase.from('audit_log').insert({
     user_id:     user.id,

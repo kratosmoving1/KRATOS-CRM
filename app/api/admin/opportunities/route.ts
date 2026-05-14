@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
+import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
 
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
     lead_source_id:     body.lead_source_id ?? null,
     service_type:       body.service_type ?? 'local',
     status,
-    move_size:          body.move_size ?? null,
+    move_size:          normalizeMoveSizeForDb(body.move_size) ?? null,
     service_date:       body.service_date ?? null,
     notes:              body.notes ?? null,
     total_amount:       body.total_amount ?? 0,
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
     origin_dwelling_type:  body.origin_dwelling_type  ?? null,
     origin_floor:          body.origin_floor          ?? null,
     origin_has_elevator:   body.origin_has_elevator   ?? null,
-    origin_stairs:         body.origin_stairs         ?? null,
+    origin_stairs_count:   body.origin_stairs_count   ?? null,
     origin_long_carry:     body.origin_long_carry     ?? null,
     origin_parking_notes:  body.origin_parking_notes  ?? null,
     // destination
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
     dest_dwelling_type:    body.dest_dwelling_type    ?? null,
     dest_floor:            body.dest_floor            ?? null,
     dest_has_elevator:     body.dest_has_elevator     ?? null,
-    dest_stairs:           body.dest_stairs           ?? null,
+    dest_stairs_count:     body.dest_stairs_count     ?? null,
     dest_long_carry:       body.dest_long_carry       ?? null,
     dest_parking_notes:    body.dest_parking_notes    ?? null,
     // pickup/dropoff cities for backward compat with dashboard
@@ -146,10 +147,11 @@ export async function POST(req: NextRequest) {
     dropoff_city:          body.dest_city             ?? null,
   }
   if (tsKey) oppPayload[tsKey] = nowIso
+  const insertPayload = stripUnknownOpportunityColumns(oppPayload)
 
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
-    .insert(oppPayload)
+    .insert(insertPayload)
     .select()
     .single()
 

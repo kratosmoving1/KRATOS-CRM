@@ -51,13 +51,13 @@ interface OppDetail {
   origin_city: string | null; origin_province: string | null
   origin_postal_code: string | null; origin_dwelling_type: string | null
   origin_floor: number | null; origin_has_elevator: boolean | null
-  origin_stairs: number | null; origin_long_carry: boolean | null
+  origin_stairs_count: number | null; origin_long_carry: boolean | null
   origin_parking_notes: string | null
   dest_address_line1: string | null; dest_address_line2: string | null
   dest_city: string | null; dest_province: string | null
   dest_postal_code: string | null; dest_dwelling_type: string | null
   dest_floor: number | null; dest_has_elevator: boolean | null
-  dest_stairs: number | null; dest_long_carry: boolean | null
+  dest_stairs_count: number | null; dest_long_carry: boolean | null
   dest_parking_notes: string | null
   created_at: string; updated_at: string
   customer: {
@@ -94,7 +94,7 @@ function AddressBlock({ prefix, data }: { prefix: 'origin' | 'dest'; data: OppDe
   const dwelling = isOrigin ? data.origin_dwelling_type : data.dest_dwelling_type
   const floor    = isOrigin ? data.origin_floor         : data.dest_floor
   const elevator = isOrigin ? data.origin_has_elevator  : data.dest_has_elevator
-  const stairs   = isOrigin ? data.origin_stairs        : data.dest_stairs
+  const stairs   = isOrigin ? data.origin_stairs_count  : data.dest_stairs_count
   const longCarry= isOrigin ? data.origin_long_carry    : data.dest_long_carry
   const parking  = isOrigin ? data.origin_parking_notes : data.dest_parking_notes
   const hasAddress = addr1 || city

@@ -21,16 +21,15 @@ interface Props {
   hasSelected?: boolean;
 }
 
-// Module-level singletons — load once per page session
-let loadPromise: Promise<google.maps.PlacesLibrary> | null = null;
-let autocompleteService: google.maps.places.AutocompleteService | null = null;
-let placesService: google.maps.places.PlacesService | null = null;
+let loadPromise: Promise<google.maps.PlacesLibrary | null> | null = null;
 
-function getPlaces(): Promise<google.maps.PlacesLibrary> {
+function getPlaces(): Promise<google.maps.PlacesLibrary | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
   if (!loadPromise) {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      loadPromise = Promise.reject(new Error('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY not set'));
+      console.error('[AddressAutocomplete] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set');
+      loadPromise = Promise.resolve(null);
     } else {
       setOptions({ key: apiKey, v: 'weekly' });
       loadPromise = importLibrary('places') as Promise<google.maps.PlacesLibrary>;
@@ -50,27 +49,37 @@ export function AddressAutocomplete({
   const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
+  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    let cancelled = false;
     getPlaces()
       .then((places) => {
-        if (!autocompleteService) {
-          autocompleteService = new places.AutocompleteService();
+        if (cancelled) return;
+        if (!places) {
+          setLoadStatus('error');
+          setErrorMessage('Address autocomplete unavailable — API key not configured.');
+          return;
         }
-        if (!placesService) {
-          const hiddenDiv = document.createElement('div');
-          placesService = new places.PlacesService(hiddenDiv);
-        }
-        setIsReady(true);
+        autocompleteServiceRef.current = new places.AutocompleteService();
+        const hiddenDiv = document.createElement('div');
+        placesServiceRef.current = new places.PlacesService(hiddenDiv);
+        setLoadStatus('ready');
+        setErrorMessage(null);
       })
-      .catch((err: Error) => {
-        setLoadError(err.message || 'Failed to load address autocomplete');
+      .catch((err) => {
+        console.error('[AddressAutocomplete] load error:', err);
+        if (!cancelled) {
+          setLoadStatus('error');
+          setErrorMessage('Address autocomplete failed to load. Check console.');
+        }
       });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -84,21 +93,27 @@ export function AddressAutocomplete({
   }, []);
 
   const fetchSuggestions = useCallback((query: string) => {
-    if (!autocompleteService || !query || query.length < 2) {
+    if (!autocompleteServiceRef.current || !query || query.length < 2) {
       setSuggestions([]);
       setIsOpen(false);
       return;
     }
-    autocompleteService.getPlacePredictions(
+    autocompleteServiceRef.current.getPlacePredictions(
       { input: query, componentRestrictions: { country: 'ca' } },
       (predictions, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
           setSuggestions(predictions);
           setIsOpen(true);
           setHighlightedIndex(0);
-        } else {
+          setErrorMessage(null);
+        } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
           setSuggestions([]);
           setIsOpen(false);
+        } else {
+          console.warn('[AddressAutocomplete] Places API status:', status);
+          setSuggestions([]);
+          setIsOpen(false);
+          setErrorMessage(`Places API: ${status}`);
         }
       }
     );
@@ -116,7 +131,7 @@ export function AddressAutocomplete({
     setSuggestions([]);
     onChange(prediction.description);
 
-    if (!placesService) {
+    if (!placesServiceRef.current) {
       onSelect({
         fullAddress: prediction.description,
         addressLine1: prediction.description,
@@ -128,10 +143,14 @@ export function AddressAutocomplete({
       return;
     }
 
-    placesService.getDetails(
+    placesServiceRef.current.getDetails(
       { placeId: prediction.place_id, fields: ['address_components', 'formatted_address'] },
       (place, status) => {
         if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+          if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+            console.warn('[AddressAutocomplete] Place details status:', status);
+            setErrorMessage(`Places API: ${status}`);
+          }
           onSelect({
             fullAddress: prediction.description,
             addressLine1: prediction.description,
@@ -166,6 +185,7 @@ export function AddressAutocomplete({
           postalCode,
           placeId: prediction.place_id,
         });
+        setErrorMessage(null);
       }
     );
   }
@@ -196,10 +216,9 @@ export function AddressAutocomplete({
           onFocus={() => { if (suggestions.length > 0) setIsOpen(true); }}
           onKeyDown={handleKeyDown}
           placeholder={
-            loadError ? 'Enter address manually' : isReady ? placeholder : 'Loading...'
+            loadStatus === 'loading' ? 'Loading address autocomplete…' : placeholder
           }
           className={className}
-          disabled={!isReady && !loadError}
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -234,7 +253,7 @@ export function AddressAutocomplete({
         </ul>
       )}
 
-      {loadError && <p className="text-xs text-red-500 mt-1">{loadError}</p>}
+      {errorMessage && <p className="text-xs text-red-500 mt-1">{errorMessage}</p>}
     </div>
   );
 }

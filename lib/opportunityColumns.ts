@@ -1,0 +1,84 @@
+export const ALLOWED_OPPORTUNITY_COLUMNS = [
+  'opportunity_number',
+  'customer_id',
+  'sales_agent_id',
+  'lead_source_id',
+  'service_type',
+  'status',
+  'move_size',
+  'total_amount',
+  'estimated_cost',
+  'service_date',
+  'pickup_city',
+  'dropoff_city',
+  'notes',
+  'origin_address_line1',
+  'origin_address_line2',
+  'origin_city',
+  'origin_province',
+  'origin_postal_code',
+  'origin_place_id',
+  'origin_dwelling_type',
+  'origin_floor',
+  'origin_has_elevator',
+  'origin_stairs_count',
+  'origin_long_carry',
+  'origin_parking_notes',
+  'dest_address_line1',
+  'dest_address_line2',
+  'dest_city',
+  'dest_province',
+  'dest_postal_code',
+  'dest_place_id',
+  'dest_dwelling_type',
+  'dest_floor',
+  'dest_has_elevator',
+  'dest_stairs_count',
+  'dest_long_carry',
+  'dest_parking_notes',
+  'booked_at',
+  'contacted_at',
+  'quote_sent_at',
+  'accepted_at',
+  'completed_at',
+  'closed_at',
+  'cancelled_at',
+  'lost_at',
+  'company_id',
+  'is_deleted',
+] as const
+
+const ALLOWED_OPPORTUNITY_COLUMN_SET = new Set<string>(ALLOWED_OPPORTUNITY_COLUMNS)
+
+export function stripUnknownOpportunityColumns(payload: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => ALLOWED_OPPORTUNITY_COLUMN_SET.has(key)),
+  )
+}
+
+const MOVE_SIZE_DB_VALUES: Record<string, string> = {
+  studio_apartment: 'studio',
+  '1_bedroom_house': '1_bedroom',
+  '2_bedroom_house': '2_bedroom',
+  '3_bedroom_house': '3_bedroom',
+  '4_bedroom_house': '4_bedroom',
+  '5_bedroom_house_plus': '5_bedroom_plus',
+  '1_bedroom_apartment': '1_bedroom',
+  '2_bedroom_apartment': '2_bedroom',
+  '3_bedroom_apartment': '3_bedroom',
+  '4_bedroom_apartment': '4_bedroom',
+  storage_5x5: 'storage',
+  storage_5x10: 'storage',
+  storage_10x10: 'storage',
+  storage_10x15: 'storage',
+  storage_10x20: 'storage',
+  storage_10x25: 'storage',
+  storage_10x30: 'storage',
+  small_office: 'office',
+  medium_office: 'office',
+  large_office: 'office',
+}
+
+export function normalizeMoveSizeForDb(value: unknown) {
+  return typeof value === 'string' ? MOVE_SIZE_DB_VALUES[value] ?? value : value
+}
