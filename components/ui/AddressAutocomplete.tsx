@@ -46,15 +46,16 @@ export function AddressAutocomplete({
   className = '',
   hasSelected = false,
 }: Props) {
-  const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [suggestions, setSuggestions] = useState<google.maps.places.PlacePrediction[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
+  const placesLibraryRef = useRef<google.maps.PlacesLibrary | null>(null);
+  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,9 +67,7 @@ export function AddressAutocomplete({
           setErrorMessage('Address autocomplete unavailable — API key not configured.');
           return;
         }
-        autocompleteServiceRef.current = new places.AutocompleteService();
-        const hiddenDiv = document.createElement('div');
-        placesServiceRef.current = new places.PlacesService(hiddenDiv);
+        placesLibraryRef.current = places;
         setLoadStatus('ready');
         setErrorMessage(null);
       })
@@ -92,31 +91,46 @@ export function AddressAutocomplete({
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  const fetchSuggestions = useCallback((query: string) => {
-    if (!autocompleteServiceRef.current || !query || query.length < 2) {
+  const fetchSuggestions = useCallback(async (query: string) => {
+    const places = placesLibraryRef.current;
+    const seq = ++requestSeqRef.current;
+
+    if (!places || !query || query.length < 2) {
       setSuggestions([]);
       setIsOpen(false);
       return;
     }
-    autocompleteServiceRef.current.getPlacePredictions(
-      { input: query, componentRestrictions: { country: 'ca' } },
-      (predictions, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-          setSuggestions(predictions);
-          setIsOpen(true);
-          setHighlightedIndex(0);
-          setErrorMessage(null);
-        } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-          setSuggestions([]);
-          setIsOpen(false);
-        } else {
-          console.warn('[AddressAutocomplete] Places API status:', status);
-          setSuggestions([]);
-          setIsOpen(false);
-          setErrorMessage(`Places API: ${status}`);
-        }
+
+    try {
+      if (!sessionTokenRef.current) {
+        sessionTokenRef.current = new places.AutocompleteSessionToken();
       }
-    );
+
+      const { suggestions: nextSuggestions } =
+        await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: query,
+          includedRegionCodes: ['ca'],
+          region: 'ca',
+          sessionToken: sessionTokenRef.current,
+        });
+
+      if (seq !== requestSeqRef.current) return;
+
+      const placePredictions = nextSuggestions
+        .map((suggestion) => suggestion.placePrediction)
+        .filter((prediction): prediction is google.maps.places.PlacePrediction => Boolean(prediction));
+
+      setSuggestions(placePredictions);
+      setIsOpen(placePredictions.length > 0);
+      setHighlightedIndex(0);
+      setErrorMessage(null);
+    } catch (err) {
+      console.warn('[AddressAutocomplete] Places API error:', err);
+      if (seq !== requestSeqRef.current) return;
+      setSuggestions([]);
+      setIsOpen(false);
+      setErrorMessage(`Places API: ${getGoogleErrorMessage(err)}`);
+    }
   }, []);
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -126,68 +140,57 @@ export function AddressAutocomplete({
     debounceRef.current = setTimeout(() => fetchSuggestions(v), 250);
   }
 
-  function handleSelect(prediction: google.maps.places.AutocompletePrediction) {
+  async function handleSelect(prediction: google.maps.places.PlacePrediction) {
+    const description = prediction.text?.text || prediction.mainText?.text || '';
     setIsOpen(false);
     setSuggestions([]);
-    onChange(prediction.description);
+    onChange(description);
 
-    if (!placesServiceRef.current) {
+    try {
+      const place = prediction.toPlace();
+      const { place: placeDetails } = await place.fetchFields({
+        fields: ['addressComponents', 'formattedAddress'],
+      });
+
+      const comps = placeDetails.addressComponents ?? [];
+      const get = (type: string, short = false) => {
+        const c = comps.find(x => x.types.includes(type));
+        return c ? ((short ? c.shortText : c.longText) ?? '') : '';
+      };
+      const addressLine1 =
+        [get('street_number'), get('route')].filter(Boolean).join(' ') ||
+        prediction.mainText?.text ||
+        '';
+      const city =
+        get('locality') ||
+        get('sublocality_level_1') ||
+        get('sublocality') ||
+        get('postal_town');
+      const province = get('administrative_area_level_1', true);
+      const postalCode = get('postal_code');
+
       onSelect({
-        fullAddress: prediction.description,
-        addressLine1: prediction.description,
+        fullAddress: placeDetails.formattedAddress || description,
+        addressLine1,
+        city,
+        province,
+        postalCode,
+        placeId: prediction.placeId,
+      });
+      sessionTokenRef.current = null;
+      setErrorMessage(null);
+    } catch (err) {
+      console.warn('[AddressAutocomplete] Place details error:', err);
+      setErrorMessage(`Places API: ${getGoogleErrorMessage(err)}`);
+      onSelect({
+        fullAddress: description,
+        addressLine1: description,
         city: '',
         province: '',
         postalCode: '',
-        placeId: prediction.place_id,
+        placeId: prediction.placeId,
       });
-      return;
     }
-
-    placesServiceRef.current.getDetails(
-      { placeId: prediction.place_id, fields: ['address_components', 'formatted_address'] },
-      (place, status) => {
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
-          if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-            console.warn('[AddressAutocomplete] Place details status:', status);
-            setErrorMessage(`Places API: ${status}`);
-          }
-          onSelect({
-            fullAddress: prediction.description,
-            addressLine1: prediction.description,
-            city: '',
-            province: '',
-            postalCode: '',
-            placeId: prediction.place_id,
-          });
-          return;
-        }
-        const comps = place.address_components ?? [];
-        const get = (type: string, short = false) => {
-          const c = comps.find(x => x.types.includes(type));
-          return c ? (short ? c.short_name : c.long_name) : '';
-        };
-        const addressLine1 =
-          [get('street_number'), get('route')].filter(Boolean).join(' ') ||
-          prediction.structured_formatting?.main_text ||
-          '';
-        const city =
-          get('locality') ||
-          get('sublocality_level_1') ||
-          get('sublocality') ||
-          get('postal_town');
-        const province = get('administrative_area_level_1', true); // "ON" not "Ontario"
-        const postalCode = get('postal_code');
-        onSelect({
-          fullAddress: place.formatted_address || prediction.description,
-          addressLine1,
-          city,
-          province,
-          postalCode,
-          placeId: prediction.place_id,
-        });
-        setErrorMessage(null);
-      }
-    );
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -235,7 +238,7 @@ export function AddressAutocomplete({
         <ul className="absolute z-[200] mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-auto">
           {suggestions.map((s, idx) => (
             <li
-              key={s.place_id}
+              key={s.placeId}
               onMouseDown={e => { e.preventDefault(); handleSelect(s); }}
               onMouseEnter={() => setHighlightedIndex(idx)}
               className={`px-3 py-2.5 cursor-pointer text-sm border-b border-slate-100 last:border-0 ${
@@ -243,10 +246,10 @@ export function AddressAutocomplete({
               }`}
             >
               <div className="font-medium text-slate-900 leading-tight">
-                {s.structured_formatting?.main_text}
+                {s.mainText?.text || s.text.text}
               </div>
               <div className="text-xs text-slate-500 mt-0.5 leading-tight">
-                {s.structured_formatting?.secondary_text}
+                {s.secondaryText?.text}
               </div>
             </li>
           ))}
@@ -256,4 +259,13 @@ export function AddressAutocomplete({
       {errorMessage && <p className="text-xs text-red-500 mt-1">{errorMessage}</p>}
     </div>
   );
+}
+
+function getGoogleErrorMessage(err: unknown) {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && 'message' in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return 'Request failed';
 }
