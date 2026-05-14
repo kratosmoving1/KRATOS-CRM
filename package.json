@@ -11,8 +11,10 @@
     "seed": "tsx supabase/seed/seed.ts"
   },
   "dependencies": {
+    "@reach/combobox": "^0.18.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
+    "@types/google.maps": "^3.64.1",
     "autoprefixer": "10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

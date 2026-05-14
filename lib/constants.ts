@@ -7,21 +7,79 @@ export const SERVICE_TYPES = [
   { value: 'international',  label: 'International' },
 ] as const
 
-export const MOVE_SIZES = [
-  { value: 'studio',         label: 'Studio' },
-  { value: '1_bed',          label: '1 Bedroom' },
-  { value: '2_bed',          label: '2 Bedroom' },
-  { value: '3_bed',          label: '3 Bedroom' },
-  { value: '4_bed',          label: '4 Bedroom' },
-  { value: '5_bed_plus',     label: '5 Bedroom+' },
-  { value: 'small_office',   label: 'Small Office' },
-  { value: 'medium_office',  label: 'Medium Office' },
-  { value: 'large_office',   label: 'Large Office' },
-  { value: 'pod',            label: 'POD' },
-  { value: 'partial',        label: 'Partial' },
-  { value: 'few_items',      label: 'Few Items' },
-  { value: 'other',          label: 'Other' },
+export const MOVE_SIZE_GROUPS = [
+  {
+    label: 'Houses',
+    options: [
+      { value: '1_bedroom_house',     label: '1 Bedroom House' },
+      { value: '2_bedroom_house',     label: '2 Bedroom House' },
+      { value: '3_bedroom_house',     label: '3 Bedroom House' },
+      { value: '4_bedroom_house',     label: '4 Bedroom House' },
+      { value: '5_bedroom_house_plus', label: '5+ Bedroom House' },
+    ],
+  },
+  {
+    label: 'Apartments / Condos',
+    options: [
+      { value: 'studio_apartment',    label: 'Studio Apartment' },
+      { value: '1_bedroom_apartment', label: '1 Bedroom Apartment' },
+      { value: '2_bedroom_apartment', label: '2 Bedroom Apartment' },
+      { value: '3_bedroom_apartment', label: '3 Bedroom Apartment' },
+      { value: '4_bedroom_apartment', label: '4 Bedroom Apartment' },
+    ],
+  },
+  {
+    label: 'Storage Units',
+    options: [
+      { value: 'storage_5x5',   label: '5×5 Storage' },
+      { value: 'storage_5x10',  label: '5×10 Storage' },
+      { value: 'storage_10x10', label: '10×10 Storage' },
+      { value: 'storage_10x15', label: '10×15 Storage' },
+      { value: 'storage_10x20', label: '10×20 Storage' },
+      { value: 'storage_10x25', label: '10×25 Storage' },
+      { value: 'storage_10x30', label: '10×30 Storage' },
+    ],
+  },
+  {
+    label: 'Office',
+    options: [
+      { value: 'small_office',  label: 'Small Office' },
+      { value: 'medium_office', label: 'Medium Office' },
+      { value: 'large_office',  label: 'Large Office' },
+    ],
+  },
+  {
+    label: 'Other',
+    options: [
+      { value: 'pod',        label: 'POD' },
+      { value: 'partial',    label: 'Partial Move' },
+      { value: 'few_items',  label: 'Few Items' },
+      { value: 'other',      label: 'Other' },
+    ],
+  },
 ] as const
+
+export const MOVE_SIZE_LABELS: Record<string, string> = {
+  ...Object.fromEntries(
+    MOVE_SIZE_GROUPS.flatMap(g => g.options.map(o => [o.value, o.label]))
+  ),
+  // Legacy values from seed data — kept for backward compat display
+  studio:         'Studio',
+  '1_bed':        '1 Bedroom',
+  '2_bed':        '2 Bedroom',
+  '3_bed':        '3 Bedroom',
+  '4_bed':        '4 Bedroom',
+  '5_bed_plus':   '5+ Bedroom',
+  '1_bedroom':    '1 Bedroom',
+  '2_bedroom':    '2 Bedroom',
+  '3_bedroom':    '3 Bedroom',
+  '4_bedroom':    '4 Bedroom',
+  '5_bedroom_plus': '5+ Bedroom',
+}
+
+// Legacy flat list — kept so any code referencing MOVE_SIZES still compiles
+export const MOVE_SIZES: ReadonlyArray<{ value: string; label: string }> =
+  MOVE_SIZE_GROUPS.flatMap(g => g.options.map(o => ({ value: o.value as string, label: o.label as string })))
 
 export const PHONE_TYPES = [
   { value: 'mobile', label: 'Mobile' },

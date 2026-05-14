@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import ModalShell from '@/components/ui/ModalShell'
-import { Input, Select } from '@/components/ui/FormField'
-import { SERVICE_TYPES, MOVE_SIZES, PHONE_TYPES } from '@/lib/constants'
+import { Input, Select, GroupedSelect } from '@/components/ui/FormField'
+import { SERVICE_TYPES, MOVE_SIZE_GROUPS, PHONE_TYPES } from '@/lib/constants'
 
 interface LeadSource { id: string; name: string }
 
@@ -145,9 +145,9 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-4">
           <Select label="Type of Service" value={form.service_type} onChange={e => update('service_type', e.target.value)}
             options={SERVICE_TYPES.map(s => ({ value: s.value, label: s.label }))} />
-          <Select label="Move Size" required placeholder="Select…" value={form.move_size}
+          <GroupedSelect label="Move Size" required placeholder="Select…" value={form.move_size}
             onChange={e => update('move_size', e.target.value)} error={errors.move_size}
-            options={MOVE_SIZES.map(s => ({ value: s.value, label: s.label }))} />
+            groups={MOVE_SIZE_GROUPS} />
         </div>
         <Select label="Referral Source" placeholder="Select source…" value={form.lead_source_id}
           onChange={e => update('lead_source_id', e.target.value)}

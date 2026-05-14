@@ -116,8 +116,8 @@ export async function POST(req: NextRequest) {
     total_amount:       body.total_amount ?? 0,
     estimated_cost:     body.estimated_cost ?? 0,
     // origin
-    origin_address_1:   body.origin_address_1 ?? null,
-    origin_address_2:   body.origin_address_2 ?? null,
+    origin_address_line1: body.origin_address_line1 ?? null,
+    origin_address_line2: body.origin_address_line2 ?? null,
     origin_city:        body.origin_city ?? null,
     origin_province:    body.origin_province ?? null,
     origin_postal_code: body.origin_postal_code ?? null,
@@ -128,8 +128,8 @@ export async function POST(req: NextRequest) {
     origin_long_carry:  body.origin_long_carry ?? null,
     origin_parking_notes: body.origin_parking_notes ?? null,
     // destination
-    dest_address_1:     body.dest_address_1 ?? null,
-    dest_address_2:     body.dest_address_2 ?? null,
+    dest_address_line1: body.dest_address_line1 ?? null,
+    dest_address_line2: body.dest_address_line2 ?? null,
     dest_city:          body.dest_city ?? null,
     dest_province:      body.dest_province ?? null,
     dest_postal_code:   body.dest_postal_code ?? null,

@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import ModalShell from '@/components/ui/ModalShell'
-import { Input, Select, Textarea, Checkbox } from '@/components/ui/FormField'
-import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
+import { Input, Select, Textarea, Checkbox, GroupedSelect, FieldWrapper } from '@/components/ui/FormField'
+import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete'
 import {
-  SERVICE_TYPES, MOVE_SIZES, PHONE_TYPES, DWELLING_TYPES,
+  SERVICE_TYPES, MOVE_SIZE_GROUPS, PHONE_TYPES, DWELLING_TYPES,
   CANADIAN_PROVINCES,
 } from '@/lib/constants'
 import { cn } from '@/lib/utils'
@@ -125,8 +125,8 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     service_type:                s1.service_type,
     move_size:                   s1.move_size || null,
     lead_source_id:              s1.lead_source_id || null,
-    origin_address_1:   origin.address_1 || null,
-    origin_address_2:   origin.address_2 || null,
+    origin_address_line1: origin.address_1 || null,
+    origin_address_line2: origin.address_2 || null,
     origin_city:        origin.city || null,
     origin_province:    origin.province || null,
     origin_postal_code: origin.postal_code || null,
@@ -136,8 +136,8 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     origin_stairs:       origin.stairs ? parseInt(origin.stairs) : null,
     origin_long_carry:   origin.long_carry || null,
     origin_parking_notes: origin.parking_notes || null,
-    dest_address_1:     dest.address_1 || null,
-    dest_address_2:     dest.address_2 || null,
+    dest_address_line1: dest.address_1 || null,
+    dest_address_line2: dest.address_2 || null,
     dest_city:          dest.city || null,
     dest_province:      dest.province || null,
     dest_postal_code:   dest.postal_code || null,
@@ -334,14 +334,14 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
               error={errors.service_type}
               options={SERVICE_TYPES.map(s => ({ value: s.value, label: s.label }))}
             />
-            <Select
+            <GroupedSelect
               label="Move Size"
               required
               placeholder="Select size…"
               value={s1.move_size}
               onChange={e => updateS1('move_size', e.target.value)}
               error={errors.move_size}
-              options={MOVE_SIZES.map(s => ({ value: s.value, label: s.label }))}
+              groups={MOVE_SIZE_GROUPS}
             />
           </div>
 
@@ -366,21 +366,23 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{prefix}</p>
 
-            <AddressAutocomplete
-              label="Address Line 1"
-              value={addr.address_1}
-              onChange={v => updateAddr(side, setAddr, 'address_1', v)}
-              onSelect={parts => {
-                setAddr(prev => ({
-                  ...prev,
-                  address_1:   parts.address_1  || prev.address_1,
-                  city:        parts.city        || prev.city,
-                  province:    parts.province    || prev.province,
-                  postal_code: parts.postal_code || prev.postal_code,
-                }))
-              }}
-              placeholder="123 Main St"
-            />
+            <FieldWrapper label="Address Line 1">
+              <AddressAutocomplete
+                value={addr.address_1}
+                onChange={v => updateAddr(side, setAddr, 'address_1', v)}
+                onSelect={({ addressLine1, city, province, postalCode }) => {
+                  setAddr(prev => ({
+                    ...prev,
+                    address_1:   addressLine1 || prev.address_1,
+                    city:        city         || prev.city,
+                    province:    province     || prev.province,
+                    postal_code: postalCode   || prev.postal_code,
+                  }))
+                }}
+                placeholder="123 Main St"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+              />
+            </FieldWrapper>
             <Input
               label="Address Line 2"
               value={addr.address_2}
@@ -395,6 +397,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
                 value={addr.city}
                 onChange={e => updateAddr(side, setAddr, 'city', e.target.value)}
                 placeholder="Toronto"
+                autoComplete="off"
               />
               <Select
                 label="Province"
@@ -411,6 +414,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
                 onChange={e => updateAddr(side, setAddr, 'postal_code', e.target.value.toUpperCase())}
                 placeholder="M5V 2T6"
                 maxLength={7}
+                autoComplete="off"
               />
             </div>
 

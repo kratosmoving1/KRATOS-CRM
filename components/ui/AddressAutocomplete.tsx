@@ -1,138 +1,220 @@
-'use client'
+'use client';
 
-import { useEffect } from 'react'
-import usePlacesAutocomplete, { getDetails } from 'use-places-autocomplete'
+import { useEffect, useState } from 'react';
+import usePlacesAutocomplete, { getDetails } from 'use-places-autocomplete';
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxPopover,
+  ComboboxList,
+  ComboboxOption,
+} from '@reach/combobox';
+import '@reach/combobox/styles.css';
 
-export interface AddressParts {
-  address_1: string
-  city: string
-  province: string
-  postal_code: string
-}
+export type AddressFields = {
+  addressLine1: string;
+  city: string;
+  province: string;
+  postalCode: string;
+};
 
 interface Props {
-  label: string
-  value: string
-  onChange: (val: string) => void
-  onSelect: (parts: AddressParts) => void
-  placeholder?: string
-  error?: string
+  value: string;
+  onChange: (value: string) => void;
+  onSelect: (fields: AddressFields) => void;
+  placeholder?: string;
+  className?: string;
 }
 
-interface AddressComponent {
-  types: string[]
-  long_name: string
-  short_name: string
+let scriptLoading = false;
+let scriptLoaded = false;
+
+function loadGoogleMapsScript(apiKey: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (scriptLoaded) return resolve();
+    if (scriptLoading) {
+      const i = setInterval(() => {
+        if (scriptLoaded) {
+          clearInterval(i);
+          resolve();
+        }
+      }, 100);
+      return;
+    }
+    scriptLoading = true;
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly&loading=async`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      scriptLoaded = true;
+      scriptLoading = false;
+      resolve();
+    };
+    script.onerror = (err) => {
+      scriptLoading = false;
+      reject(err);
+    };
+    document.head.appendChild(script);
+  });
 }
 
-function getComponent(
-  components: AddressComponent[],
-  type: string,
-  form: 'long_name' | 'short_name' = 'long_name',
-) {
-  return components.find(c => c.types.includes(type))?.[form] ?? ''
-}
-
-export default function AddressAutocomplete({
-  label, value, onChange, onSelect, placeholder, error,
+export function AddressAutocomplete({
+  value,
+  onChange,
+  onSelect,
+  placeholder = 'Start typing an address...',
+  className,
 }: Props) {
-  const {
-    ready,
-    value: inputVal,
-    setValue,
-    suggestions: { status, data },
-    clearSuggestions,
-  } = usePlacesAutocomplete({
-    requestOptions: {
-      componentRestrictions: { country: ['ca', 'us'] },
-      types: ['address'],
-    },
-    debounce: 300,
-    initOnMount: typeof window !== 'undefined' && !!(window as Window & typeof globalThis & { google?: unknown }).google,
-  })
+  const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    setValue(value, false)
-  }, [value, setValue])
-
-  async function handleSelect(description: string, placeId: string) {
-    setValue(description, false)
-    clearSuggestions()
-    try {
-      const result = await getDetails({
-        placeId,
-        fields: ['address_components'],
-      }) as { address_components?: AddressComponent[] }
-      const comps = result.address_components ?? []
-      const streetNumber = getComponent(comps, 'street_number')
-      const route = getComponent(comps, 'route')
-      const city =
-        getComponent(comps, 'locality') ||
-        getComponent(comps, 'sublocality_level_1') ||
-        getComponent(comps, 'administrative_area_level_2')
-      const province = getComponent(comps, 'administrative_area_level_1', 'short_name')
-      const postal_code = getComponent(comps, 'postal_code')
-      onSelect({
-        address_1: [streetNumber, route].filter(Boolean).join(' '),
-        city,
-        province,
-        postal_code,
-      })
-    } catch {
-      onSelect({ address_1: description, city: '', province: '', postal_code: '' })
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!key) {
+      setLoadError('Google Maps API key not configured');
+      console.error('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set');
+      return;
     }
-  }
+    loadGoogleMapsScript(key)
+      .then(() => setIsReady(true))
+      .catch((err) => {
+        console.error('Failed to load Google Maps:', err);
+        setLoadError('Failed to load address autocomplete');
+      });
+  }, []);
 
-  const baseInput =
-    'w-full rounded-lg border px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-kratos/20 transition-colors'
-  const borderClass = error
-    ? 'border-red-400 focus:border-red-400'
-    : 'border-slate-200 focus:border-kratos'
-
-  if (!ready) {
+  if (loadError) {
     return (
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
         <input
+          type="text"
           value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder ?? 'Address…'}
-          className={`${baseInput} ${borderClass}`}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={className}
+          autoComplete="off"
         />
-        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        <p className="mt-1 text-xs text-red-500">{loadError}</p>
       </div>
-    )
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Loading address autocomplete..."
+        className={className}
+        autoComplete="off"
+        disabled
+      />
+    );
   }
 
   return (
-    <div className="relative">
-      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
-      <input
-        value={inputVal}
-        onChange={e => { setValue(e.target.value); onChange(e.target.value) }}
-        placeholder={placeholder ?? 'Start typing an address…'}
-        className={`${baseInput} ${borderClass}`}
+    <AutocompleteInner
+      value={value}
+      onChange={onChange}
+      onSelect={onSelect}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
+
+function AutocompleteInner({
+  value: externalValue,
+  onChange,
+  onSelect,
+  placeholder,
+  className,
+}: Props) {
+  const {
+    ready,
+    value,
+    suggestions: { status, data },
+    setValue,
+    clearSuggestions,
+  } = usePlacesAutocomplete({
+    requestOptions: { componentRestrictions: { country: 'ca' } },
+    debounce: 300,
+    defaultValue: externalValue,
+  });
+
+  useEffect(() => {
+    if (externalValue !== value) setValue(externalValue, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalValue]);
+
+  const handleSelect = async (description: string, placeId: string) => {
+    setValue(description, false);
+    clearSuggestions();
+    onChange(description);
+
+    try {
+      const details = (await getDetails({
+        placeId,
+        fields: ['address_components', 'formatted_address'],
+      })) as google.maps.places.PlaceResult;
+
+      const components = details.address_components || [];
+      const get = (type: string) =>
+        components.find((c) => c.types.includes(type))?.long_name || '';
+
+      const streetNumber = get('street_number');
+      const route = get('route');
+      const addressLine1 =
+        [streetNumber, route].filter(Boolean).join(' ') || description;
+      const city =
+        get('locality') || get('sublocality') || get('postal_town');
+      const province = get('administrative_area_level_1');
+      const postalCode = get('postal_code');
+
+      onSelect({ addressLine1, city, province, postalCode });
+    } catch (err) {
+      console.error('Place details error:', err);
+      onSelect({ addressLine1: description, city: '', province: '', postalCode: '' });
+    }
+  };
+
+  return (
+    <Combobox
+      onSelect={(val) => {
+        const match = data.find((s) => s.description === val);
+        if (match) handleSelect(val, match.place_id);
+      }}
+    >
+      <ComboboxInput
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          onChange(e.target.value);
+        }}
+        disabled={!ready}
+        placeholder={placeholder}
+        className={className}
         autoComplete="off"
       />
-      {status === 'OK' && data.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {data.map(({ place_id, description, structured_formatting }) => (
-            <li
-              key={place_id}
-              onMouseDown={e => { e.preventDefault(); handleSelect(description, place_id) }}
-              className="cursor-pointer px-4 py-2.5 hover:bg-slate-50"
-            >
-              <p className="text-sm font-medium text-slate-800 leading-tight">
-                {structured_formatting.main_text}
-              </p>
-              <p className="text-xs text-slate-400 leading-tight mt-0.5">
-                {structured_formatting.secondary_text}
-              </p>
+      <ComboboxPopover className="z-[100] mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+        <ComboboxList>
+          {status === 'OK' &&
+            data.map(({ place_id, description }) => (
+              <ComboboxOption
+                key={place_id}
+                value={description}
+                className="cursor-pointer border-b border-slate-100 px-3 py-2.5 text-sm last:border-0 hover:bg-orange-50"
+              />
+            ))}
+          {status === 'ZERO_RESULTS' && (
+            <li className="px-3 py-2 text-sm text-slate-500">
+              No matches — keep typing or enter manually
             </li>
-          ))}
-        </ul>
-      )}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
-  )
+          )}
+        </ComboboxList>
+      </ComboboxPopover>
+    </Combobox>
+  );
 }

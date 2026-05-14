@@ -68,6 +68,40 @@ export function Select({ label, error, wrapClassName, placeholder, options, requ
   )
 }
 
+interface GroupedSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label: string
+  error?: string
+  wrapClassName?: string
+  placeholder?: string
+  groups: ReadonlyArray<{
+    label: string
+    options: ReadonlyArray<{ value: string; label: string }>
+  }>
+}
+
+export function GroupedSelect({
+  label, error, wrapClassName, placeholder, groups, required, className, ...props
+}: GroupedSelectProps) {
+  return (
+    <FieldWrapper label={label} error={error} required={required} className={wrapClassName}>
+      <select
+        className={cn(inputCls, error && errorCls, className)}
+        required={required}
+        {...props}
+      >
+        {placeholder && <option value="">{placeholder}</option>}
+        {groups.map(group => (
+          <optgroup key={group.label} label={group.label}>
+            {group.options.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </FieldWrapper>
+  )
+}
+
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string
   error?: string

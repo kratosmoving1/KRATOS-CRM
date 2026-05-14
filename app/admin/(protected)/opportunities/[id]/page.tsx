@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
 import ChangeStatusModal from '@/components/admin/modals/ChangeStatusModal'
 import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
-import { OPP_STATUSES } from '@/lib/constants'
+import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -47,13 +47,13 @@ interface OppDetail {
   id: string; opportunity_number: string; status: OppStatus
   service_type: string; service_date: string | null; move_size: string | null
   total_amount: number; estimated_cost: number; notes: string | null
-  origin_address_1: string | null; origin_address_2: string | null
+  origin_address_line1: string | null; origin_address_line2: string | null
   origin_city: string | null; origin_province: string | null
   origin_postal_code: string | null; origin_dwelling_type: string | null
   origin_floor: number | null; origin_has_elevator: boolean | null
   origin_stairs: number | null; origin_long_carry: boolean | null
   origin_parking_notes: string | null
-  dest_address_1: string | null; dest_address_2: string | null
+  dest_address_line1: string | null; dest_address_line2: string | null
   dest_city: string | null; dest_province: string | null
   dest_postal_code: string | null; dest_dwelling_type: string | null
   dest_floor: number | null; dest_has_elevator: boolean | null
@@ -85,18 +85,18 @@ interface TimelineItem {
 }
 
 function AddressBlock({ prefix, data }: { prefix: 'origin' | 'dest'; data: OppDetail }) {
-  const p = prefix
-  const addr1    = data[`${p}_address_1`]
-  const addr2    = data[`${p}_address_2`]
-  const city     = data[`${p}_city`]
-  const prov     = data[`${p}_province`]
-  const postal   = data[`${p}_postal_code`]
-  const dwelling = data[`${p}_dwelling_type`]
-  const floor    = data[`${p}_floor`]
-  const elevator = data[`${p}_has_elevator`]
-  const stairs   = data[`${p}_stairs`]
-  const longCarry= data[`${p}_long_carry`]
-  const parking  = data[`${p}_parking_notes`]
+  const isOrigin = prefix === 'origin'
+  const addr1    = isOrigin ? data.origin_address_line1 : data.dest_address_line1
+  const addr2    = isOrigin ? data.origin_address_line2 : data.dest_address_line2
+  const city     = isOrigin ? data.origin_city          : data.dest_city
+  const prov     = isOrigin ? data.origin_province      : data.dest_province
+  const postal   = isOrigin ? data.origin_postal_code   : data.dest_postal_code
+  const dwelling = isOrigin ? data.origin_dwelling_type : data.dest_dwelling_type
+  const floor    = isOrigin ? data.origin_floor         : data.dest_floor
+  const elevator = isOrigin ? data.origin_has_elevator  : data.dest_has_elevator
+  const stairs   = isOrigin ? data.origin_stairs        : data.dest_stairs
+  const longCarry= isOrigin ? data.origin_long_carry    : data.dest_long_carry
+  const parking  = isOrigin ? data.origin_parking_notes : data.dest_parking_notes
   const hasAddress = addr1 || city
   if (!hasAddress) return <p className="text-sm text-slate-400">Not set</p>
   return (
@@ -302,7 +302,7 @@ export default function OpportunityDetailPage() {
             <p className="mt-1 text-sm text-slate-500">
               {SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type}
               {opp.service_date ? ` · ${formatDateShort(opp.service_date)}` : ' · TBD'}
-              {opp.move_size ? ` · ${opp.move_size.replace(/_/g,' ')}` : ''}
+              {opp.move_size ? ` · ${MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')}` : ''}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -567,7 +567,7 @@ export default function OpportunityDetailPage() {
                   <InfoRow label="Source"  value={opp.lead_source?.name ?? '—'} />
                   <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
                   <InfoRow label="Date"    value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} />
-                  <InfoRow label="Size"    value={opp.move_size?.replace(/_/g,' ') ?? '—'} />
+                  <InfoRow label="Size"    value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
                 </div>
               </div>
 
@@ -644,7 +644,7 @@ export default function OpportunityDetailPage() {
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Size</p>
                   <p className="mt-1 text-lg font-bold text-slate-900 capitalize">
-                    {opp.move_size?.replace(/_/g,' ') ?? '—'}
+                    {opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'}
                   </p>
                 </div>
               </div>

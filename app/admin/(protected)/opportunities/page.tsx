@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Search, Plus, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
 import { useCreateModal } from '@/contexts/CreationModalsContext'
 import StatusPill from '@/components/ui/StatusPill'
-import { OPP_STATUSES } from '@/lib/constants'
+import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -185,7 +185,7 @@ export default function OpportunitiesPage() {
                     <td className="px-4 py-3 text-sm font-medium text-slate-900">{opp.customer?.full_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{formatDate(opp.service_date)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{opp.move_size?.replace(/_/g,' ') ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'}</td>
                     <td className="px-4 py-3 text-right text-sm font-medium text-slate-900">{opp.total_amount > 0 ? formatCurrency(opp.total_amount) : '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{opp.lead_source?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{opp.agent?.full_name ?? '—'}</td>

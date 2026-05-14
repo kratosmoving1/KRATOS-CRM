@@ -69,8 +69,8 @@ export type Database = {
           pickup_city: string | null
           dropoff_city: string | null
           notes: string | null
-          origin_address_1: string | null
-          origin_address_2: string | null
+          origin_address_line1: string | null
+          origin_address_line2: string | null
           origin_city: string | null
           origin_province: string | null
           origin_postal_code: string | null
@@ -80,8 +80,8 @@ export type Database = {
           origin_stairs: number | null
           origin_long_carry: boolean | null
           origin_parking_notes: string | null
-          dest_address_1: string | null
-          dest_address_2: string | null
+          dest_address_line1: string | null
+          dest_address_line2: string | null
           dest_city: string | null
           dest_province: string | null
           dest_postal_code: string | null
