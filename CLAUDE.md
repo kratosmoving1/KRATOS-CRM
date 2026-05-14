@@ -23,7 +23,7 @@ The product is internally called "Kratos CRM" (the GitHub repo is `KRATOS-CRM`).
 - **Charts:** recharts
 - **Icons:** lucide-react (no emoji)
 - **Auth:** `@supabase/ssr`
-- **Maps:** `use-places-autocomplete` + `@reach/combobox` with Google Maps Places API
+- **Maps:** `use-places-autocomplete` + `@types/google.maps` with Google Maps Places API (custom dropdown — NOT @reach/combobox which is React 16/17 only)
 - **Background jobs (when added):** Inngest or Trigger.dev
 - **AI (when added):** Anthropic API (Claude)
 - **Vector search (when added):** pgvector extension on Supabase
