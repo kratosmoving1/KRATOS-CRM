@@ -14,7 +14,7 @@ export type Database = {
           id: string
           full_name: string
           email: string
-          role: 'admin' | 'sales_manager' | 'senior_sales' | 'junior_sales' | 'dispatcher' | 'accountant' | 'ops_manager'
+          role: 'owner' | 'admin' | 'manager' | 'sales' | 'dispatcher' | 'crew' | 'viewer' | 'sales_manager' | 'senior_sales' | 'junior_sales' | 'accountant' | 'ops_manager'
           avatar_url: string | null
           is_active: boolean
           company_id: string | null
@@ -121,6 +121,22 @@ export type Database = {
         }
         Insert: Omit<Database['public']['Tables']['audit_log']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['audit_log']['Insert']>
+      }
+      audit_logs: {
+        Row: {
+          id: string
+          actor_user_id: string | null
+          action: string
+          entity_type: string
+          entity_id: string | null
+          old_data: Json | null
+          new_data: Json | null
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['audit_logs']['Insert']>
       }
       tasks: {
         Row: {

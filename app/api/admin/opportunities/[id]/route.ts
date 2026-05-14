@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
+import { hasPermission, isActiveUser, isAdminRole } from '@/lib/auth/permissions'
+import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import type { Json } from '@/types/database'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -40,14 +43,32 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .single()
+
+  if (!isActiveUser(profile)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const body = await req.json()
 
   // Fetch current state for audit diff
   const { data: current } = await supabase
     .from('opportunities')
-    .select('status')
+    .select('*')
     .eq('id', params.id)
     .single()
+
+  if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const canUpdateAssigned =
+    current.sales_agent_id === user.id && hasPermission(profile?.role, 'lead:update_assigned')
+  const canUpdateAny = hasPermission(profile?.role, 'lead:update')
+
+  if (!canUpdateAny && !canUpdateAssigned) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const isStatusChange = body.status && body.status !== current?.status
 
@@ -90,13 +111,40 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     diff,
   })
 
+  await logAuditEvent({
+    actorUserId: user.id,
+    action,
+    entityType: 'opportunity',
+    entityId: params.id,
+    oldData: current as unknown as Json,
+    newData: data as unknown as Json,
+    ipAddress: req.headers.get('x-forwarded-for'),
+    userAgent: req.headers.get('user-agent'),
+  })
+
   return NextResponse.json(data)
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .single()
+
+  if (!isActiveUser(profile) || !isAdminRole(profile?.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { data: current } = await supabase
+    .from('opportunities')
+    .select('*')
+    .eq('id', params.id)
+    .single()
 
   const { error } = await supabase
     .from('opportunities')
@@ -111,6 +159,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     entity_id:   params.id,
     action:      'delete',
     diff:        null,
+  })
+
+  await logAuditEvent({
+    actorUserId: user.id,
+    action: 'delete',
+    entityType: 'opportunity',
+    entityId: params.id,
+    oldData: current as unknown as Json,
+    newData: { is_deleted: true },
+    ipAddress: req.headers.get('x-forwarded-for'),
+    userAgent: req.headers.get('user-agent'),
   })
 
   return NextResponse.json({ ok: true })
