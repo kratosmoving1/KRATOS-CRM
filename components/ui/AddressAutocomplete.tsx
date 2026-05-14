@@ -1,168 +1,240 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import usePlacesAutocomplete, { getDetails } from 'use-places-autocomplete';
+import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type AddressFields = {
+export type ParsedAddress = {
+  fullAddress: string;
   addressLine1: string;
   city: string;
   province: string;
   postalCode: string;
+  placeId: string;
 };
 
 interface Props {
   value: string;
   onChange: (value: string) => void;
-  onSelect: (fields: AddressFields) => void;
+  onSelect: (parsed: ParsedAddress) => void;
   placeholder?: string;
   className?: string;
+  hasSelected?: boolean;
 }
 
-let scriptLoading = false;
-let scriptLoaded = false;
+// Module-level singletons — load once per page session
+let loadPromise: Promise<google.maps.PlacesLibrary> | null = null;
+let autocompleteService: google.maps.places.AutocompleteService | null = null;
+let placesService: google.maps.places.PlacesService | null = null;
 
-function loadGoogleMapsScript(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (scriptLoaded) return resolve();
-    if (scriptLoading) {
-      const i = setInterval(() => {
-        if (scriptLoaded) { clearInterval(i); resolve(); }
-      }, 100);
-      return;
+function getPlaces(): Promise<google.maps.PlacesLibrary> {
+  if (!loadPromise) {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      loadPromise = Promise.reject(new Error('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY not set'));
+    } else {
+      setOptions({ key: apiKey, v: 'weekly' });
+      loadPromise = importLibrary('places') as Promise<google.maps.PlacesLibrary>;
     }
-    scriptLoading = true;
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly&loading=async`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => { scriptLoaded = true; scriptLoading = false; resolve(); };
-    script.onerror = (err) => { scriptLoading = false; reject(err); };
-    document.head.appendChild(script);
-  });
+  }
+  return loadPromise!;
 }
 
-export function AddressAutocomplete({ value, onChange, onSelect, placeholder = 'Start typing an address...', className }: Props) {
-  const [isReady, setIsReady] = useState(false);
+export function AddressAutocomplete({
+  value,
+  onChange,
+  onSelect,
+  placeholder = 'Start typing an address...',
+  className = '',
+  hasSelected = false,
+}: Props) {
+  const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!key) {
-      setLoadError('Google Maps API key not configured');
-      return;
-    }
-    loadGoogleMapsScript(key)
-      .then(() => setIsReady(true))
-      .catch(() => setLoadError('Failed to load address autocomplete'));
+    if (typeof window === 'undefined') return;
+    getPlaces()
+      .then((places) => {
+        if (!autocompleteService) {
+          autocompleteService = new places.AutocompleteService();
+        }
+        if (!placesService) {
+          const hiddenDiv = document.createElement('div');
+          placesService = new places.PlacesService(hiddenDiv);
+        }
+        setIsReady(true);
+      })
+      .catch((err: Error) => {
+        setLoadError(err.message || 'Failed to load address autocomplete');
+      });
   }, []);
 
-  if (loadError) {
-    return (
-      <div>
-        <input type="text" value={value} onChange={e => onChange(e.target.value)}
-          placeholder={placeholder} className={className} autoComplete="off" />
-        <p className="mt-1 text-xs text-red-500">{loadError}</p>
-      </div>
-    );
-  }
-
-  if (!isReady) {
-    return (
-      <input type="text" value={value} onChange={e => onChange(e.target.value)}
-        placeholder="Loading..." className={className} autoComplete="off" disabled />
-    );
-  }
-
-  return <AutocompleteInner value={value} onChange={onChange} onSelect={onSelect} placeholder={placeholder} className={className} />;
-}
-
-function AutocompleteInner({ value: externalValue, onChange, onSelect, placeholder, className }: Props) {
-  const {
-    ready, value, suggestions: { status, data }, setValue, clearSuggestions,
-  } = usePlacesAutocomplete({
-    requestOptions: { componentRestrictions: { country: 'ca' } },
-    debounce: 300,
-    defaultValue: externalValue,
-  });
-
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
-    if (externalValue !== value) setValue(externalValue, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalValue]);
-
-  useEffect(() => {
-    setOpen(status === 'OK' && data.length > 0);
-  }, [status, data]);
-
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function onClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
+        setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  async function handleSelect(description: string, placeId: string) {
-    setValue(description, false);
-    clearSuggestions();
-    setOpen(false);
-    onChange(description);
+  const fetchSuggestions = useCallback((query: string) => {
+    if (!autocompleteService || !query || query.length < 2) {
+      setSuggestions([]);
+      setIsOpen(false);
+      return;
+    }
+    autocompleteService.getPlacePredictions(
+      { input: query, componentRestrictions: { country: 'ca' } },
+      (predictions, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+          setSuggestions(predictions);
+          setIsOpen(true);
+          setHighlightedIndex(0);
+        } else {
+          setSuggestions([]);
+          setIsOpen(false);
+        }
+      }
+    );
+  }, []);
 
-    try {
-      const details = (await getDetails({
-        placeId,
-        fields: ['address_components'],
-      })) as { address_components?: google.maps.GeocoderAddressComponent[] };
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    onChange(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchSuggestions(v), 250);
+  }
 
-      const comps = details.address_components ?? [];
-      const get = (type: string) => comps.find(c => c.types.includes(type))?.long_name ?? '';
+  function handleSelect(prediction: google.maps.places.AutocompletePrediction) {
+    setIsOpen(false);
+    setSuggestions([]);
+    onChange(prediction.description);
 
+    if (!placesService) {
       onSelect({
-        addressLine1: [get('street_number'), get('route')].filter(Boolean).join(' ') || description,
-        city:    get('locality') || get('sublocality') || get('postal_town'),
-        province: get('administrative_area_level_1'),
-        postalCode: get('postal_code'),
+        fullAddress: prediction.description,
+        addressLine1: prediction.description,
+        city: '',
+        province: '',
+        postalCode: '',
+        placeId: prediction.place_id,
       });
-    } catch {
-      onSelect({ addressLine1: description, city: '', province: '', postalCode: '' });
+      return;
+    }
+
+    placesService.getDetails(
+      { placeId: prediction.place_id, fields: ['address_components', 'formatted_address'] },
+      (place, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+          onSelect({
+            fullAddress: prediction.description,
+            addressLine1: prediction.description,
+            city: '',
+            province: '',
+            postalCode: '',
+            placeId: prediction.place_id,
+          });
+          return;
+        }
+        const comps = place.address_components ?? [];
+        const get = (type: string, short = false) => {
+          const c = comps.find(x => x.types.includes(type));
+          return c ? (short ? c.short_name : c.long_name) : '';
+        };
+        const addressLine1 =
+          [get('street_number'), get('route')].filter(Boolean).join(' ') ||
+          prediction.structured_formatting?.main_text ||
+          '';
+        const city =
+          get('locality') ||
+          get('sublocality_level_1') ||
+          get('sublocality') ||
+          get('postal_town');
+        const province = get('administrative_area_level_1', true); // "ON" not "Ontario"
+        const postalCode = get('postal_code');
+        onSelect({
+          fullAddress: place.formatted_address || prediction.description,
+          addressLine1,
+          city,
+          province,
+          postalCode,
+          placeId: prediction.place_id,
+        });
+      }
+    );
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!isOpen || suggestions.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSelect(suggestions[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
     }
   }
 
   return (
     <div ref={containerRef} className="relative">
-      <input
-        value={value}
-        onChange={e => { setValue(e.target.value); onChange(e.target.value); }}
-        disabled={!ready}
-        placeholder={placeholder}
-        className={className}
-        autoComplete="off"
-        onFocus={() => { if (status === 'OK' && data.length > 0) setOpen(true); }}
-      />
-      {open && (
-        <ul className="absolute z-[100] mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-          {data.map(({ place_id, description, structured_formatting }) => (
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          onChange={handleInputChange}
+          onFocus={() => { if (suggestions.length > 0) setIsOpen(true); }}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            loadError ? 'Enter address manually' : isReady ? placeholder : 'Loading...'
+          }
+          className={className}
+          disabled={!isReady && !loadError}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+        {hasSelected && !isOpen && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 text-sm select-none">
+            ✓
+          </span>
+        )}
+      </div>
+
+      {isOpen && suggestions.length > 0 && (
+        <ul className="absolute z-[200] mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-auto">
+          {suggestions.map((s, idx) => (
             <li
-              key={place_id}
-              onMouseDown={e => { e.preventDefault(); handleSelect(description, place_id); }}
-              className="cursor-pointer border-b border-slate-100 px-3 py-2.5 last:border-0 hover:bg-orange-50"
+              key={s.place_id}
+              onMouseDown={e => { e.preventDefault(); handleSelect(s); }}
+              onMouseEnter={() => setHighlightedIndex(idx)}
+              className={`px-3 py-2.5 cursor-pointer text-sm border-b border-slate-100 last:border-0 ${
+                idx === highlightedIndex ? 'bg-orange-50' : 'hover:bg-slate-50'
+              }`}
             >
-              <p className="text-sm font-medium text-slate-800 leading-tight">
-                {structured_formatting.main_text}
-              </p>
-              <p className="text-xs text-slate-400 leading-tight mt-0.5">
-                {structured_formatting.secondary_text}
-              </p>
+              <div className="font-medium text-slate-900 leading-tight">
+                {s.structured_formatting?.main_text}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5 leading-tight">
+                {s.structured_formatting?.secondary_text}
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      {loadError && <p className="text-xs text-red-500 mt-1">{loadError}</p>}
     </div>
   );
 }

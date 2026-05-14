@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import ModalShell from '@/components/ui/ModalShell'
-import { Input, Select, Textarea, Checkbox, GroupedSelect, FieldWrapper } from '@/components/ui/FormField'
+import { Input, Select, Textarea, Checkbox, GroupedSelect } from '@/components/ui/FormField'
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete'
+import type { ParsedAddress } from '@/components/ui/AddressAutocomplete'
 import {
   SERVICE_TYPES, MOVE_SIZE_GROUPS, PHONE_TYPES, DWELLING_TYPES,
-  CANADIAN_PROVINCES,
 } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
@@ -21,12 +21,12 @@ const STEPS = [
 
 type AddressForm = {
   address_1: string; address_2: string; city: string; province: string
-  postal_code: string; dwelling_type: string; floor: string
+  postal_code: string; place_id: string; dwelling_type: string; floor: string
   has_elevator: boolean; stairs: string; long_carry: boolean; parking_notes: string
 }
 
 const emptyAddress = (): AddressForm => ({
-  address_1: '', address_2: '', city: '', province: '', postal_code: '',
+  address_1: '', address_2: '', city: '', province: '', postal_code: '', place_id: '',
   dwelling_type: '', floor: '', has_elevator: false, stairs: '', long_carry: false, parking_notes: '',
 })
 
@@ -125,28 +125,30 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     service_type:                s1.service_type,
     move_size:                   s1.move_size || null,
     lead_source_id:              s1.lead_source_id || null,
-    origin_address_line1: origin.address_1 || null,
-    origin_address_line2: origin.address_2 || null,
-    origin_city:        origin.city || null,
-    origin_province:    origin.province || null,
-    origin_postal_code: origin.postal_code || null,
-    origin_dwelling_type: origin.dwelling_type || null,
-    origin_floor:        origin.floor ? parseInt(origin.floor) : null,
-    origin_has_elevator: origin.has_elevator || null,
-    origin_stairs:       origin.stairs ? parseInt(origin.stairs) : null,
-    origin_long_carry:   origin.long_carry || null,
-    origin_parking_notes: origin.parking_notes || null,
-    dest_address_line1: dest.address_1 || null,
-    dest_address_line2: dest.address_2 || null,
-    dest_city:          dest.city || null,
-    dest_province:      dest.province || null,
-    dest_postal_code:   dest.postal_code || null,
-    dest_dwelling_type: dest.dwelling_type || null,
-    dest_floor:         dest.floor ? parseInt(dest.floor) : null,
-    dest_has_elevator:  dest.has_elevator || null,
-    dest_stairs:        dest.stairs ? parseInt(dest.stairs) : null,
-    dest_long_carry:    dest.long_carry || null,
-    dest_parking_notes: dest.parking_notes || null,
+    origin_address_line1:  origin.address_1    || null,
+    origin_address_line2:  origin.address_2    || null,
+    origin_city:           origin.city         || null,
+    origin_province:       origin.province     || null,
+    origin_postal_code:    origin.postal_code  || null,
+    origin_place_id:       origin.place_id     || null,
+    origin_dwelling_type:  origin.dwelling_type || null,
+    origin_floor:          origin.floor ? parseInt(origin.floor) : null,
+    origin_has_elevator:   origin.has_elevator || null,
+    origin_stairs:         origin.stairs ? parseInt(origin.stairs) : null,
+    origin_long_carry:     origin.long_carry   || null,
+    origin_parking_notes:  origin.parking_notes || null,
+    dest_address_line1:    dest.address_1      || null,
+    dest_address_line2:    dest.address_2      || null,
+    dest_city:             dest.city           || null,
+    dest_province:         dest.province       || null,
+    dest_postal_code:      dest.postal_code    || null,
+    dest_place_id:         dest.place_id       || null,
+    dest_dwelling_type:    dest.dwelling_type  || null,
+    dest_floor:            dest.floor ? parseInt(dest.floor) : null,
+    dest_has_elevator:     dest.has_elevator   || null,
+    dest_stairs:           dest.stairs ? parseInt(dest.stairs) : null,
+    dest_long_carry:       dest.long_carry     || null,
+    dest_parking_notes:    dest.parking_notes  || null,
   }), [s1, origin, dest])
 
   async function submit(saveAndClose = false) {
@@ -362,61 +364,50 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
         const side     = isOrigin ? 'origin' : 'dest'
         const prefix   = isOrigin ? 'Origin / Pickup' : 'Destination / Dropoff'
 
+        function applyParsed(parsed: ParsedAddress) {
+          setAddr(prev => ({
+            ...prev,
+            address_1:   parsed.addressLine1 || prev.address_1,
+            city:        parsed.city         || prev.city,
+            province:    parsed.province     || prev.province,
+            postal_code: parsed.postalCode   || prev.postal_code,
+            place_id:    parsed.placeId      || prev.place_id,
+          }))
+        }
+
         return (
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{prefix}</p>
 
-            <FieldWrapper label="Address Line 1">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Address
+              </label>
               <AddressAutocomplete
                 value={addr.address_1}
-                onChange={v => updateAddr(side, setAddr, 'address_1', v)}
-                onSelect={({ addressLine1, city, province, postalCode }) => {
-                  setAddr(prev => ({
-                    ...prev,
-                    address_1:   addressLine1 || prev.address_1,
-                    city:        city         || prev.city,
-                    province:    province     || prev.province,
-                    postal_code: postalCode   || prev.postal_code,
-                  }))
+                onChange={v => {
+                  setAddr(prev => ({ ...prev, address_1: v, city: '', province: '', postal_code: '', place_id: '' }))
+                  setErrors(e => { const n = { ...e }; delete n[`${side}_address_1`]; return n })
                 }}
-                placeholder="123 Main St"
+                onSelect={applyParsed}
+                hasSelected={Boolean(addr.city)}
+                placeholder="Start typing an address…"
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
               />
-            </FieldWrapper>
+              {addr.city && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  {[addr.city, addr.province, addr.postal_code].filter(Boolean).join(', ')}
+                </p>
+              )}
+            </div>
+
             <Input
-              label="Address Line 2"
+              label="Apt / Unit / Suite"
               value={addr.address_2}
               onChange={e => updateAddr(side, setAddr, 'address_2', e.target.value)}
               placeholder="Unit 4B (optional)"
+              autoComplete="off"
             />
-
-            <div className="grid grid-cols-3 gap-3">
-              <Input
-                label="City"
-                wrapClassName="col-span-1"
-                value={addr.city}
-                onChange={e => updateAddr(side, setAddr, 'city', e.target.value)}
-                placeholder="Toronto"
-                autoComplete="off"
-              />
-              <Select
-                label="Province"
-                wrapClassName="col-span-1"
-                placeholder="–"
-                value={addr.province}
-                onChange={e => updateAddr(side, setAddr, 'province', e.target.value)}
-                options={CANADIAN_PROVINCES.map(p => ({ value: p.value, label: p.label }))}
-              />
-              <Input
-                label="Postal Code"
-                wrapClassName="col-span-1"
-                value={addr.postal_code}
-                onChange={e => updateAddr(side, setAddr, 'postal_code', e.target.value.toUpperCase())}
-                placeholder="M5V 2T6"
-                maxLength={7}
-                autoComplete="off"
-              />
-            </div>
 
             <Select
               label="Dwelling Type"

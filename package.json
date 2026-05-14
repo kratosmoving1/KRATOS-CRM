@@ -11,6 +11,7 @@
     "seed": "tsx supabase/seed/seed.ts"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.0.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
     "@types/google.maps": "^3.64.1",
@@ -26,8 +27,7 @@
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.1",
-    "tailwindcss": "3.4.19",
-    "use-places-autocomplete": "^4.0.1"
+    "tailwindcss": "3.4.19"
   },
   "devDependencies": {
     "@types/node": "^20.17.50",

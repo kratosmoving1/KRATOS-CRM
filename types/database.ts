@@ -74,6 +74,7 @@ export type Database = {
           origin_city: string | null
           origin_province: string | null
           origin_postal_code: string | null
+          origin_place_id: string | null
           origin_dwelling_type: string | null
           origin_floor: number | null
           origin_has_elevator: boolean | null
@@ -85,6 +86,7 @@ export type Database = {
           dest_city: string | null
           dest_province: string | null
           dest_postal_code: string | null
+          dest_place_id: string | null
           dest_dwelling_type: string | null
           dest_floor: number | null
           dest_has_elevator: boolean | null
