@@ -9,6 +9,7 @@ This file tracks security hardening work found during the initial audit. The cur
 - Why risky: Any authenticated user can create opportunities and assign `sales_agent_id` without a role check.
 - Recommended fix: Require `lead:create`; restrict assigning other users unless role is `owner`, `admin`, or `manager`; write to `audit_logs`.
 - Priority: High
+- Status: Hardened. Requires an active profile and `lead:create`, validates core fields, restricts cross-user assignment, and writes to `audit_logs`.
 
 ### `app/api/admin/opportunities/[id]/route.ts`
 - What it does: Updates, status-changes, and soft-deletes opportunities.
@@ -22,6 +23,7 @@ This file tracks security hardening work found during the initial audit. The cur
 - Why risky: Any authenticated user can update customer contact data.
 - Recommended fix: Require `contact:update` or `contact:update_assigned`; add payload allowlist; write to `audit_logs`.
 - Priority: High
+- Status: Hardened. Requires an active profile, uses a customer-field allowlist, supports assigned-sales access, and writes to `audit_logs`.
 
 ## Medium Priority
 
@@ -30,18 +32,21 @@ This file tracks security hardening work found during the initial audit. The cur
 - Why risky: Communications become part of the customer record and may contain sensitive customer details.
 - Recommended fix: Require relevant assigned/customer permissions; write to `audit_logs` for note/email/call creation.
 - Priority: Medium
+- Status: Hardened. Requires an active profile, validates communication type/direction/body, checks broad or assigned lead/contact permissions, and writes to `audit_logs`.
 
 ### `app/api/admin/tasks/route.ts`
 - What it does: Creates tasks and assigns users.
 - Why risky: Authenticated users can assign work to others.
 - Recommended fix: Let regular users create tasks for themselves; require manager/admin role to assign other users.
 - Priority: Medium
+- Status: Hardened. Requires an active profile, validates title/priority, allows self-assignment by default, restricts assigning others, and writes to `audit_logs`.
 
 ### `app/api/admin/follow-ups/route.ts`
 - What it does: Creates follow-ups and assigns users.
 - Why risky: Authenticated users can assign follow-ups to others.
 - Recommended fix: Let regular users create follow-ups for themselves; require manager/admin role to assign other users.
 - Priority: Medium
+- Status: Hardened. Requires an active profile and `lead:create`, validates date/type, restricts assigning others, and writes to `audit_logs`.
 
 ## Low Priority
 

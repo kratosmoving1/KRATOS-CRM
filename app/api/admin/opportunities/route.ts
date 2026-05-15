@@ -3,6 +3,17 @@ import { createClient } from '@/lib/supabase/server'
 import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
+import { hasPermission, isAdminRole } from '@/lib/auth/permissions'
+import { requireActiveProfile } from '@/lib/auth/server'
+import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import type { Json } from '@/types/database'
+
+const SERVICE_TYPES = ['local', 'long_distance', 'commercial', 'packing', 'storage', 'international'] as const
+const OPP_STATUSES = ['opportunity', 'booked', 'completed', 'closed', 'cancelled'] as const
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
 
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -52,10 +63,31 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireActiveProfile(supabase)
+  if (auth.response) return auth.response
+  const { user, profile } = auth.context
+
+  if (!hasPermission(profile.role, 'lead:create')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const body = await req.json()
+
+  if (!body.customer_id && (!isString(body.customer_name) || !body.customer_name.trim())) {
+    return NextResponse.json({ error: 'Customer name is required' }, { status: 400 })
+  }
+  if (!body.customer_id && (!isString(body.customer_phone) || body.customer_phone.replace(/\D/g, '').length !== 10)) {
+    return NextResponse.json({ error: 'Valid customer phone is required' }, { status: 400 })
+  }
+  if (body.service_type && !SERVICE_TYPES.includes(body.service_type)) {
+    return NextResponse.json({ error: 'Invalid service type' }, { status: 400 })
+  }
+  if (body.status && !OPP_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+  }
+  if (body.sales_agent_id && body.sales_agent_id !== user.id && !isAdminRole(profile.role) && !hasPermission(profile.role, 'lead:update')) {
+    return NextResponse.json({ error: 'Cannot assign opportunity to another user' }, { status: 403 })
+  }
 
   // Generate opportunity number
   const year = new Date().getFullYear()
@@ -167,6 +199,17 @@ export async function POST(req: NextRequest) {
     entity_id:   opp.id,
     action:      'create',
     diff:        { opportunity_number: opportunityNumber, status },
+  })
+
+  await logAuditEvent({
+    actorUserId: user.id,
+    action: 'create',
+    entityType: 'opportunity',
+    entityId: opp.id,
+    oldData: null,
+    newData: opp as unknown as Json,
+    ipAddress: req.headers.get('x-forwarded-for'),
+    userAgent: req.headers.get('user-agent'),
   })
 
   return NextResponse.json(opp, { status: 201 })
