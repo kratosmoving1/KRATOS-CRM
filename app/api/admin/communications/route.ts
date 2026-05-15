@@ -25,8 +25,14 @@ export async function POST(req: NextRequest) {
   if (body.direction && !DIRECTIONS.includes(body.direction)) {
     return NextResponse.json({ error: 'Invalid direction' }, { status: 400 })
   }
-  if (!body.body?.trim()) {
+  // For calls, notes are optional. For other communication types, require a body.
+  if (body.type !== 'call' && !body.body?.trim()) {
     return NextResponse.json({ error: 'Body is required' }, { status: 400 })
+  }
+
+  // If this is a call, require a call outcome to be provided.
+  if (body.type === 'call' && !body.call_outcome) {
+    return NextResponse.json({ error: 'call_outcome is required for call type' }, { status: 400 })
   }
 
   let isAssigned = false
@@ -64,7 +70,7 @@ export async function POST(req: NextRequest) {
       type:                  body.type,
       direction:             body.direction ?? 'outbound',
       subject:               body.subject ?? null,
-      body:                  body.body.trim(),
+      body:                  typeof body.body === 'string' ? body.body.trim() : null,
       call_outcome:          body.call_outcome ?? null,
       call_duration_seconds: body.call_duration_seconds ?? null,
       email_to:              body.email_to ?? null,

@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
 import ChangeStatusModal from '@/components/admin/modals/ChangeStatusModal'
 import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
+import CreateFollowUpModal from '@/components/admin/modals/CreateFollowUpModal'
 import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -180,6 +181,7 @@ export default function OpportunityDetailPage() {
   const [commSubject, setCommSubject] = useState('')
   const [commEmailTo, setCommEmailTo] = useState('')
   const [commSubmitting, setCommSubmitting] = useState(false)
+  const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
 
   // Timeline
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -242,7 +244,9 @@ export default function OpportunityDetailPage() {
   }
 
   async function submitComm() {
-    if (!commBody.trim()) return
+    // validate client-side: for calls, require a call outcome; for others require a body
+    if (commType === 'call' && !commCallOutcome) { toast.error('Select a call outcome'); return }
+    if (commType !== 'call' && !commBody.trim()) { toast.error('Enter content'); return }
     setCommSubmitting(true)
     try {
       const payload: Record<string, unknown> = {
@@ -268,7 +272,9 @@ export default function OpportunityDetailPage() {
         body: JSON.stringify(payload),
       })
       if (!res.ok) { toast.error('Failed to save'); return }
-      toast.success(commType === 'note' ? 'Note saved' : `${commType.toUpperCase()} logged`)
+      if (commType === 'note') toast.success('Note saved')
+      else if (commType === 'call') toast.success('Call logged.')
+      else toast.success(`${commType.toUpperCase()} logged`)
       setCommBody('')
       setCommCallOutcome('')
       setCommSubject('')
@@ -504,10 +510,21 @@ export default function OpportunityDetailPage() {
                   }
                   className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                 />
+                {commType === 'call' && commCallOutcome === 'no_answer' && (
+                  <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="mb-2 text-sm font-medium text-slate-700">No Answer — follow-up actions</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => toast('Send SMS — coming soon')} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Send SMS (Coming soon)</button>
+                      <button type="button" onClick={() => toast('Send Email — coming soon')} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Send Email (Coming soon)</button>
+                      <button type="button" onClick={() => setShowCreateFollowUp(true)} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Create follow-up</button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-3 flex justify-end">
                   <button
                     onClick={submitComm}
-                    disabled={commSubmitting || !commBody.trim()}
+                    disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
                     className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
                   >
                     {commSubmitting && <Loader2 size={14} className="animate-spin" />}
@@ -515,6 +532,10 @@ export default function OpportunityDetailPage() {
                   </button>
                 </div>
               </div>
+
+              {showCreateFollowUp && (
+                <CreateFollowUpModal onClose={() => setShowCreateFollowUp(false)} />
+              )}
 
               {/* Activity timeline */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
