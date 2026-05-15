@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ElementType, type ReactNode } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronRight, Edit2, RefreshCw, Trash2, Loader2,
   MapPin, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
-  Clock, CheckCircle2,
+  Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
+  WalletCards, X, CalendarPlus, Package, Boxes, ListTodo, ArrowRight,
+  ClipboardCheck, ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
@@ -136,6 +138,19 @@ const CALL_OUTCOME_OPTIONS = [
   { value: 'busy',         label: 'Busy' },
 ]
 
+const PAYMENT_METHODS = [
+  { label: 'Cash', value: 'cash', icon: Banknote, note: 'Record only' },
+  { label: 'Check', value: 'check', icon: ReceiptText, note: 'Record only' },
+  { label: 'Credit Card (Record Only)', value: 'credit_card_record', icon: CreditCard, note: 'Manual entry' },
+  { label: 'Credit Card', value: 'credit_card', icon: CreditCard, note: 'Stripe Checkout' },
+  { label: 'Interac e-Transfer', value: 'interac_e_transfer', icon: WalletCards, note: 'Record only' },
+  { label: 'Wire Transfer', value: 'wire_transfer', icon: Landmark, note: 'Record only' },
+  { label: 'Debit Card (Record Only)', value: 'debit_card_record', icon: CreditCard, note: 'Manual entry' },
+  { label: 'Debit Card', value: 'debit_card', icon: CreditCard, note: 'Coming soon' },
+] as const
+
+type PaymentMethod = typeof PAYMENT_METHODS[number]['value']
+
 function CommTypeIcon({ type }: { type: string }) {
   const icons: Record<string, React.ElementType> = {
     note: FileText, call: PhoneCall, sms: MessageSquare, email: AtSign,
@@ -173,6 +188,11 @@ export default function OpportunityDetailPage() {
   // Notes (estimate tab)
   const [notes, setNotes] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
+  const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -181,6 +201,7 @@ export default function OpportunityDetailPage() {
       const data: OppDetail = await res.json()
       setOpp(data)
       setNotes(data.notes ?? '')
+      setPaymentAmount(data.total_amount > 0 ? String(data.total_amount) : '')
     } catch { setError('Failed to load') }
     finally { setLoading(false) }
   }, [id])
@@ -257,6 +278,49 @@ export default function OpportunityDetailPage() {
     finally { setCommSubmitting(false) }
   }
 
+  async function handlePaymentMethod(method: PaymentMethod) {
+    setSelectedPaymentMethod(method)
+    setPaymentMessage(null)
+
+    if (method !== 'credit_card') {
+      setPaymentMessage('Payment recording is staged for the next database pass. No payment was saved yet.')
+      return
+    }
+
+    if (!opp) return
+    const amount = Number(paymentAmount || opp.total_amount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentMessage('Enter an amount before starting Stripe Checkout.')
+      return
+    }
+
+    setPaymentLoading(true)
+    try {
+      const res = await fetch('/api/payments/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: opp.id,
+          amountCents: Math.round(amount * 100),
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setPaymentMessage(data.error ?? 'Unable to create Stripe Checkout session.')
+        return
+      }
+
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch {
+      setPaymentMessage('Unable to reach the payment server.')
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
   if (loading) return (
     <div className="space-y-4 animate-pulse">
       <div className="h-8 w-64 rounded bg-slate-200" />
@@ -272,6 +336,12 @@ export default function OpportunityDetailPage() {
     </div>
   )
 
+  const subtotal = opp.total_amount > 0 ? opp.total_amount : 0
+  const discounts = 0
+  const salesTax = 0
+  const estimateTotal = Math.max(subtotal - discounts + salesTax, 0)
+  const totalPaid = 0
+  const balanceDue = Math.max(estimateTotal - totalPaid, 0)
   const profit = opp.total_amount - opp.estimated_cost
 
   // Timeline stats
@@ -687,67 +757,141 @@ export default function OpportunityDetailPage() {
             </div>
 
             {/* Right sidebar */}
-            <div className="space-y-4">
-              {/* Information */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Information</h2>
-                <div className="space-y-2.5 text-sm">
-                  <InfoRow label="Status"  value={OPP_STATUSES.find(s => s.value === opp.status)?.label ?? opp.status} />
-                  <InfoRow label="Agent"   value={opp.agent?.full_name ?? 'Unassigned'} />
-                  <InfoRow label="Source"  value={opp.lead_source?.name ?? '—'} />
-                  <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
-                  <InfoRow label="Date"    value={opp.service_date ? formatDate(opp.service_date) : 'TBD'} />
+            <div className="space-y-3">
+              <PanelSection title="Opportunity Total" icon={ShieldCheck}>
+                <MoneyRow label="Subtotal" value={subtotal > 0 ? formatCurrency(subtotal) : '—'} />
+                <MoneyRow label="Discounts" value={discounts > 0 ? `-${formatCurrency(discounts)}` : '—'} />
+                <MoneyRow label="Sales Tax / HST" value={salesTax > 0 ? formatCurrency(salesTax) : '—'} />
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <MoneyRow label="Estimate Total" value={estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'} strong />
                 </div>
-              </div>
+              </PanelSection>
 
-              {/* Customer */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Customer</h2>
-                {opp.customer ? (
-                  <div className="space-y-2">
-                    <Link href={`/admin/customers/${opp.customer.id}`}
-                      className="block font-semibold text-slate-900 hover:text-kratos">
-                      {opp.customer.full_name}
-                    </Link>
-                    {opp.customer.phone && (
-                      <p className="flex items-center gap-2 text-sm text-slate-600">
-                        <Phone size={13} className="text-slate-400" /> {opp.customer.phone}
-                      </p>
-                    )}
-                    {opp.customer.email && (
-                      <p className="flex items-center gap-2 text-sm text-slate-600">
-                        <Mail size={13} className="text-slate-400" />
-                        <span className="break-all">{opp.customer.email}</span>
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-400">No customer linked</p>
-                )}
-              </div>
+              <PanelSection title="Payments" icon={CreditCard}>
+                <MoneyRow label="Total Paid" value={formatCurrency(totalPaid)} />
+                <MoneyRow label="Balance Due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
+                <button
+                  onClick={() => setPaymentDrawerOpen(true)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:-translate-y-px hover:shadow-md"
+                >
+                  <CreditCard size={16} /> Add Payment
+                </button>
+              </PanelSection>
 
-              {/* Opportunity Total */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Opportunity Total</h2>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Total Amount</span>
-                    <span className="font-semibold text-slate-900">
-                      {opp.total_amount > 0 ? formatCurrency(opp.total_amount) : '—'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Est. Cost</span>
-                    <span className="font-semibold text-slate-900">
-                      {opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <PanelActionSection
+                title="Survey"
+                icon={CalendarPlus}
+                body="Schedule survey"
+                detail="Survey scheduling will connect to dispatch/calendar later."
+              />
+
+              <PanelActionSection
+                title="Box Delivery"
+                icon={Package}
+                body="Schedule delivery"
+                detail="Box delivery workflow is planned for the operations module."
+              />
+
+              <PanelActionSection
+                title="Inventory"
+                icon={Boxes}
+                body={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g, ' ')) : 'No inventory yet'}
+                detail="Inventory itemization will be added to the quote builder."
+              />
+
+              <PanelActionSection
+                title="Tasks"
+                icon={ListTodo}
+                body="No quote tasks yet"
+                detail="Task summaries will appear here once linked task reads are added."
+              />
             </div>
           </div>
         )}
       </div>
+
+      {paymentDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[1px]" onClick={() => setPaymentDrawerOpen(false)} />
+          <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl shadow-slate-950/20">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Payments</p>
+                  <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Add Payment</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Quote {formatQuoteNumber(opp.opportunity_number)} · {balanceDue > 0 ? formatCurrency(balanceDue) : 'No balance'} due
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPaymentDrawerOpen(false)}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Close payment drawer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Amount
+              </label>
+              <div className="mb-5 flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 focus-within:border-kratos focus-within:bg-white focus-within:ring-2 focus-within:ring-kratos/20">
+                <span className="mr-2 text-sm font-semibold text-slate-500">$</span>
+                <input
+                  value={paymentAmount}
+                  onChange={e => setPaymentAmount(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                {PAYMENT_METHODS.map(({ label, value, icon: Icon, note }) => (
+                  <button
+                    key={value}
+                    onClick={() => handlePaymentMethod(value)}
+                    disabled={paymentLoading}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition',
+                      selectedPaymentMethod === value
+                        ? 'border-kratos bg-kratos/10'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                    )}
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                      <Icon size={18} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-slate-950">{label}</span>
+                      <span className="block text-xs text-slate-500">{note}</span>
+                    </span>
+                    {paymentLoading && selectedPaymentMethod === value ? (
+                      <Loader2 size={16} className="animate-spin text-slate-400" />
+                    ) : (
+                      <ArrowRight size={16} className="text-slate-300" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {paymentMessage && (
+                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {paymentMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+              <p className="text-xs leading-5 text-slate-500">
+                Stripe Checkout is server-side only. Record-only methods are UI placeholders until the payments table is added.
+              </p>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Modals */}
       {showStatusModal && (
@@ -806,6 +950,63 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-baseline justify-between gap-2">
       <span className="shrink-0 text-slate-500">{label}</span>
       <span className="text-right font-medium text-slate-800 truncate">{value}</span>
+    </div>
+  )
+}
+
+function PanelSection({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string
+  icon: ElementType
+  children: ReactNode
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+          <Icon size={14} />
+        </span>
+        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{title}</h2>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function PanelActionSection({
+  title,
+  icon,
+  body,
+  detail,
+}: {
+  title: string
+  icon: ElementType
+  body: string
+  detail: string
+}) {
+  return (
+    <PanelSection title={title} icon={icon}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{body}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+        </div>
+        <button className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+          View
+        </button>
+      </div>
+    </PanelSection>
+  )
+}
+
+function MoneyRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1 text-sm">
+      <span className={strong ? 'font-semibold text-slate-700' : 'text-slate-500'}>{label}</span>
+      <span className={strong ? 'font-bold text-slate-950' : 'font-semibold text-slate-800'}>{value}</span>
     </div>
   )
 }

@@ -8,6 +8,7 @@ import OpenItemsCard from '@/components/admin/OpenItemsCard'
 import SalesLeadersCard from '@/components/admin/SalesLeadersCard'
 import ReferralSourcesCard from '@/components/admin/ReferralSourcesCard'
 import JobRevenueChart from '@/components/admin/JobRevenueChart'
+import WelcomeLoading from '@/components/admin/WelcomeLoading'
 import { formatCurrency } from '@/lib/format'
 import type { DashboardData } from '@/lib/queries/dashboard'
 
@@ -41,8 +42,14 @@ function SkeletonDashboard() {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [profileName, setProfileName] = useState<string | null>(null)
 
   useEffect(() => {
+    fetch('/api/admin/me')
+      .then(res => res.ok ? res.json() : null)
+      .then(profile => setProfileName(profile?.full_name ?? profile?.email ?? null))
+      .catch(() => setProfileName(null))
+
     fetch('/api/admin/dashboard')
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -63,7 +70,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (!data) return <SkeletonDashboard />
+  if (!data) return <WelcomeLoading name={profileName} />
 
   const movesValue = `${data.movesThisMonth} / ${formatCurrency(data.revenueThisMonth)}`
   const avgProfit  = data.avgProfitPerCustomer > 0
@@ -74,10 +81,10 @@ export default function DashboardPage() {
     : '$0'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Page title */}
-      <div className="mb-2">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+      <div className="mb-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Dashboard</h1>
         <p className="mt-0.5 text-sm text-slate-500">Welcome back — here&apos;s what&apos;s happening at Kratos Moving.</p>
       </div>
 
