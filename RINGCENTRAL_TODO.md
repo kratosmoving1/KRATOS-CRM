@@ -18,6 +18,12 @@ Features needed
    - Render templates server-side and substitute variables
    - Ensure sending number is SMS-enabled and belongs to extension
    - Save communications records and audit logs only after successful send
+   - RingCentral app needs SMS/A2P SMS permissions/scopes for production texting.
+   - The authenticated JWT user must have permission to send SMS.
+   - `RINGCENTRAL_FROM_NUMBER` must belong to the authenticated RingCentral account/extension.
+   - The from number must be SMS-enabled.
+   - Business SMS/A2P registration may be required before production SMS works.
+   - If SMS fails, the CRM must show the actual RingCentral error returned by the API.
 
 3. Sync call logs from RingCentral to CRM
    - Create a webhook endpoint to receive call logs and message events

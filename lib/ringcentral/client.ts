@@ -68,7 +68,19 @@ export class RingCentralCallError extends Error {
 }
 
 export function isRingCentralConfigured() {
-  return Boolean(RC_CLIENT_ID && RC_CLIENT_SECRET && RC_JWT && RC_FROM)
+  return getMissingRingCentralEnv().length === 0
+}
+
+export function getMissingRingCentralEnv() {
+  return [
+    ['RINGCENTRAL_CLIENT_ID', RC_CLIENT_ID],
+    ['RINGCENTRAL_CLIENT_SECRET', RC_CLIENT_SECRET],
+    ['RINGCENTRAL_JWT', RC_JWT],
+    ['RINGCENTRAL_SERVER_URL', process.env.RINGCENTRAL_SERVER_URL],
+    ['RINGCENTRAL_FROM_NUMBER', RC_FROM],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name)
 }
 
 export function getRingCentralConfigStatus() {
@@ -76,7 +88,7 @@ export function getRingCentralConfigStatus() {
     hasClientId: Boolean(RC_CLIENT_ID),
     hasClientSecret: Boolean(RC_CLIENT_SECRET),
     hasJwt: Boolean(RC_JWT),
-    hasServerUrl: Boolean(RC_SERVER),
+    hasServerUrl: Boolean(process.env.RINGCENTRAL_SERVER_URL),
     hasFromNumber: Boolean(RC_FROM),
     serverUrl: RC_SERVER,
   }
@@ -97,7 +109,12 @@ function extractRingCentralError(data: RingCentralErrorResponse, fallback: strin
 }
 
 async function getAccessToken() {
-  if (!isRingCentralConfigured()) throw new Error('RingCentral is not configured.')
+  const missingEnv = getMissingRingCentralEnv()
+  if (missingEnv.length > 0) {
+    throw new RingCentralCallError(`RingCentral is not configured. Missing: ${missingEnv.join(', ')}`, {
+      code: 'RINGCENTRAL_NOT_CONFIGURED',
+    })
+  }
 
   const credentials = Buffer.from(`${RC_CLIENT_ID}:${RC_CLIENT_SECRET}`).toString('base64')
   const body = new URLSearchParams({

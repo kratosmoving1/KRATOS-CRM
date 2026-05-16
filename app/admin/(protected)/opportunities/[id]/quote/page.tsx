@@ -195,6 +195,7 @@ export default function OpportunityDetailPage() {
   const [noAnswerTemplates, setNoAnswerTemplates] = useState<CommunicationTemplate[]>([])
   const [noAnswerSmsTemplateId, setNoAnswerSmsTemplateId] = useState('')
   const [noAnswerEmailTemplateId, setNoAnswerEmailTemplateId] = useState('')
+  const [noAnswerSmsSending, setNoAnswerSmsSending] = useState(false)
 
   // Timeline
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -318,6 +319,48 @@ export default function OpportunityDetailPage() {
       loadTimeline()
     } catch { toast.error('Network error') }
     finally { setCommSubmitting(false) }
+  }
+
+  async function sendNoAnswerSms() {
+    if (!opp?.customer) {
+      toast.error('No customer linked')
+      return
+    }
+
+    if (!noAnswerSmsTemplateId) {
+      toast.error('Select an SMS template')
+      return
+    }
+
+    setNoAnswerSmsSending(true)
+    toast.message('Sending SMS...')
+
+    try {
+      const res = await fetch('/api/communications/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: opp.id,
+          customerId: opp.customer.id,
+          templateId: noAnswerSmsTemplateId,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        toast.error(typeof data.error === 'string' ? data.error : 'Unable to send SMS')
+        loadTimeline()
+        return
+      }
+
+      toast.success('SMS sent.')
+      loadTimeline()
+    } catch {
+      toast.error('Unable to send SMS')
+      loadTimeline()
+    } finally {
+      setNoAnswerSmsSending(false)
+    }
   }
 
   async function handlePaymentMethod(method: PaymentMethod) {
@@ -574,9 +617,11 @@ export default function OpportunityDetailPage() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => toast.message('RingCentral SMS route is not connected yet.')}
-                        className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                        onClick={sendNoAnswerSms}
+                        disabled={noAnswerSmsSending || !noAnswerSmsTemplateId}
+                        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600 disabled:opacity-50"
                       >
+                        {noAnswerSmsSending && <Loader2 size={13} className="animate-spin" />}
                         Send SMS using template
                       </button>
                       <button

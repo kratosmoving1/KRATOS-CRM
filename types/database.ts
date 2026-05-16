@@ -186,6 +186,9 @@ export type Database = {
           call_duration_seconds: number | null
           phone_number: string | null
           status: string | null
+          provider: string | null
+          provider_message_id: string | null
+          error_message: string | null
           email_to: string | null
           email_cc: string | null
           created_by: string | null
