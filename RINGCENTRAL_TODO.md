@@ -5,9 +5,11 @@ Plan and implementation notes for RingCentral integration
 Features needed
 
 1. Click-to-call from CRM
-   - Implement a secure server-side API that creates RingCentral calls using OAuth or JWT
-   - Use server-side credentials only; never expose client secret in the browser
-   - Provide UI integration to start call and show call progress
+   - Server route added: `POST /api/ringcentral/call`
+   - UI confirmation added for phone numbers on opportunity/customer pages
+   - Route uses JWT auth and `POST /restapi/v1.0/account/~/extension/~/ring-out`
+   - Verify the authenticated JWT extension can use RingOut and that `RINGCENTRAL_FROM_NUMBER` is assigned/caller-ID eligible
+   - If RingOut is unavailable for the extension/account, the CRM records a failed call activity and returns a controlled error
 
 2. Send SMS from CRM
    - Implement POST /api/communications/sms/send
@@ -47,6 +49,9 @@ Required environment variables (server only)
 
 Notes
 
+- RingCentral JWT auth exchanges `RINGCENTRAL_JWT` for an OAuth access token, then sends that access token in the Bearer header for RingOut.
+- RingOut may require account-level permissions/scopes and extension eligibility. Confirm the app has voice/RingOut permissions in the RingCentral Developer Console before expecting live calls.
+- The current CRM flow starts a company-line RingOut call with `playPrompt: true`; production testing should confirm whether Kratos wants prompt-on-answer or direct connection.
 - RingCentral SMS requires that the sending number be SMS-enabled for the authenticated extension. Verify from the RingCentral admin dashboard.
 - Prefer server-to-server JWT or OAuth with a service account and store secrets in environment variables or a secrets manager.
 - Use official RingCentral SDK for Node when implementing production flows.

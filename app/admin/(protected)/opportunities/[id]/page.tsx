@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronDown, Edit2, ExternalLink, Loader2, Mail, Phone, PlusCircle } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
+import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -188,11 +189,16 @@ export default function OpportunityProfilePage() {
               </button>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
-              {phone && (
+              {phone && opp.customer && (
                 <span className="inline-flex items-center gap-1.5">
                   <Phone size={14} className="text-slate-400" />
                   {opp.customer?.phone_type ? `${opp.customer.phone_type[0].toUpperCase()}${opp.customer.phone_type.slice(1)}` : 'Phone'}
-                  <a href={`tel:${opp.customer?.phone}`} className="text-blue-600 hover:underline">{phone}</a>
+                  <RingCentralCallButton
+                    phoneNumber={opp.customer.phone ?? ''}
+                    label={phone}
+                    opportunityId={opp.id}
+                    customerId={opp.customer.id}
+                  />
                 </span>
               )}
               {opp.customer?.email && (
@@ -234,7 +240,16 @@ export default function OpportunityProfilePage() {
           <section className="border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-normal text-slate-900">Contacts</h2>
             <div className="mt-6 space-y-2 text-sm text-slate-600">
-              {phone ? <p>{phone}</p> : <p>No customer contacts.</p>}
+              {phone && opp.customer ? (
+                <p>
+                  <RingCentralCallButton
+                    phoneNumber={opp.customer.phone ?? ''}
+                    label={phone}
+                    opportunityId={opp.id}
+                    customerId={opp.customer.id}
+                  />
+                </p>
+              ) : <p>No customer contacts.</p>}
               {opp.customer?.email && <p>{opp.customer.email}</p>}
             </div>
             <h2 className="mt-8 text-lg font-normal text-slate-900">Opportunity Contacts</h2>

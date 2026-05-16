@@ -8,6 +8,7 @@ import {
   TrendingUp, Package, CheckCircle, XCircle,
 } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
+import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
 import { formatCurrency } from '@/lib/format'
 
 interface Opp {
@@ -156,9 +157,13 @@ export default function CustomerDetailPage() {
                 <div className="flex items-center gap-3">
                   <Phone size={15} className="shrink-0 text-slate-400" />
                   <div>
-                    <a href={`tel:${customer.phone}`} className="font-medium text-slate-800 hover:text-kratos">
-                      {customer.phone}
-                    </a>
+                    <RingCentralCallButton
+                      phoneNumber={customer.phone}
+                      label={customer.phone}
+                      customerId={customer.id}
+                      opportunityId={mostRecentOpp?.id ?? null}
+                      className="font-medium text-slate-800 hover:text-kratos"
+                    />
                     {customer.phone_type && (
                       <span className="ml-2 capitalize rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
                         {customer.phone_type}
@@ -171,9 +176,13 @@ export default function CustomerDetailPage() {
                 <div className="flex items-center gap-3">
                   <Phone size={15} className="shrink-0 text-slate-400" />
                   <div>
-                    <a href={`tel:${customer.secondary_phone}`} className="font-medium text-slate-800 hover:text-kratos">
-                      {customer.secondary_phone}
-                    </a>
+                    <RingCentralCallButton
+                      phoneNumber={customer.secondary_phone}
+                      label={customer.secondary_phone}
+                      customerId={customer.id}
+                      opportunityId={mostRecentOpp?.id ?? null}
+                      className="font-medium text-slate-800 hover:text-kratos"
+                    />
                     {customer.secondary_phone_type && (
                       <span className="ml-2 capitalize rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
                         {customer.secondary_phone_type}

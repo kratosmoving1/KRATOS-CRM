@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
+import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
 import ChangeStatusModal from '@/components/admin/modals/ChangeStatusModal'
 import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
 import CreateFollowUpModal from '@/components/admin/modals/CreateFollowUpModal'
@@ -625,9 +626,13 @@ export default function OpportunityDetailPage() {
                     {opp.customer.phone && (
                       <div className="flex items-center gap-2 text-sm text-slate-600">
                         <Phone size={13} className="text-slate-400 shrink-0" />
-                        <a href={`tel:${opp.customer.phone}`} className="hover:text-kratos">
-                          {opp.customer.phone}
-                        </a>
+                        <RingCentralCallButton
+                          phoneNumber={opp.customer.phone}
+                          label={opp.customer.phone}
+                          opportunityId={opp.id}
+                          customerId={opp.customer.id}
+                          className="text-slate-600 hover:text-kratos"
+                        />
                         {opp.customer.phone_type && (
                           <span className="capitalize text-xs text-slate-400">({opp.customer.phone_type})</span>
                         )}
@@ -636,7 +641,13 @@ export default function OpportunityDetailPage() {
                     {opp.customer.secondary_phone && (
                       <div className="flex items-center gap-2 text-sm text-slate-600">
                         <Phone size={13} className="text-slate-400 shrink-0" />
-                        {opp.customer.secondary_phone}
+                        <RingCentralCallButton
+                          phoneNumber={opp.customer.secondary_phone}
+                          label={opp.customer.secondary_phone}
+                          opportunityId={opp.id}
+                          customerId={opp.customer.id}
+                          className="text-slate-600 hover:text-kratos"
+                        />
                       </div>
                     )}
                     {opp.customer.email && (

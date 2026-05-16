@@ -184,6 +184,8 @@ export type Database = {
           body: string
           call_outcome: 'connected' | 'voicemail' | 'no_answer' | 'wrong_number' | 'busy' | null
           call_duration_seconds: number | null
+          phone_number: string | null
+          status: string | null
           email_to: string | null
           email_cc: string | null
           created_by: string | null
