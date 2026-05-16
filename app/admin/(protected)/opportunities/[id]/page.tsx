@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ChevronDown, Edit2, ExternalLink, Loader2, Mail, Phone, PlusCircle } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
 import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
+import SendEstimateMenu from '@/components/admin/SendEstimateMenu'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -36,6 +37,7 @@ interface OppProfile {
   move_size: string | null
   total_amount: number
   estimated_cost: number
+  deposit_amount?: number | null
   origin_address_line1: string | null
   origin_address_line2: string | null
   origin_city: string | null
@@ -209,10 +211,28 @@ export default function OpportunityProfilePage() {
               )}
             </div>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-md bg-kratos px-4 py-2 text-sm font-semibold text-slate-900 hover:opacity-90">
-            <PlusCircle size={16} />
-            Add Quote
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <SendEstimateMenu
+              opportunity={{
+                id: opp.id,
+                opportunityNumber: formatQuoteNumber(opp.opportunity_number),
+                estimateTotal: opp.total_amount ?? 0,
+                depositAmount: opp.deposit_amount ?? null,
+                moveSize,
+                moveDate: formatShortDate(opp.service_date),
+                customer: opp.customer ? {
+                  id: opp.customer.id,
+                  fullName: opp.customer.full_name,
+                  email: opp.customer.email,
+                  phone: opp.customer.phone,
+                } : null,
+              }}
+            />
+            <button className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              <PlusCircle size={16} />
+              Add Quote
+            </button>
+          </div>
         </div>
       </header>
 

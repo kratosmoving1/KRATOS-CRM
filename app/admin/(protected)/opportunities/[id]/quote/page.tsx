@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
 import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
+import SendEstimateMenu from '@/components/admin/SendEstimateMenu'
 import ChangeStatusModal from '@/components/admin/modals/ChangeStatusModal'
 import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
 import CreateFollowUpModal from '@/components/admin/modals/CreateFollowUpModal'
@@ -51,7 +52,7 @@ interface AuditEntry {
 interface OppDetail {
   id: string; opportunity_number: string; status: OppStatus
   service_type: string; service_date: string | null; move_size: string | null
-  total_amount: number; estimated_cost: number; notes: string | null
+  total_amount: number; estimated_cost: number; deposit_amount?: number | null; notes: string | null
   origin_address_line1: string | null; origin_address_line2: string | null
   origin_city: string | null; origin_province: string | null
   origin_postal_code: string | null; origin_dwelling_type: string | null
@@ -531,6 +532,22 @@ export default function OpportunityDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <SendEstimateMenu
+              opportunity={{
+                id: opp.id,
+                opportunityNumber: formatQuoteNumber(opp.opportunity_number),
+                estimateTotal: opp.total_amount ?? 0,
+                depositAmount: opp.deposit_amount ?? null,
+                moveSize: opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : null,
+                moveDate: opp.service_date ? formatDateShort(opp.service_date) : null,
+                customer: opp.customer ? {
+                  id: opp.customer.id,
+                  fullName: opp.customer.full_name,
+                  email: opp.customer.email,
+                  phone: opp.customer.phone,
+                } : null,
+              }}
+            />
             <button
               onClick={() => setShowEditModal(true)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"

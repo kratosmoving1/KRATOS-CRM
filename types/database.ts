@@ -65,6 +65,7 @@ export type Database = {
           move_size: string | null
           total_amount: number
           estimated_cost: number
+          deposit_amount: number | null
           service_date: string | null
           pickup_city: string | null
           dropoff_city: string | null
@@ -101,6 +102,8 @@ export type Database = {
           closed_at: string | null
           cancelled_at: string | null
           lost_at: string | null
+          estimate_sent_at: string | null
+          estimate_sent_by: string | null
           company_id: string | null
           created_at: string
           updated_at: string
@@ -222,6 +225,20 @@ export type Database = {
         }
         Insert: Omit<Database['public']['Tables']['payments']['Row'], 'id' | 'created_at' | 'updated_at' | 'is_deleted'>
         Update: Partial<Database['public']['Tables']['payments']['Insert']>
+      }
+      estimate_portal_links: {
+        Row: {
+          id: string
+          opportunity_id: string
+          quote_id: string | null
+          token: string
+          expires_at: string | null
+          created_by: string | null
+          created_at: string
+          last_viewed_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['estimate_portal_links']['Row'], 'id' | 'created_at' | 'last_viewed_at'>
+        Update: Partial<Database['public']['Tables']['estimate_portal_links']['Insert']>
       }
       communication_templates: {
         Row: {

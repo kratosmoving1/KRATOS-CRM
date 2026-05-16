@@ -8,6 +8,7 @@ export const ALLOWED_OPPORTUNITY_COLUMNS = [
   'move_size',
   'total_amount',
   'estimated_cost',
+  'deposit_amount',
   'service_date',
   'pickup_city',
   'dropoff_city',
@@ -44,6 +45,8 @@ export const ALLOWED_OPPORTUNITY_COLUMNS = [
   'closed_at',
   'cancelled_at',
   'lost_at',
+  'estimate_sent_at',
+  'estimate_sent_by',
   'company_id',
   'is_deleted',
 ] as const
