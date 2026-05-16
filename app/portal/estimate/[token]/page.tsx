@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import Image from 'next/image'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { formatCurrency } from '@/lib/format'
@@ -89,7 +90,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
           </div>
           <div className="flex gap-2">
             <button className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white/80">Manage Inventory</button>
-            <button className="rounded-lg bg-kratos px-3 py-2 text-sm font-semibold text-slate-950">Sign Estimate</button>
+            <Link href={`/portal/estimate/${params.token}/sign`} className="rounded-lg bg-kratos px-3 py-2 text-sm font-semibold text-slate-950">Sign Estimate</Link>
           </div>
         </div>
       </header>
@@ -157,7 +158,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
 
         <div className="mt-10 flex flex-wrap gap-3">
           <button className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700">Manage Inventory</button>
-          <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">Sign Estimate</button>
+          <Link href={`/portal/estimate/${params.token}/sign`} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">Sign Estimate</Link>
           <button className="rounded-xl bg-kratos px-5 py-3 text-sm font-semibold text-slate-950">Pay Deposit</button>
         </div>
       </section>

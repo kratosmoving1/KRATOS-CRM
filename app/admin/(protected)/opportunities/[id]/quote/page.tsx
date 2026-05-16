@@ -17,6 +17,7 @@ import SendEstimateMenu from '@/components/admin/SendEstimateMenu'
 import ChangeStatusModal from '@/components/admin/modals/ChangeStatusModal'
 import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
 import CreateFollowUpModal from '@/components/admin/modals/CreateFollowUpModal'
+import QuickEditModal from '@/components/admin/modals/QuickEditModal'
 import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -192,6 +193,7 @@ export default function OpportunityDetailPage() {
   const [tab, setTab] = useState<'sales' | 'estimate'>('sales')
 
   const [showStatusModal, setShowStatusModal] = useState(false)
+  const [showQuickEdit, setShowQuickEdit] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -549,7 +551,7 @@ export default function OpportunityDetailPage() {
               }}
             />
             <button
-              onClick={() => setShowEditModal(true)}
+              onClick={() => setShowQuickEdit(true)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               <Edit2 size={14} /> Edit
@@ -1233,6 +1235,28 @@ export default function OpportunityDetailPage() {
             load()
             loadTimeline()
           }}
+        />
+      )}
+
+      {showQuickEdit && (
+        <QuickEditModal
+          data={{
+            oppId:             opp.id,
+            customerId:        opp.customer?.id ?? '',
+            customerName:      opp.customer?.full_name ?? '',
+            customerPhone:     opp.customer?.phone ?? '',
+            customerPhoneType: opp.customer?.phone_type ?? 'mobile',
+            customerEmail:     opp.customer?.email ?? '',
+            serviceDate:       opp.service_date,
+            serviceDateTbd:    !opp.service_date,
+            serviceType:       opp.service_type,
+            moveSize:          opp.move_size ?? '',
+            leadSourceId:      opp.lead_source?.id ?? '',
+            leadSourceName:    opp.lead_source?.name ?? null,
+          }}
+          onClose={() => setShowQuickEdit(false)}
+          onSaved={load}
+          onOpenFullEdit={() => { setShowQuickEdit(false); setShowEditModal(true) }}
         />
       )}
 

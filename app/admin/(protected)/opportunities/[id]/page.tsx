@@ -7,6 +7,8 @@ import { ChevronDown, Edit2, ExternalLink, Loader2, Mail, Phone, PlusCircle } fr
 import StatusPill from '@/components/ui/StatusPill'
 import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
 import SendEstimateMenu from '@/components/admin/SendEstimateMenu'
+import QuickEditModal from '@/components/admin/modals/QuickEditModal'
+import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -115,6 +117,8 @@ export default function OpportunityProfilePage() {
   const [opp, setOpp] = useState<OppProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showQuickEdit, setShowQuickEdit] = useState(false)
+  const [showFullEdit, setShowFullEdit] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -186,7 +190,12 @@ export default function OpportunityProfilePage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-normal tracking-tight text-slate-900">{customerName}</h1>
-              <button className="rounded p-1 text-blue-600 hover:bg-blue-50" aria-label="Edit profile">
+              <button
+                onClick={() => setShowQuickEdit(true)}
+                className="rounded p-1 text-blue-600 hover:bg-blue-50"
+                aria-label="Quick edit"
+                title="Quick edit"
+              >
                 <Edit2 size={17} />
               </button>
             </div>
@@ -357,6 +366,35 @@ export default function OpportunityProfilePage() {
           </section>
         </main>
       </div>
+
+      {showQuickEdit && opp && (
+        <QuickEditModal
+          data={{
+            oppId:             opp.id,
+            customerId:        opp.customer?.id ?? '',
+            customerName:      opp.customer?.full_name ?? '',
+            customerPhone:     opp.customer?.phone ?? '',
+            customerPhoneType: opp.customer?.phone_type ?? 'mobile',
+            customerEmail:     opp.customer?.email ?? '',
+            serviceDate:       opp.service_date,
+            serviceDateTbd:    !opp.service_date,
+            serviceType:       opp.service_type,
+            moveSize:          opp.move_size ?? '',
+            leadSourceId:      opp.lead_source?.id ?? '',
+            leadSourceName:    opp.lead_source?.name ?? null,
+          }}
+          onClose={() => setShowQuickEdit(false)}
+          onSaved={load}
+          onOpenFullEdit={() => setShowFullEdit(true)}
+        />
+      )}
+
+      {showFullEdit && opp && (
+        <CreateOpportunityModal
+          editId={opp.id}
+          onClose={() => { setShowFullEdit(false); load() }}
+        />
+      )}
     </div>
   )
 }
