@@ -8,7 +8,7 @@ import {
   MapPin, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Package, Boxes, ListTodo, ArrowRight,
-  ClipboardCheck, ShieldCheck,
+  ClipboardCheck, ShieldCheck, Calendar, Pencil,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
@@ -18,6 +18,7 @@ import ChangeStatusModal from '@/components/admin/modals/ChangeStatusModal'
 import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityModal'
 import CreateFollowUpModal from '@/components/admin/modals/CreateFollowUpModal'
 import QuickEditModal from '@/components/admin/modals/QuickEditModal'
+import EditAddressModal, { type EditAddressData } from '@/components/admin/modals/EditAddressModal'
 import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -198,6 +199,15 @@ export default function OpportunityDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Move date inline edit
+  const [showDateEdit, setShowDateEdit] = useState(false)
+  const [editingDate, setEditingDate] = useState('')
+  const [editingTbd, setEditingTbd] = useState(false)
+  const [savingDate, setSavingDate] = useState(false)
+
+  // Address edit modal
+  const [addressEditData, setAddressEditData] = useState<EditAddressData | null>(null)
+
   // Communication composer
   const [commType, setCommType] = useState<CommType>('note')
   const [commBody, setCommBody] = useState('')
@@ -285,6 +295,55 @@ export default function OpportunityDetailPage() {
       })
       setOpp(p => p ? { ...p, notes } : p)
     } finally { setNotesSaving(false) }
+  }
+
+  function openDateEdit() {
+    if (!opp) return
+    setEditingDate(opp.service_date ?? '')
+    setEditingTbd(!opp.service_date)
+    setShowDateEdit(true)
+  }
+
+  async function saveDateEdit() {
+    if (!opp) return
+    setSavingDate(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/move-date`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceDate: editingTbd ? null : editingDate, tbd: editingTbd }),
+      })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error ?? 'Failed to save date'); return }
+      setOpp(p => p ? { ...p, service_date: json.service_date } : p)
+      setShowDateEdit(false)
+      toast.success('Move date updated.')
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setSavingDate(false)
+    }
+  }
+
+  function openAddressEdit(prefix: 'origin' | 'dest') {
+    if (!opp) return
+    const isOrigin = prefix === 'origin'
+    setAddressEditData({
+      oppId:          opp.id,
+      prefix,
+      address_line1:  (isOrigin ? opp.origin_address_line1 : opp.dest_address_line1)  ?? '',
+      address_line2:  (isOrigin ? opp.origin_address_line2 : opp.dest_address_line2)  ?? '',
+      city:           (isOrigin ? opp.origin_city          : opp.dest_city)            ?? '',
+      province:       (isOrigin ? opp.origin_province      : opp.dest_province)        ?? '',
+      postal_code:    (isOrigin ? opp.origin_postal_code   : opp.dest_postal_code)     ?? '',
+      place_id:       '',
+      dwelling_type:  (isOrigin ? opp.origin_dwelling_type : opp.dest_dwelling_type)   ?? '',
+      floor:          String(isOrigin ? (opp.origin_floor ?? '') : (opp.dest_floor ?? '')),
+      has_elevator:   (isOrigin ? opp.origin_has_elevator  : opp.dest_has_elevator)    ?? false,
+      stairs_count:   String(isOrigin ? (opp.origin_stairs_count ?? '') : (opp.dest_stairs_count ?? '')),
+      long_carry:     (isOrigin ? opp.origin_long_carry    : opp.dest_long_carry)      ?? false,
+      parking_notes:  (isOrigin ? opp.origin_parking_notes : opp.dest_parking_notes)   ?? '',
+    })
   }
 
   async function handleDelete() {
@@ -871,7 +930,76 @@ export default function OpportunityDetailPage() {
                   <InfoRow label="Agent"   value={opp.agent?.full_name ?? 'Unassigned'} />
                   <InfoRow label="Source"  value={opp.lead_source?.name ?? '—'} />
                   <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
-                  <InfoRow label="Date"    value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} />
+
+                  {/* Move date row with inline edit */}
+                  {showDateEdit ? (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Move Date</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowDateEdit(false)}
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="tbd-check"
+                          checked={editingTbd}
+                          onChange={e => setEditingTbd(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 accent-kratos"
+                        />
+                        <label htmlFor="tbd-check" className="text-sm text-slate-600 cursor-pointer select-none">TBD (date not confirmed)</label>
+                      </div>
+                      {!editingTbd && (
+                        <input
+                          type="date"
+                          value={editingDate}
+                          onChange={e => setEditingDate(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                        />
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowDateEdit(false)}
+                          className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveDateEdit}
+                          disabled={savingDate}
+                          className="flex items-center gap-1.5 rounded-lg bg-kratos px-3 py-1.5 text-xs font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
+                        >
+                          {savingDate && <Loader2 size={12} className="animate-spin" />}
+                          Save Date
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Date</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-slate-900">
+                          {opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={openDateEdit}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Edit move date"
+                        >
+                          <Calendar size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <InfoRow label="Size"    value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
                 </div>
               </div>
@@ -959,15 +1087,35 @@ export default function OpportunityDetailPage() {
                 <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Trip Info</h2>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div>
-                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      <MapPin size={12} /> Origin
-                    </p>
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <MapPin size={12} /> Origin
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openAddressEdit('origin')}
+                        className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Edit origin address"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </div>
                     <AddressBlock prefix="origin" data={opp} />
                   </div>
                   <div>
-                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      <MapPin size={12} /> Destination
-                    </p>
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <MapPin size={12} /> Destination
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openAddressEdit('dest')}
+                        className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Edit destination address"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </div>
                     <AddressBlock prefix="dest" data={opp} />
                   </div>
                 </div>
@@ -1247,12 +1395,6 @@ export default function OpportunityDetailPage() {
             customerPhone:     opp.customer?.phone ?? '',
             customerPhoneType: opp.customer?.phone_type ?? 'mobile',
             customerEmail:     opp.customer?.email ?? '',
-            serviceDate:       opp.service_date,
-            serviceDateTbd:    !opp.service_date,
-            serviceType:       opp.service_type,
-            moveSize:          opp.move_size ?? '',
-            leadSourceId:      opp.lead_source?.id ?? '',
-            leadSourceName:    opp.lead_source?.name ?? null,
           }}
           onClose={() => setShowQuickEdit(false)}
           onSaved={load}
@@ -1264,6 +1406,14 @@ export default function OpportunityDetailPage() {
         <CreateOpportunityModal
           onClose={() => { setShowEditModal(false); load() }}
           editId={opp.id}
+        />
+      )}
+
+      {addressEditData && (
+        <EditAddressModal
+          data={addressEditData}
+          onClose={() => setAddressEditData(null)}
+          onSaved={load}
         />
       )}
 

@@ -376,12 +376,6 @@ export default function OpportunityProfilePage() {
             customerPhone:     opp.customer?.phone ?? '',
             customerPhoneType: opp.customer?.phone_type ?? 'mobile',
             customerEmail:     opp.customer?.email ?? '',
-            serviceDate:       opp.service_date,
-            serviceDateTbd:    !opp.service_date,
-            serviceType:       opp.service_type,
-            moveSize:          opp.move_size ?? '',
-            leadSourceId:      opp.lead_source?.id ?? '',
-            leadSourceName:    opp.lead_source?.name ?? null,
           }}
           onClose={() => setShowQuickEdit(false)}
           onSaved={load}

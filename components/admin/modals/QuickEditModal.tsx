@@ -1,27 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Loader2, Settings } from 'lucide-react'
+import { useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import ModalShell from '@/components/ui/ModalShell'
-import { Input, Select, GroupedSelect } from '@/components/ui/FormField'
-import { SERVICE_TYPES, MOVE_SIZE_GROUPS, PHONE_TYPES } from '@/lib/constants'
+import { Input, Select } from '@/components/ui/FormField'
+import { PHONE_TYPES } from '@/lib/constants'
 
-interface LeadSource { id: string; name: string }
-
-interface QuickEditData {
+export interface QuickEditData {
   oppId: string
   customerId: string
   customerName: string
   customerPhone: string
   customerPhoneType: string
   customerEmail: string
-  serviceDate: string | null
-  serviceDateTbd: boolean
-  serviceType: string
-  moveSize: string
-  leadSourceId: string
-  leadSourceName: string | null
 }
 
 interface Props {
@@ -40,7 +32,6 @@ function formatPhone(raw: string): string {
 
 export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit }: Props) {
   const [submitting, setSubmitting] = useState(false)
-  const [leadSources, setLeadSources] = useState<LeadSource[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const [form, setForm] = useState({
@@ -48,16 +39,7 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
     customerPhone:     data.customerPhone,
     customerPhoneType: data.customerPhoneType || 'mobile',
     customerEmail:     data.customerEmail,
-    serviceDate:       data.serviceDate ?? '',
-    serviceDateTbd:    data.serviceDateTbd,
-    serviceType:       data.serviceType,
-    moveSize:          data.moveSize,
-    leadSourceId:      data.leadSourceId,
   })
-
-  useEffect(() => {
-    fetch('/api/admin/lead-sources').then(r => r.json()).then(setLeadSources).catch(() => {})
-  }, [])
 
   function update<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm(p => ({ ...p, [k]: v }))
@@ -70,7 +52,6 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
     if (!form.customerPhone.trim()) errs.customerPhone = 'Required'
     else if (form.customerPhone.replace(/\D/g, '').length !== 10) errs.customerPhone = 'Must be 10 digits'
     if (form.customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.customerEmail)) errs.customerEmail = 'Invalid email'
-    if (!form.serviceDateTbd && !form.serviceDate) errs.serviceDate = 'Set a date or check TBD'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -87,18 +68,11 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
           customerPhone:     form.customerPhone.replace(/\D/g, ''),
           customerPhoneType: form.customerPhoneType,
           customerEmail:     form.customerEmail.trim() || null,
-          serviceDate:       form.serviceDateTbd ? null : (form.serviceDate || null),
-          serviceType:       form.serviceType,
-          moveSize:          form.moveSize || null,
-          leadSourceId:      form.leadSourceId || null,
         }),
       })
       const json = await res.json()
-      if (!res.ok) {
-        toast.error(json.error ?? 'Failed to save changes')
-        return
-      }
-      toast.success('Customer details updated.')
+      if (!res.ok) { toast.error(json.error ?? 'Failed to save changes'); return }
+      toast.success('Contact details updated.')
       onSaved()
       onClose()
     } catch {
@@ -110,18 +84,17 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
 
   return (
     <ModalShell
-      title="Quick Edit"
-      subtitle="OPPORTUNITY"
+      title="Edit Customer Contact"
+      subtitle="QUICK EDIT"
       onClose={onClose}
-      maxWidth="max-w-lg"
+      maxWidth="max-w-md"
       footer={
         <div className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => { onClose(); onOpenFullEdit() }}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
+            className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
-            <Settings size={14} />
             Edit Full Move Details
           </button>
           <div className="flex items-center gap-2">
@@ -142,10 +115,6 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
       }
     >
       <div className="space-y-4">
-        <div className="border-b border-slate-100 pb-1">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Customer</p>
-        </div>
-
         <Input
           label="Full Name"
           required
@@ -154,7 +123,6 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
           error={errors.customerName}
           placeholder="Jane Smith"
         />
-
         <div className="flex items-end gap-2">
           <Input
             label="Phone Number"
@@ -173,7 +141,6 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
             options={PHONE_TYPES.map(p => ({ value: p.value, label: p.label }))}
           />
         </div>
-
         <Input
           label="Email"
           type="email"
@@ -181,55 +148,6 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
           onChange={e => update('customerEmail', e.target.value)}
           error={errors.customerEmail}
           placeholder="jane@example.com"
-        />
-
-        <div className="border-b border-slate-100 pb-1 pt-2">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Move Details</p>
-        </div>
-
-        <div>
-          <Input
-            label="Move Date"
-            type="date"
-            required={!form.serviceDateTbd}
-            value={form.serviceDate}
-            onChange={e => update('serviceDate', e.target.value)}
-            disabled={form.serviceDateTbd}
-            error={errors.serviceDate}
-          />
-          <label className="mt-2 flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.serviceDateTbd}
-              onChange={e => update('serviceDateTbd', e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 accent-kratos"
-            />
-            <span className="text-sm text-slate-600">TBD</span>
-          </label>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="Type of Service"
-            value={form.serviceType}
-            onChange={e => update('serviceType', e.target.value)}
-            options={SERVICE_TYPES.map(s => ({ value: s.value, label: s.label }))}
-          />
-          <GroupedSelect
-            label="Move Size"
-            placeholder="Select…"
-            value={form.moveSize}
-            onChange={e => update('moveSize', e.target.value)}
-            groups={MOVE_SIZE_GROUPS}
-          />
-        </div>
-
-        <Select
-          label="Referral Source"
-          placeholder="Select source…"
-          value={form.leadSourceId}
-          onChange={e => update('leadSourceId', e.target.value)}
-          options={leadSources.map(ls => ({ value: ls.id, label: ls.name }))}
         />
       </div>
     </ModalShell>
