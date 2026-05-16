@@ -182,7 +182,7 @@ export type Database = {
           direction: 'inbound' | 'outbound' | 'internal' | null
           subject: string | null
           body: string
-          call_outcome: 'connected' | 'voicemail' | 'no_answer' | 'wrong_number' | 'busy' | null
+          call_outcome: 'connected' | 'voicemail' | 'no_answer' | 'wrong_number' | 'busy' | 'pending' | null
           call_duration_seconds: number | null
           phone_number: string | null
           status: string | null
@@ -195,6 +195,21 @@ export type Database = {
         }
         Insert: Omit<Database['public']['Tables']['communications']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['communications']['Insert']>
+      }
+      communication_templates: {
+        Row: {
+          id: string
+          name: string
+          channel: 'sms' | 'email' | 'call'
+          trigger: string
+          subject: string | null
+          body: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['communication_templates']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['communication_templates']['Insert']>
       }
     }
   }

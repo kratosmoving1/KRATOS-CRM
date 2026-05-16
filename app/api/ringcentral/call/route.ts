@@ -4,10 +4,12 @@ import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizeRole, type CrmRole } from '@/lib/auth/permissions'
 import {
+  getRingCentralConfigStatus,
   isRingCentralConfigured,
-  normalizePhoneToE164,
+  RingCentralCallError,
   startRingCentralCall,
 } from '@/lib/ringcentral/client'
+import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 import type { Json } from '@/types/database'
 
 const CALL_ALLOWED_ROLES: CrmRole[] = ['owner', 'admin', 'manager', 'sales', 'dispatcher']
@@ -20,6 +22,10 @@ type RingCentralCallBody = {
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
+}
+
+function callRouteLog(message: string, metadata?: Record<string, unknown>) {
+  console.info(`[RingCentralCallRoute] ${message}`, metadata ?? {})
 }
 
 async function writeCallActivity({
@@ -47,7 +53,7 @@ async function writeCallActivity({
       direction: 'outbound',
       subject: 'RingCentral call',
       body,
-      call_outcome: null,
+      call_outcome: status === 'initiated' ? 'pending' : null,
       call_duration_seconds: null,
       email_to: null,
       email_cc: null,
@@ -90,7 +96,25 @@ export async function POST(req: NextRequest) {
     return jsonError('phoneNumber is required.', 400)
   }
 
-  const phoneNumber = normalizePhoneToE164(rawPhoneNumber)
+  const normalizedCustomerPhone = normalizePhoneToE164(rawPhoneNumber)
+  const normalizedFromPhone = normalizePhoneToE164(process.env.RINGCENTRAL_FROM_NUMBER ?? '')
+  const phoneNumber = normalizedCustomerPhone.normalized
+
+  callRouteLog('Call requested', {
+    userId: user.id,
+    role: normalizedRole,
+    opportunityId,
+    customerId,
+    config: getRingCentralConfigStatus(),
+    fromNumber: normalizedFromPhone.normalized || null,
+    fromNumberIsE164: normalizedFromPhone.isE164,
+    toNumber: normalizedCustomerPhone.normalized,
+    toNumberIsE164: normalizedCustomerPhone.isE164,
+  })
+
+  if (!normalizedCustomerPhone.isE164) {
+    return jsonError(`RingCentral call failed: Invalid customer phone number: ${rawPhoneNumber}`, 400)
+  }
   const auditContext = {
     actorUserId: user.id,
     entityType: 'ringcentral_call',
@@ -167,6 +191,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unable to start RingCentral call.'
+    const statusCode = err instanceof RingCentralCallError && err.status ? err.status : 502
     const { data: failedActivity } = await writeCallActivity({
       opportunityId,
       customerId,
@@ -186,7 +211,12 @@ export async function POST(req: NextRequest) {
       } satisfies Json,
     })
 
-    console.error('RingCentral call failed:', err)
-    return jsonError('Unable to start call.', 502)
+    console.error('RingCentral call failed:', {
+      message,
+      status: err instanceof RingCentralCallError ? err.status : undefined,
+      code: err instanceof RingCentralCallError ? err.code : undefined,
+      details: err instanceof RingCentralCallError ? err.details : undefined,
+    })
+    return jsonError(`RingCentral call failed: ${message}`, statusCode >= 400 && statusCode < 600 ? statusCode : 502)
   }
 }

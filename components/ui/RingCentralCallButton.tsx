@@ -36,13 +36,13 @@ export default function RingCentralCallButton({
       const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
-        toast.success('Call started.')
+        toast.success('Call started through RingCentral.')
         setConfirming(false)
         return
       }
 
-      if (data?.error === 'RingCentral is not configured.') {
-        toast.error('RingCentral is not configured.')
+      if (typeof data?.error === 'string') {
+        toast.error(data.error)
         return
       }
 

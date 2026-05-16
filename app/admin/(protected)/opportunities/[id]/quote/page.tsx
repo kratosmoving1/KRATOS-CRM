@@ -89,6 +89,15 @@ interface TimelineItem {
   actor: string | null
 }
 
+interface CommunicationTemplate {
+  id: string
+  name: string
+  channel: 'sms' | 'email' | 'call'
+  trigger: string
+  subject: string | null
+  body: string
+}
+
 function AddressBlock({ prefix, data }: { prefix: 'origin' | 'dest'; data: OppDetail }) {
   const isOrigin = prefix === 'origin'
   const addr1    = isOrigin ? data.origin_address_line1 : data.dest_address_line1
@@ -183,6 +192,9 @@ export default function OpportunityDetailPage() {
   const [commEmailTo, setCommEmailTo] = useState('')
   const [commSubmitting, setCommSubmitting] = useState(false)
   const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
+  const [noAnswerTemplates, setNoAnswerTemplates] = useState<CommunicationTemplate[]>([])
+  const [noAnswerSmsTemplateId, setNoAnswerSmsTemplateId] = useState('')
+  const [noAnswerEmailTemplateId, setNoAnswerEmailTemplateId] = useState('')
 
   // Timeline
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -220,6 +232,29 @@ export default function OpportunityDetailPage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'sales') loadTimeline() }, [tab, loadTimeline])
+
+  useEffect(() => {
+    async function loadNoAnswerTemplates() {
+      if (commType !== 'call' || commCallOutcome !== 'no_answer' || noAnswerTemplates.length > 0) return
+
+      try {
+        const res = await fetch('/api/admin/communication-templates')
+        const data = await res.json()
+        if (!res.ok) return
+
+        const templates = (data.templates ?? []).filter((template: CommunicationTemplate) => (
+          template.trigger === 'no_answer' && (template.channel === 'sms' || template.channel === 'email')
+        ))
+        setNoAnswerTemplates(templates)
+        setNoAnswerSmsTemplateId(templates.find((template: CommunicationTemplate) => template.channel === 'sms')?.id ?? '')
+        setNoAnswerEmailTemplateId(templates.find((template: CommunicationTemplate) => template.channel === 'email')?.id ?? '')
+      } catch {
+        toast.error('Unable to load follow-up templates')
+      }
+    }
+
+    loadNoAnswerTemplates()
+  }, [commType, commCallOutcome, noAnswerTemplates.length])
 
   async function saveNotes() {
     if (!opp || notes === opp.notes) return
@@ -514,9 +549,43 @@ export default function OpportunityDetailPage() {
                 {commType === 'call' && commCallOutcome === 'no_answer' && (
                   <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">No Answer — follow-up actions</p>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => toast('Send SMS — coming soon')} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Send SMS (Coming soon)</button>
-                      <button type="button" onClick={() => toast('Send Email — coming soon')} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Send Email (Coming soon)</button>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <select
+                        value={noAnswerSmsTemplateId}
+                        onChange={event => setNoAnswerSmsTemplateId(event.target.value)}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+                      >
+                        <option value="">Select SMS template</option>
+                        {noAnswerTemplates.filter(template => template.channel === 'sms').map(template => (
+                          <option key={template.id} value={template.id}>{template.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={noAnswerEmailTemplateId}
+                        onChange={event => setNoAnswerEmailTemplateId(event.target.value)}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+                      >
+                        <option value="">Select email template</option>
+                        {noAnswerTemplates.filter(template => template.channel === 'email').map(template => (
+                          <option key={template.id} value={template.id}>{template.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toast.message('SMS sending is not configured yet.')}
+                        className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                      >
+                        Send SMS using template
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toast.message('Email sending is not configured yet.')}
+                        className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600"
+                      >
+                        Send Email using template
+                      </button>
                       <button type="button" onClick={() => setShowCreateFollowUp(true)} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Create follow-up</button>
                     </div>
                   </div>

@@ -1,15 +1,12 @@
-/**
- * Minimal RingCentral client skeleton.
- * - Does not hardcode credentials
- * - Reads configuration from environment variables
- * - Uses REST endpoints server-side only
- */
+import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 
 const RC_CLIENT_ID = process.env.RINGCENTRAL_CLIENT_ID
 const RC_CLIENT_SECRET = process.env.RINGCENTRAL_CLIENT_SECRET
 const RC_JWT = process.env.RINGCENTRAL_JWT
 const RC_SERVER = process.env.RINGCENTRAL_SERVER_URL || 'https://platform.ringcentral.com'
 const RC_FROM = process.env.RINGCENTRAL_FROM_NUMBER
+const RINGOUT_ENDPOINT = '/restapi/v1.0/account/~/extension/~/ring-out'
+const TOKEN_ENDPOINT = '/restapi/oauth/token'
 
 type RingCentralTokenResponse = {
   access_token?: string
@@ -17,6 +14,14 @@ type RingCentralTokenResponse = {
   expires_in?: number
   error?: string
   error_description?: string
+}
+
+type RingCentralErrorResponse = {
+  message?: string
+  error?: string
+  errorCode?: string
+  error_description?: string
+  errors?: Array<{ message?: string; errorCode?: string }>
 }
 
 type StartRingCentralCallInput = {
@@ -35,22 +40,47 @@ export type StartRingCentralCallResult = {
   raw: unknown
 }
 
+export class RingCentralCallError extends Error {
+  status?: number
+  code?: string
+  details?: unknown
+
+  constructor(message: string, options: { status?: number; code?: string; details?: unknown } = {}) {
+    super(message)
+    this.name = 'RingCentralCallError'
+    this.status = options.status
+    this.code = options.code
+    this.details = options.details
+  }
+}
+
 export function isRingCentralConfigured() {
   return Boolean(RC_CLIENT_ID && RC_CLIENT_SECRET && RC_JWT && RC_FROM)
 }
 
-export function normalizePhoneToE164(value: string) {
-  const withoutExtension = value.replace(/(?:ext\.?|x)\s*\d+$/i, '').trim()
-  const digits = withoutExtension.replace(/\D/g, '')
-
-  if (withoutExtension.startsWith('+') && digits.length >= 8 && digits.length <= 15) {
-    return `+${digits}`
+export function getRingCentralConfigStatus() {
+  return {
+    hasClientId: Boolean(RC_CLIENT_ID),
+    hasClientSecret: Boolean(RC_CLIENT_SECRET),
+    hasJwt: Boolean(RC_JWT),
+    hasServerUrl: Boolean(RC_SERVER),
+    hasFromNumber: Boolean(RC_FROM),
+    serverUrl: RC_SERVER,
   }
+}
 
-  if (digits.length === 10) return `+1${digits}`
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
+function ringCentralLog(message: string, metadata?: Record<string, unknown>) {
+  console.info(`[RingCentral] ${message}`, metadata ?? {})
+}
 
-  return value.trim()
+function extractRingCentralError(data: RingCentralErrorResponse, fallback: string) {
+  return (
+    data.message ||
+    data.error_description ||
+    data.error ||
+    data.errors?.find(error => error.message)?.message ||
+    fallback
+  )
 }
 
 async function getAccessToken() {
@@ -62,7 +92,12 @@ async function getAccessToken() {
     assertion: RC_JWT as string,
   })
 
-  const res = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+  ringCentralLog('Authenticating with JWT', {
+    endpoint: `${RC_SERVER}${TOKEN_ENDPOINT}`,
+    config: getRingCentralConfigStatus(),
+  })
+
+  const res = await fetch(`${RC_SERVER}${TOKEN_ENDPOINT}`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -76,8 +111,19 @@ async function getAccessToken() {
 
   if (!res.ok || !data.access_token) {
     const message = data.error_description || data.error || 'Unable to authenticate with RingCentral.'
-    throw new Error(message)
+    console.error('[RingCentral] Auth failed', {
+      status: res.status,
+      code: data.error,
+      message,
+    })
+    throw new RingCentralCallError(message, { status: res.status, code: data.error, details: data })
   }
+
+  ringCentralLog('Auth succeeded', {
+    status: res.status,
+    tokenType: data.token_type,
+    expiresIn: data.expires_in,
+  })
 
   return data.access_token
 }
@@ -85,28 +131,65 @@ async function getAccessToken() {
 export async function startRingCentralCall({ to, from = RC_FROM }: StartRingCentralCallInput): Promise<StartRingCentralCallResult> {
   if (!isRingCentralConfigured() || !from) throw new Error('RingCentral is not configured.')
 
+  const normalizedTo = normalizePhoneToE164(to)
+  const normalizedFrom = normalizePhoneToE164(from)
+
+  if (!normalizedTo.isE164) {
+    throw new RingCentralCallError(`Invalid customer phone number: ${to}`, { code: 'INVALID_TO_NUMBER' })
+  }
+
+  if (!normalizedFrom.isE164) {
+    throw new RingCentralCallError(`Invalid RingCentral from number: ${from}`, { code: 'INVALID_FROM_NUMBER' })
+  }
+
   const token = await getAccessToken()
-  const res = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/ring-out`, {
+  const endpoint = `${RC_SERVER}${RINGOUT_ENDPOINT}`
+  const requestBody = {
+    from: { phoneNumber: normalizedFrom.normalized },
+    to: { phoneNumber: normalizedTo.normalized },
+    playPrompt: true,
+  }
+
+  ringCentralLog('Starting RingOut call', {
+    endpoint,
+    from: normalizedFrom.normalized,
+    to: normalizedTo.normalized,
+  })
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      from: { phoneNumber: from },
-      to: { phoneNumber: to },
-      callerId: { phoneNumber: from },
-      playPrompt: true,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   const data = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    const errorObject = data as { message?: string; errorCode?: string }
-    throw new Error(errorObject.message || errorObject.errorCode || 'Unable to start RingCentral call.')
+    const errorObject = data as RingCentralErrorResponse
+    const message = extractRingCentralError(errorObject, 'Unable to start RingCentral call.')
+    console.error('[RingCentral] RingOut failed', {
+      status: res.status,
+      code: errorObject.errorCode || errorObject.error,
+      message,
+      endpoint,
+      from: normalizedFrom.normalized,
+      to: normalizedTo.normalized,
+    })
+    throw new RingCentralCallError(message, {
+      status: res.status,
+      code: errorObject.errorCode || errorObject.error,
+      details: data,
+    })
   }
+
+  ringCentralLog('RingOut response received', {
+    status: res.status,
+    responseStatus: (data as StartRingCentralCallResult).status,
+  })
 
   const result = data as Omit<StartRingCentralCallResult, 'raw'>
   return {
