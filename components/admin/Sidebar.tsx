@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   Briefcase,
+  Warehouse,
   Users,
   Phone,
   Bell,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/admin',           label: 'Dashboard',     icon: LayoutDashboard },
   { href: '/admin/customers',     label: 'Customers',     icon: Users },
   { href: '/admin/opportunities', label: 'Quotes', icon: Briefcase },
+  { href: '/admin/storage',       label: 'Storage',       icon: Warehouse },
   { href: '/admin/calls',         label: 'Calls',         icon: Phone },
   { href: '/admin/follow-ups',    label: 'Follow-ups',    icon: Bell },
   { href: '/admin/invoices',      label: 'Invoices',      icon: Receipt },

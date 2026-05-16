@@ -29,7 +29,13 @@ function address(parts: Array<string | null | undefined>) {
 }
 
 export default async function EstimatePortalPage({ params, searchParams }: PageProps) {
-  const supabase = createAdminClient()
+  let supabase: ReturnType<typeof createAdminClient>
+  try {
+    supabase = createAdminClient()
+  } catch (err) {
+    console.error('Estimate portal configuration error:', err)
+    return <PortalError title="Estimate portal unavailable" />
+  }
   const { data: link } = await supabase
     .from('estimate_portal_links')
     .select('id, opportunity_id, quote_id, expires_at')
@@ -38,12 +44,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
 
   if (!link || (link.expires_at && new Date(link.expires_at) < new Date())) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-center text-white">
-        <div>
-          <h1 className="text-2xl font-semibold">Estimate link unavailable</h1>
-          <p className="mt-2 text-sm text-slate-300">Please contact Kratos Moving at (800) 321-3222.</p>
-        </div>
-      </main>
+      <PortalError title="Estimate link unavailable" />
     )
   }
 
@@ -61,12 +62,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
 
   if (!opp) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-center text-white">
-        <div>
-          <h1 className="text-2xl font-semibold">Estimate not found</h1>
-          <p className="mt-2 text-sm text-slate-300">Please contact Kratos Moving at (800) 321-3222.</p>
-        </div>
-      </main>
+      <PortalError title="Estimate not found" />
     )
   }
 
@@ -74,7 +70,8 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
   const subtotal = Number(opp.total_amount ?? 0)
   const hst = 0
   const total = subtotal + hst
-  const deposit = Number(opp.deposit_amount ?? 0)
+  const savedDeposit = Number(opp.deposit_amount ?? 150)
+  const deposit = Number.isFinite(savedDeposit) && savedDeposit > 0 ? savedDeposit : 150
   const moveSize = opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? String(opp.move_size).replace(/_/g, ' ')) : 'To be confirmed'
 
   return (
@@ -115,7 +112,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
           <div className="rounded-2xl bg-slate-950 p-5 text-white">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Estimated Total</p>
             <p className="mt-2 text-3xl font-semibold text-kratos">{formatCurrency(total)}</p>
-            <p className="mt-4 text-sm text-slate-300">Deposit to secure move: {deposit > 0 ? formatCurrency(deposit) : 'To be confirmed'}</p>
+            <p className="mt-4 text-sm text-slate-300">Deposit to secure move: {formatCurrency(deposit)}</p>
           </div>
         </div>
 
@@ -134,7 +131,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
             <DetailRow label="Subtotal" value={formatCurrency(subtotal)} />
             <DetailRow label="HST" value={hst > 0 ? formatCurrency(hst) : 'Included / not yet itemized'} />
             <DetailRow label="Total" value={formatCurrency(total)} strong />
-            <DetailRow label="Deposit" value={deposit > 0 ? formatCurrency(deposit) : 'To be confirmed'} strong />
+            <DetailRow label="Deposit" value={formatCurrency(deposit)} strong />
           </div>
         </section>
 
@@ -162,6 +159,17 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
           <button className="rounded-xl bg-kratos px-5 py-3 text-sm font-semibold text-slate-950">Pay Deposit</button>
         </div>
       </section>
+    </main>
+  )
+}
+
+function PortalError({ title }: { title: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-center text-white">
+      <div>
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        <p className="mt-2 text-sm text-slate-300">Please contact Kratos Moving at (800) 321-3222.</p>
+      </div>
     </main>
   )
 }

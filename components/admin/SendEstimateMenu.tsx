@@ -29,16 +29,15 @@ const PRICING_OPTIONS = [
   { value: 'summary', label: 'Summary' },
 ]
 
-function defaultDeposit(total: number) {
-  if (total > 0) return Math.min(500, Math.max(250, Math.round(total * 0.1)))
-  return 250
+function defaultDeposit() {
+  return 150
 }
 
 export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [pricingDisplay, setPricingDisplay] = useState('estimated_price')
-  const [depositAmount, setDepositAmount] = useState(String(opportunity.depositAmount ?? defaultDeposit(opportunity.estimateTotal)))
+  const [depositAmount, setDepositAmount] = useState(String(opportunity.depositAmount ?? defaultDeposit()))
   const [sendEmailChecked, setSendEmailChecked] = useState(Boolean(opportunity.customer?.email))
   const [sendSmsChecked, setSendSmsChecked] = useState(false)
   const [message, setMessage] = useState('')
@@ -58,8 +57,8 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
         return
       }
       window.open(data.url, '_blank', 'noopener,noreferrer')
-    } catch {
-      toast.error('Unable to create portal preview')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to create portal preview')
     } finally {
       setLoading(false)
       setMenuOpen(false)
@@ -98,8 +97,8 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
       }
       toast.success('Estimate email sent.')
       setDrawerOpen(false)
-    } catch {
-      toast.error('Unable to send estimate email')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to send estimate email')
     } finally {
       setLoading(false)
     }
@@ -170,8 +169,38 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5">
+              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Estimated price</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-950">{formatCurrency(opportunity.estimateTotal)}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                    {pricingDisplay.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Move size</p>
+                    <p className="mt-1 font-semibold text-slate-800">{opportunity.moveSize ?? 'TBD'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Move date</p>
+                    <p className="mt-1 font-semibold text-slate-800">{opportunity.moveDate ?? 'TBD'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Estimate type</p>
+                    <p className="mt-1 font-semibold text-slate-800">Standard</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Pricing</p>
+                    <p className="mt-1 font-semibold text-slate-800">Non-binding</p>
+                  </div>
+                </div>
+              </section>
+
               <section>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Pricing Display</h3>
+                <h3 className="mt-6 text-xs font-semibold uppercase tracking-widest text-slate-500">Pricing Display</h3>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {PRICING_OPTIONS.map(option => (
                     <button

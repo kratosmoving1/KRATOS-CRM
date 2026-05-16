@@ -10,6 +10,22 @@ import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import type { Json } from '@/types/database'
 
 const COMPANY_PHONE = '(800) 321-3222'
+const DEFAULT_DEPOSIT_AMOUNT = 150
+const DEFAULT_ESTIMATE_EMAIL_BODY = `Hi {{customer_first_name}},
+
+Your Kratos Moving estimate is ready for review.
+
+You can view your estimate here:
+{{estimate_link}}
+
+Deposit required to secure your move:
+{{deposit_amount}}
+
+If you have any questions or would like to make changes, please reply to this email or call us at {{company_phone}}.
+
+Thank you,
+{{agent_first_name}}
+Kratos Moving Inc.`
 
 type ProfilesField = { full_name: string | null; email: string | null }[] | { full_name: string | null; email: string | null } | null
 type CustomerField = { id: string; full_name: string; email: string | null; phone: string | null }[] | { id: string; full_name: string; email: string | null; phone: string | null } | null
@@ -42,6 +58,10 @@ function htmlFromText(text: string) {
   return `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">${escapeHtml(text).replace(/\n/g, '<br />')}</div>`
 }
 
+function appOrigin(req: NextRequest) {
+  return process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+}
+
 function senderForProfile(email: string | null | undefined) {
   const mapped: Record<string, { name: string; email: string }> = {
     'sales@kratosmoving.com': { name: 'Euliza from Kratos Moving', email: 'sales@kratosmoving.com' },
@@ -71,7 +91,7 @@ export async function POST(req: NextRequest) {
 
   const { user, role } = auth.context
   const normalizedRole = normalizeRole(role)
-  if (!['owner', 'admin', 'manager', 'sales'].includes(normalizedRole)) {
+  if (!['owner', 'admin', 'manager', 'sales', 'dispatcher'].includes(normalizedRole)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -109,17 +129,49 @@ export async function POST(req: NextRequest) {
 
   const customer = one(opportunity.customer as CustomerField)
   const agent = one(opportunity.agent as ProfilesField)
-  const link = await getOrCreateEstimatePortalLink({ supabase, opportunityId, quoteId, createdBy: user.id })
-  const estimateLink = portalEstimateUrl(req.nextUrl.origin, link.token)
-  const resolvedDeposit = depositAmount ?? Number(opportunity.deposit_amount ?? 0)
+  const savedDeposit = Number(opportunity.deposit_amount ?? DEFAULT_DEPOSIT_AMOUNT)
+  const resolvedDeposit = depositAmount ?? (Number.isFinite(savedDeposit) && savedDeposit > 0 ? savedDeposit : DEFAULT_DEPOSIT_AMOUNT)
+
+  await logAuditEvent({
+    actorUserId: user.id,
+    action: 'estimate_email_send_attempted',
+    entityType: 'opportunity',
+    entityId: opportunityId,
+    oldData: null,
+    newData: { opportunityId, quoteId, recipientEmail, pricingDisplay, depositAmount: resolvedDeposit } as Json,
+    ipAddress: req.headers.get('x-forwarded-for'),
+    userAgent: req.headers.get('user-agent'),
+  })
+
+  let link: Awaited<ReturnType<typeof getOrCreateEstimatePortalLink>>
+  try {
+    link = await getOrCreateEstimatePortalLink({ supabase, opportunityId, quoteId, createdBy: user.id })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unable to create estimate portal link.'
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'estimate_email_failed',
+      entityType: 'opportunity',
+      entityId: opportunityId,
+      oldData: null,
+      newData: { opportunityId, quoteId, recipientEmail, error: message } as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+
+  const estimateLink = portalEstimateUrl(appOrigin(req), link.token)
 
   const vars = {
     customer_first_name: firstName(customer?.full_name),
     customer_full_name: customer?.full_name ?? '',
     agent_first_name: firstName(profile?.full_name ?? agent?.full_name),
     agent_full_name: profile?.full_name ?? agent?.full_name ?? '',
-    company_phone: COMPANY_PHONE,
+    company_phone: process.env.COMPANY_PHONE || COMPANY_PHONE,
     move_date: opportunity.service_date ?? '',
+    origin_address: [opportunity.origin_address_line1, opportunity.origin_city, opportunity.origin_province, opportunity.origin_postal_code].filter(Boolean).join(', '),
+    destination_address: [opportunity.dest_address_line1, opportunity.dest_city, opportunity.dest_province, opportunity.dest_postal_code].filter(Boolean).join(', '),
     origin_city: opportunity.origin_city ?? '',
     destination_city: opportunity.dest_city ?? '',
     estimate_link: estimateLink,
@@ -138,7 +190,12 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   const subject = await renderTemplate(template?.subject ?? 'Your Kratos Moving estimate is ready', vars)
-  const text = customMessage ?? await renderTemplate(template?.body ?? '', vars)
+  const text = customMessage ?? await renderTemplate(template?.body || DEFAULT_ESTIMATE_EMAIL_BODY, vars)
+
+  await supabase
+    .from('opportunities')
+    .update({ deposit_amount: resolvedDeposit })
+    .eq('id', opportunityId)
 
   try {
     const sender = senderForProfile(profile?.email)
@@ -199,6 +256,37 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unable to send estimate email.'
     console.error('Estimate email failed:', err)
+    await supabase.from('communications').insert({
+      opportunity_id: opportunityId,
+      customer_id: customer?.id ?? opportunity.customer_id,
+      type: 'email',
+      direction: 'outbound',
+      subject,
+      body: text,
+      email_to: recipientEmail,
+      provider: process.env.EMAIL_PROVIDER ?? null,
+      status: 'failed',
+      error_message: message,
+      created_by: user.id,
+    })
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'estimate_email_failed',
+      entityType: 'opportunity',
+      entityId: opportunityId,
+      oldData: null,
+      newData: {
+        opportunityId,
+        quoteId,
+        recipientEmail,
+        pricingDisplay,
+        depositAmount: resolvedDeposit,
+        portalLinkId: link.id,
+        error: message,
+      } as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
     return NextResponse.json({ error: message }, { status: 502 })
   }
 }

@@ -21,8 +21,12 @@ interface Customer {
 
 function latestOpp(opps: Opp[]): Opp | null {
   if (!opps.length) return null
-  const priority = ['booked','accepted','quote_sent','contacted','new_lead','completed','cancelled','lost']
-  const sorted = [...opps].sort((a, b) => priority.indexOf(a.status) - priority.indexOf(b.status))
+  const priority = ['opportunity','booked','accepted','quote_sent','contacted','new_lead','completed','closed','cancelled','lost']
+  const sorted = [...opps].sort((a, b) => {
+    const aRank = priority.includes(a.status) ? priority.indexOf(a.status) : priority.length
+    const bRank = priority.includes(b.status) ? priority.indexOf(b.status) : priority.length
+    return aRank - bRank
+  })
   return sorted[0]
 }
 
@@ -55,9 +59,14 @@ export default function CustomersPage() {
       })
       const res = await fetch(`/api/admin/customers?${params}`)
       const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Unable to load customers')
       setCustomers(json.data ?? [])
       setCount(json.count ?? 0)
-    } catch {} finally { setLoading(false) }
+    } catch (err) {
+      console.error('Customers load failed:', err)
+      setCustomers([])
+      setCount(0)
+    } finally { setLoading(false) }
   }, [page, debouncedSearch])
 
   useEffect(() => { load() }, [load])

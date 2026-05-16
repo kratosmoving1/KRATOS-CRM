@@ -23,16 +23,25 @@ export function isEmailConfigured() {
 
 export function emailConfigError() {
   const provider = process.env.EMAIL_PROVIDER
-  if (!provider) return 'Email provider is not configured.'
+  const missing: string[] = []
+  if (!provider) missing.push('EMAIL_PROVIDER')
+  if (provider === 'resend' && !process.env.RESEND_API_KEY) missing.push('RESEND_API_KEY')
+  if (provider === 'sendgrid' && !process.env.SENDGRID_API_KEY) missing.push('SENDGRID_API_KEY')
+  if (!process.env.EMAIL_FROM_DEFAULT) missing.push('EMAIL_FROM_DEFAULT')
+  if (missing.length) return `Email provider is not configured. Missing: ${missing.join(', ')}.`
   if (provider !== 'resend' && provider !== 'sendgrid') return `Unsupported email provider: ${provider}`
-  if (provider === 'resend' && !process.env.RESEND_API_KEY) return 'RESEND_API_KEY is missing.'
-  if (provider === 'sendgrid' && !process.env.SENDGRID_API_KEY) return 'SENDGRID_API_KEY is missing.'
-  if (!process.env.EMAIL_FROM_DEFAULT) return 'EMAIL_FROM_DEFAULT is missing.'
   return 'Email provider is not configured.'
 }
 
-function fromAddress(name: string | undefined, email: string) {
-  return name ? `${name} <${email}>` : email
+function parseAddress(value: string) {
+  const match = value.match(/^\s*(.*?)\s*<([^>]+)>\s*$/)
+  if (!match) return { name: null, email: value.trim() }
+  return { name: match[1]?.trim() || null, email: match[2]?.trim() ?? value.trim() }
+}
+
+function fromAddress(name: string | undefined, value: string) {
+  if (value.includes('<')) return value
+  return name ? `${name} <${value}>` : value
 }
 
 export async function sendEmail({
@@ -50,6 +59,7 @@ export async function sendEmail({
   if (!isEmailConfigured() || !provider || !defaultFrom) throw new Error(emailConfigError())
 
   const sender = fromEmail || defaultFrom
+  const parsedSender = parseAddress(sender)
   const reply = replyTo || defaultReplyTo || sender
 
   if (provider === 'resend') {
@@ -82,7 +92,7 @@ export async function sendEmail({
       },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
-        from: { email: sender, name: fromName || 'Kratos Moving' },
+        from: { email: parsedSender.email, name: fromName || parsedSender.name || 'Kratos Moving' },
         reply_to: { email: reply },
         subject,
         content: [

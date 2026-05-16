@@ -149,6 +149,7 @@ export async function POST(req: NextRequest) {
     notes:              body.notes ?? null,
     total_amount:       body.total_amount ?? 0,
     estimated_cost:     body.estimated_cost ?? 0,
+    deposit_amount:     body.deposit_amount ?? 150,
     // origin
     origin_address_line1:  body.origin_address_line1  ?? null,
     origin_address_line2:  body.origin_address_line2  ?? null,

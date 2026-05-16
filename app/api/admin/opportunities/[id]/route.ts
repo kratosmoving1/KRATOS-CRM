@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
-import { hasPermission, isActiveUser, isAdminRole } from '@/lib/auth/permissions'
+import { hasPermission, isActiveUser, isAdminRole, normalizeRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 
@@ -11,6 +11,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', user.id)
+    .single()
+
+  if (!isActiveUser(profile)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data, error } = await supabase
     .from('opportunities')
@@ -26,6 +34,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
 
+  const normalizedRole = normalizeRole(profile?.role)
+  const canViewProfitability = ['owner', 'admin', 'manager'].includes(normalizedRole)
+  const responseData = canViewProfitability ? data : { ...data, estimated_cost: 0 }
+
   // Fetch audit log for this opportunity
   const { data: auditLog } = await supabase
     .from('audit_log')
@@ -35,7 +47,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .order('created_at', { ascending: false })
     .limit(50)
 
-  return NextResponse.json({ ...data, audit_log: auditLog ?? [] })
+  return NextResponse.json({ ...responseData, audit_log: auditLog ?? [], can_view_profitability: canViewProfitability })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

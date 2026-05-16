@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     serviceType:       opp.service_type ?? 'local',
     moveSize:          opp.move_size ?? null,
     totalAmount:       Number(opp.total_amount ?? 0),
-    depositAmount:     Number(opp.deposit_amount ?? 0) || null,
+    depositAmount:     Number(opp.deposit_amount ?? 150) || 150,
     originAddress:     address([opp.origin_address_line1, opp.origin_address_line2, opp.origin_city, opp.origin_province, opp.origin_postal_code]),
     destAddress:       address([opp.dest_address_line1, opp.dest_address_line2, opp.dest_city, opp.dest_province, opp.dest_postal_code]),
     notes:             null, // never expose internal notes to customer

@@ -75,6 +75,7 @@ interface OppDetail {
   agent: { id: string; full_name: string; email: string } | null
   lead_source: { id: string; name: string } | null
   audit_log: AuditEntry[]
+  can_view_profitability?: boolean
 }
 
 interface TimelineItem {
@@ -143,6 +144,16 @@ const COMM_TYPES = [
 ] as const
 
 type CommType = typeof COMM_TYPES[number]['value']
+type QuoteTab = 'sales' | 'estimate' | 'storage' | 'files' | 'accounting' | 'profitability'
+
+const QUOTE_TABS: Array<{ value: QuoteTab; label: string }> = [
+  { value: 'sales', label: 'Sales' },
+  { value: 'estimate', label: 'Estimate' },
+  { value: 'storage', label: 'Storage' },
+  { value: 'files', label: 'Files & Photos' },
+  { value: 'accounting', label: 'Accounting' },
+  { value: 'profitability', label: 'Profitability' },
+]
 
 const CALL_OUTCOME_OPTIONS = [
   { value: 'connected',    label: 'Connected' },
@@ -191,7 +202,7 @@ export default function OpportunityDetailPage() {
   const [opp, setOpp] = useState<OppDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'sales' | 'estimate'>('sales')
+  const [tab, setTab] = useState<QuoteTab>('sales')
 
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showQuickEdit, setShowQuickEdit] = useState(false)
@@ -631,19 +642,19 @@ export default function OpportunityDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-slate-200">
-          {(['sales', 'estimate'] as const).map(t => (
+        <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
+          {QUOTE_TABS.filter(t => t.value !== 'profitability' || opp.can_view_profitability).map(t => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={t.value}
+              onClick={() => setTab(t.value)}
               className={cn(
-                'px-5 py-2.5 text-sm font-medium capitalize transition-colors',
-                tab === t
+                'whitespace-nowrap px-5 py-2.5 text-sm font-medium transition-colors',
+                tab === t.value
                   ? 'border-b-2 border-kratos text-slate-900'
                   : 'text-slate-500 hover:text-slate-700',
               )}
             >
-              {t === 'sales' ? 'Sales' : 'Estimate'}
+              {t.label}
             </button>
           ))}
         </div>
@@ -1017,10 +1028,10 @@ export default function OpportunityDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-slate-500">Est. Cost</span>
                     <span className="font-semibold text-slate-900">
-                      {opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
+                      {opp.can_view_profitability && opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
                     </span>
                   </div>
-                  {opp.total_amount > 0 && (
+                  {opp.can_view_profitability && opp.total_amount > 0 && (
                     <div className="flex justify-between border-t border-slate-100 pt-2">
                       <span className="font-medium text-slate-600">Profit</span>
                       <span className={`font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -1065,13 +1076,13 @@ export default function OpportunityDetailPage() {
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Cost</p>
                   <p className="mt-1 text-lg font-bold text-slate-900">
-                    {opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
+                    {opp.can_view_profitability && opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Profit</p>
                   <p className={`mt-1 text-lg font-bold ${profit < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                    {opp.total_amount > 0 ? formatCurrency(profit) : '—'}
+                    {opp.can_view_profitability && opp.total_amount > 0 ? formatCurrency(profit) : '—'}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -1185,6 +1196,60 @@ export default function OpportunityDetailPage() {
                 body="No quote tasks yet"
                 detail="Task summaries will appear here once linked task reads are added."
               />
+            </div>
+          </div>
+        )}
+
+        {tab === 'storage' && (
+          <div className="rounded-xl border border-slate-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-slate-950">Storage</h2>
+            <p className="mt-2 text-sm text-slate-500">Storage module coming soon. Future work will cover storage accounts, SIT, pickup/delivery scheduling, monthly billing, and storage balances for this quote.</p>
+          </div>
+        )}
+
+        {tab === 'files' && (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+            <FileText className="mx-auto text-slate-300" size={28} />
+            <h2 className="mt-3 text-lg font-semibold text-slate-950">Files & Photos</h2>
+            <p className="mt-2 text-sm text-slate-500">Upload area coming soon for quote documents, photos, signed paperwork, and customer attachments.</p>
+          </div>
+        )}
+
+        {tab === 'accounting' && (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <PanelSection title="Payments" icon={CreditCard}>
+              <MoneyRow label="Deposit" value={formatCurrency(Number(opp.deposit_amount ?? 150) || 150)} />
+              <MoneyRow label="Total Paid" value={formatCurrency(totalPaid)} />
+              <MoneyRow label="Balance Due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
+              <button
+                onClick={() => setPaymentDrawerOpen(true)}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950"
+              >
+                <CreditCard size={16} /> Add Payment
+              </button>
+            </PanelSection>
+            <PanelActionSection title="Invoices" icon={ReceiptText} body="Invoice workflow coming soon" detail="Invoices will connect to quote totals, deposits, and payment status." />
+            <PanelActionSection title="Stripe / Manual Status" icon={WalletCards} body="No connected payment summary yet" detail="Recorded payments and Stripe webhook status will appear here." />
+          </div>
+        )}
+
+        {tab === 'profitability' && opp.can_view_profitability && (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Estimated Revenue</p>
+              <p className="mt-2 text-2xl font-bold text-slate-950">{opp.total_amount > 0 ? formatCurrency(opp.total_amount) : '—'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Estimated Cost</p>
+              <p className="mt-2 text-2xl font-bold text-slate-950">{opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Estimated Profit</p>
+              <p className={`mt-2 text-2xl font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{opp.total_amount > 0 ? formatCurrency(profit) : '—'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Margin</p>
+              <p className="mt-2 text-2xl font-bold text-slate-950">{opp.total_amount > 0 ? `${Math.round((profit / opp.total_amount) * 100)}%` : '—'}</p>
             </div>
           </div>
         )}
