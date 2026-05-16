@@ -16,12 +16,13 @@ Features needed
 2. Send SMS from CRM
    - `POST /api/communications/sms/send` sends through RingCentral when env vars are configured
    - Render templates server-side and substitute variables
-   - Ensure sending number is SMS-enabled and belongs to extension
+   - Ensure `RINGCENTRAL_SMS_FROM_NUMBER` is SMS-enabled and belongs to the JWT-authenticated extension
    - Save communications records and audit logs only after successful send
    - RingCentral app needs SMS/A2P SMS permissions/scopes for production texting.
    - The authenticated JWT user must have permission to send SMS.
-   - `RINGCENTRAL_FROM_NUMBER` must belong to the authenticated RingCentral account/extension.
-   - The from number must be SMS-enabled.
+   - `RINGCENTRAL_SMS_FROM_NUMBER` must belong to the authenticated RingCentral account/extension.
+   - The SMS from number must be SMS-enabled and include `SmsSender` in diagnostics.
+   - The 1-800 number can remain the RingOut/caller-ID number, but it should not be used for API SMS unless diagnostics confirms it is owned by the authenticated extension and SMS-capable.
    - Business SMS/A2P registration may be required before production SMS works.
    - If SMS fails, the CRM must show the actual RingCentral error returned by the API.
 
@@ -54,13 +55,14 @@ Required environment variables (server only)
 - RINGCENTRAL_JWT (optional; for JWT auth)
 - RINGCENTRAL_SERVER_URL (default: https://platform.ringcentral.com)
 - RINGCENTRAL_FROM_NUMBER
+- RINGCENTRAL_SMS_FROM_NUMBER
 
 Notes
 
 - RingCentral JWT auth exchanges `RINGCENTRAL_JWT` for an OAuth access token, then sends that access token in the Bearer header for RingOut.
 - RingOut may require account-level permissions/scopes and extension eligibility. Confirm the app has voice/RingOut permissions in the RingCentral Developer Console before expecting live calls.
 - The current CRM flow starts a company-line RingOut call with `playPrompt: true`; production testing should confirm whether Kratos wants prompt-on-answer or direct connection.
-- RingCentral SMS requires that the sending number be SMS-enabled for the authenticated extension. Verify from the RingCentral admin dashboard.
+- RingCentral SMS requires that the sending number be SMS-enabled for the authenticated extension. Set `RINGCENTRAL_SMS_FROM_NUMBER` to one of the SMS-capable numbers shown in diagnostics.
 - Prefer server-to-server JWT or OAuth with a service account and store secrets in environment variables or a secrets manager.
 - Use official RingCentral SDK for Node when implementing production flows.
 - Document exact API usage and scopes required in README when implementing.

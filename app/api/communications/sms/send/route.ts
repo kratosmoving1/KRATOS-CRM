@@ -5,8 +5,8 @@ import { normalizeRole, type CrmRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 import {
-  getMissingRingCentralEnv,
-  isRingCentralConfigured,
+  getMissingRingCentralSmsEnv,
+  isRingCentralSmsConfigured,
   RingCentralCallError,
   sendSmsViaRingCentral,
   renderTemplate,
@@ -195,16 +195,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    if (!isRingCentralConfigured()) {
-      const missing = getMissingRingCentralEnv()
-      throw new RingCentralCallError(`RingCentral is not configured. Missing: ${missing.join(', ')}`, {
-        code: 'RINGCENTRAL_NOT_CONFIGURED',
+    if (!isRingCentralSmsConfigured()) {
+      const missing = getMissingRingCentralSmsEnv()
+      throw new RingCentralCallError(`RingCentral SMS is not configured. Missing: ${missing.join(', ')}`, {
+        code: 'RINGCENTRAL_SMS_NOT_CONFIGURED',
       })
     }
 
     const result = await sendSmsViaRingCentral({
       to: normalizedTo.normalized,
-      from: process.env.RINGCENTRAL_FROM_NUMBER || '',
+      from: process.env.RINGCENTRAL_SMS_FROM_NUMBER || '',
       text,
     })
 

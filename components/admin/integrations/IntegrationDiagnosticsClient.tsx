@@ -44,6 +44,14 @@ type Diagnostics = {
       smsCapable: boolean
       callCapable: boolean
     }
+    smsFromNumber?: {
+      value: string
+      ownedByAuthenticatedExtension: boolean
+      smsCapable: boolean
+      callCapable: boolean
+      configured: boolean
+      message: string
+    }
   }
   stripe: {
     configured: boolean
@@ -73,6 +81,7 @@ const ENV_ORDER = [
   'RINGCENTRAL_JWT',
   'RINGCENTRAL_SERVER_URL',
   'RINGCENTRAL_FROM_NUMBER',
+  'RINGCENTRAL_SMS_FROM_NUMBER',
   'STRIPE_SECRET_KEY',
   'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
   'STRIPE_WEBHOOK_SECRET',
@@ -236,11 +245,16 @@ export default function IntegrationDiagnosticsClient() {
             <DetailRow label="Server URL" value={diagnostics.ringcentral.serverUrl} />
             <DetailRow label="Authenticated extension" value={diagnostics.ringcentral.authenticatedExtension?.name ?? 'Unavailable'} />
             <DetailRow label="Extension number" value={diagnostics.ringcentral.authenticatedExtension?.extensionNumber ?? 'Unavailable'} />
-            <DetailRow label="From number" value={diagnostics.ringcentral.fromNumber.value || 'Missing'} />
-            <DetailRow label="Owned by extension" status={diagnostics.ringcentral.fromNumber.ownedByAuthenticatedExtension} value={diagnostics.ringcentral.fromNumber.ownedByAuthenticatedExtension ? 'Yes' : 'No'} />
-            <DetailRow label="SMS capable" status={diagnostics.ringcentral.fromNumber.smsCapable} value={diagnostics.ringcentral.fromNumber.smsCapable ? 'Yes' : 'No'} />
+            <DetailRow label="RingOut from number" value={diagnostics.ringcentral.fromNumber.value || 'Missing'} />
+            <DetailRow label="RingOut number owned by extension" status={diagnostics.ringcentral.fromNumber.ownedByAuthenticatedExtension} value={diagnostics.ringcentral.fromNumber.ownedByAuthenticatedExtension ? 'Yes' : 'No'} />
             <DetailRow label="RingOut likely" status={diagnostics.ringcentral.fromNumber.callCapable} value={diagnostics.ringcentral.fromNumber.callCapable ? 'Yes' : 'No'} />
+            <DetailRow label="SMS from number" value={diagnostics.ringcentral.smsFromNumber?.value || 'Missing'} />
+            <DetailRow label="SMS number owned by extension" status={diagnostics.ringcentral.smsFromNumber?.ownedByAuthenticatedExtension ?? false} value={diagnostics.ringcentral.smsFromNumber?.ownedByAuthenticatedExtension ? 'Yes' : 'No'} />
+            <DetailRow label="SMS capable" status={diagnostics.ringcentral.smsFromNumber?.smsCapable ?? false} value={diagnostics.ringcentral.smsFromNumber?.smsCapable ? 'Yes' : 'No'} />
           </div>
+          {diagnostics.ringcentral.smsFromNumber?.message && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{diagnostics.ringcentral.smsFromNumber.message}</p>
+          )}
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Scopes</p>
             <div className="mt-2 flex flex-wrap gap-2">

@@ -24,6 +24,7 @@ RingCentral:
 - `RINGCENTRAL_JWT`
 - `RINGCENTRAL_SERVER_URL=https://platform.ringcentral.com`
 - `RINGCENTRAL_FROM_NUMBER`
+- `RINGCENTRAL_SMS_FROM_NUMBER`
 
 Stripe:
 - `STRIPE_SECRET_KEY`
@@ -43,6 +44,7 @@ RingCentral SMS has a stricter limitation:
 - The sending number should appear in `/restapi/v1.0/account/~/extension/~/phone-number`.
 - The number must include the `SmsSender` feature.
 - A super admin cannot send SMS on behalf of other user extensions through this endpoint.
+- Kratos CRM uses `RINGCENTRAL_SMS_FROM_NUMBER` for SMS. Do not use the 1-800 line unless diagnostics shows it belongs to the JWT-authenticated extension and includes `SmsSender`.
 
 If SmartMoving prompts each user to log into RingCentral, it may be using per-user OAuth rather than one company-wide JWT. Kratos CRM currently diagnoses the configured server-side JWT first.
 

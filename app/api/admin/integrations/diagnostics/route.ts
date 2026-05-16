@@ -35,6 +35,7 @@ const SAFE_ENV_VALUES = new Set([
   'EMAIL_REPLY_TO_DEFAULT',
   'RINGCENTRAL_SERVER_URL',
   'RINGCENTRAL_FROM_NUMBER',
+  'RINGCENTRAL_SMS_FROM_NUMBER',
   'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
 ])
 
@@ -50,6 +51,7 @@ const ENV_GROUP = [
   'RINGCENTRAL_JWT',
   'RINGCENTRAL_SERVER_URL',
   'RINGCENTRAL_FROM_NUMBER',
+  'RINGCENTRAL_SMS_FROM_NUMBER',
   'STRIPE_SECRET_KEY',
   'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
   'STRIPE_WEBHOOK_SECRET',
@@ -61,6 +63,14 @@ const RC_REQUIRED = [
   'RINGCENTRAL_JWT',
   'RINGCENTRAL_SERVER_URL',
   'RINGCENTRAL_FROM_NUMBER',
+] as const
+
+const RC_SMS_REQUIRED = [
+  'RINGCENTRAL_CLIENT_ID',
+  'RINGCENTRAL_CLIENT_SECRET',
+  'RINGCENTRAL_JWT',
+  'RINGCENTRAL_SERVER_URL',
+  'RINGCENTRAL_SMS_FROM_NUMBER',
 ] as const
 
 function envStatus(name: string): EnvStatus {
@@ -88,8 +98,10 @@ function parseProviderError(data: unknown, fallback: string) {
 
 async function ringCentralDiagnostics() {
   const serverUrl = process.env.RINGCENTRAL_SERVER_URL || 'https://platform.ringcentral.com'
-  const fromNumber = process.env.RINGCENTRAL_FROM_NUMBER || ''
+  const ringOutNumber = process.env.RINGCENTRAL_FROM_NUMBER || ''
+  const smsNumber = process.env.RINGCENTRAL_SMS_FROM_NUMBER || ''
   const missingEnv = missing(RC_REQUIRED)
+  const missingSmsEnv = missing(RC_SMS_REQUIRED)
 
   const base = {
     configured: missingEnv.length === 0,
@@ -109,10 +121,18 @@ async function ringCentralDiagnostics() {
       features: string[]
     }>,
     fromNumber: {
-      value: fromNumber,
+      value: ringOutNumber,
       ownedByAuthenticatedExtension: false,
       smsCapable: false,
       callCapable: false,
+    },
+    smsFromNumber: {
+      value: smsNumber,
+      ownedByAuthenticatedExtension: false,
+      smsCapable: false,
+      callCapable: false,
+      configured: missingSmsEnv.length === 0,
+      message: missingSmsEnv.length ? `RingCentral SMS is not configured. Missing: ${missingSmsEnv.join(', ')}.` : 'RingCentral SMS number not checked.',
     },
   }
 
@@ -156,21 +176,29 @@ async function ringCentralDiagnostics() {
     const extensionData = await extensionRes.json().catch(() => ({}))
     const phoneData = await phoneRes.json().catch(() => ({}))
     const records = Array.isArray(phoneData?.records) ? phoneData.records as RingCentralPhoneNumber[] : []
-    const normalizedFrom = normalizePhoneToE164(fromNumber)
-    const matchedFrom = records.find(record => {
+    const normalizedRingOutFrom = normalizePhoneToE164(ringOutNumber)
+    const normalizedSmsFrom = normalizePhoneToE164(smsNumber)
+    const matchedRingOutFrom = records.find(record => {
       const normalized = normalizePhoneToE164(record.phoneNumber ?? '')
-      return normalized.isE164 && normalized.normalized === normalizedFrom.normalized
+      return normalized.isE164 && normalized.normalized === normalizedRingOutFrom.normalized
     })
-    const features = matchedFrom?.features ?? []
+    const matchedSmsFrom = records.find(record => {
+      const normalized = normalizePhoneToE164(record.phoneNumber ?? '')
+      return normalized.isE164 && normalized.normalized === normalizedSmsFrom.normalized
+    })
+    const ringOutFeatures = matchedRingOutFrom?.features ?? []
+    const smsFeatures = matchedSmsFrom?.features ?? []
     const hasRingOutScope = scopes.includes('RingOut')
-    const canUseCallerId = features.includes('CallerId') || features.includes('RingOut')
+    const canUseCallerId = ringOutFeatures.includes('CallerId') || ringOutFeatures.includes('RingOut')
 
     let message = 'RingCentral JWT auth succeeded.'
     if (!hasRingOutScope) message += ' RingOut scope missing.'
     else message += ' RingOut scope present.'
-    if (!matchedFrom) message += ' RINGCENTRAL_FROM_NUMBER does not belong to authenticated extension.'
-    else if (features.includes('SmsSender')) message += ' From number appears SMS-capable.'
-    else message += ' From number does not appear SMS-capable.'
+    if (!matchedRingOutFrom) message += ' RINGCENTRAL_FROM_NUMBER does not belong to authenticated extension.'
+    if (missingSmsEnv.length) message += ` RingCentral SMS is not configured. Missing: ${missingSmsEnv.join(', ')}.`
+    else if (!matchedSmsFrom) message += ' RINGCENTRAL_SMS_FROM_NUMBER does not belong to authenticated extension.'
+    else if (smsFeatures.includes('SmsSender')) message += ' SMS from number appears SMS-capable.'
+    else message += ' SMS from number does not appear SMS-capable.'
 
     return {
       ...base,
@@ -190,10 +218,22 @@ async function ringCentralDiagnostics() {
         features: record.features ?? [],
       })),
       fromNumber: {
-        value: fromNumber,
-        ownedByAuthenticatedExtension: Boolean(matchedFrom),
-        smsCapable: Boolean(matchedFrom?.features?.includes('SmsSender')),
-        callCapable: Boolean(matchedFrom && (hasRingOutScope || canUseCallerId)),
+        value: ringOutNumber,
+        ownedByAuthenticatedExtension: Boolean(matchedRingOutFrom),
+        smsCapable: Boolean(matchedRingOutFrom?.features?.includes('SmsSender')),
+        callCapable: Boolean(matchedRingOutFrom && (hasRingOutScope || canUseCallerId)),
+      },
+      smsFromNumber: {
+        value: smsNumber,
+        ownedByAuthenticatedExtension: Boolean(matchedSmsFrom),
+        smsCapable: Boolean(matchedSmsFrom?.features?.includes('SmsSender')),
+        callCapable: Boolean(matchedSmsFrom?.features?.includes('CallerId') || matchedSmsFrom?.features?.includes('RingOut')),
+        configured: missingSmsEnv.length === 0,
+        message: missingSmsEnv.length
+          ? `RingCentral SMS is not configured. Missing: ${missingSmsEnv.join(', ')}.`
+          : matchedSmsFrom?.features?.includes('SmsSender')
+          ? 'RINGCENTRAL_SMS_FROM_NUMBER belongs to authenticated extension and appears SMS-capable.'
+          : 'RINGCENTRAL_SMS_FROM_NUMBER is not SMS-capable for this authenticated extension.',
       },
     }
   } catch (err) {

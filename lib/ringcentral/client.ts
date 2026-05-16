@@ -5,6 +5,7 @@ const RC_CLIENT_SECRET = process.env.RINGCENTRAL_CLIENT_SECRET
 const RC_JWT = process.env.RINGCENTRAL_JWT
 const RC_SERVER = process.env.RINGCENTRAL_SERVER_URL || 'https://platform.ringcentral.com'
 const RC_FROM = process.env.RINGCENTRAL_FROM_NUMBER
+const RC_SMS_FROM = process.env.RINGCENTRAL_SMS_FROM_NUMBER
 const RINGOUT_ENDPOINT = '/restapi/v1.0/account/~/extension/~/ring-out'
 const TOKEN_ENDPOINT = '/restapi/oauth/token'
 
@@ -83,6 +84,22 @@ export function getMissingRingCentralEnv() {
     .map(([name]) => name)
 }
 
+export function getMissingRingCentralSmsEnv() {
+  return [
+    ['RINGCENTRAL_CLIENT_ID', RC_CLIENT_ID],
+    ['RINGCENTRAL_CLIENT_SECRET', RC_CLIENT_SECRET],
+    ['RINGCENTRAL_JWT', RC_JWT],
+    ['RINGCENTRAL_SERVER_URL', process.env.RINGCENTRAL_SERVER_URL],
+    ['RINGCENTRAL_SMS_FROM_NUMBER', RC_SMS_FROM],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name)
+}
+
+export function isRingCentralSmsConfigured() {
+  return getMissingRingCentralSmsEnv().length === 0
+}
+
 export function getRingCentralConfigStatus() {
   return {
     hasClientId: Boolean(RC_CLIENT_ID),
@@ -90,6 +107,7 @@ export function getRingCentralConfigStatus() {
     hasJwt: Boolean(RC_JWT),
     hasServerUrl: Boolean(process.env.RINGCENTRAL_SERVER_URL),
     hasFromNumber: Boolean(RC_FROM),
+    hasSmsFromNumber: Boolean(RC_SMS_FROM),
     serverUrl: RC_SERVER,
   }
 }
@@ -231,7 +249,12 @@ export async function startRingCentralCall({ to, from = RC_FROM }: StartRingCent
 }
 
 export async function sendSmsViaRingCentral({ to, from, text }: SendRingCentralSmsInput): Promise<SendRingCentralSmsResult> {
-  if (!isRingCentralConfigured()) throw new Error('RingCentral is not configured.')
+  const missingEnv = getMissingRingCentralSmsEnv()
+  if (missingEnv.length > 0) {
+    throw new RingCentralCallError(`RingCentral SMS is not configured. Missing: ${missingEnv.join(', ')}`, {
+      code: 'RINGCENTRAL_SMS_NOT_CONFIGURED',
+    })
+  }
 
   const normalizedTo = normalizePhoneToE164(to)
   const normalizedFrom = normalizePhoneToE164(from)
