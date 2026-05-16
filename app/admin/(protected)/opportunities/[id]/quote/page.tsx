@@ -152,15 +152,26 @@ const CALL_OUTCOME_OPTIONS = [
 const PAYMENT_METHODS = [
   { label: 'Cash', value: 'cash', icon: Banknote, note: 'Record only' },
   { label: 'Check', value: 'check', icon: ReceiptText, note: 'Record only' },
-  { label: 'Credit Card (Record Only)', value: 'credit_card_record', icon: CreditCard, note: 'Manual entry' },
-  { label: 'Credit Card', value: 'credit_card', icon: CreditCard, note: 'Stripe Checkout' },
+  { label: 'Credit Card', value: 'credit_card', icon: CreditCard, note: 'Stripe Checkout or record only' },
+  { label: 'Credit Card (Record Only)', value: 'credit_card_record', icon: CreditCard, note: 'Manual card record' },
+  { label: 'Debit Card', value: 'debit_card', icon: CreditCard, note: 'Stripe Checkout or record only' },
+  { label: 'Debit Card (Record Only)', value: 'debit_card_record', icon: CreditCard, note: 'Manual debit/card record' },
   { label: 'Interac e-Transfer', value: 'interac_e_transfer', icon: WalletCards, note: 'Record only' },
   { label: 'Wire Transfer', value: 'wire_transfer', icon: Landmark, note: 'Record only' },
-  { label: 'Debit Card (Record Only)', value: 'debit_card_record', icon: CreditCard, note: 'Manual entry' },
-  { label: 'Debit Card', value: 'debit_card', icon: CreditCard, note: 'Coming soon' },
 ] as const
 
 type PaymentMethod = typeof PAYMENT_METHODS[number]['value']
+
+const RECORD_ONLY_PAYMENT_METHODS: PaymentMethod[] = [
+  'cash',
+  'check',
+  'credit_card_record',
+  'debit_card_record',
+  'interac_e_transfer',
+  'wire_transfer',
+]
+
+const STRIPE_PAYMENT_METHODS: PaymentMethod[] = ['credit_card', 'debit_card']
 
 function CommTypeIcon({ type }: { type: string }) {
   const icons: Record<string, React.ElementType> = {
@@ -207,6 +218,10 @@ export default function OpportunityDetailPage() {
   const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10))
+  const [paymentReference, setPaymentReference] = useState('')
+  const [paymentNotes, setPaymentNotes] = useState('')
+  const [paymentStatus, setPaymentStatus] = useState('received')
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
 
@@ -217,7 +232,6 @@ export default function OpportunityDetailPage() {
       const data: OppDetail = await res.json()
       setOpp(data)
       setNotes(data.notes ?? '')
-      setPaymentAmount(data.total_amount > 0 ? String(data.total_amount) : '')
     } catch { setError('Failed to load') }
     finally { setLoading(false) }
   }, [id])
@@ -363,29 +377,31 @@ export default function OpportunityDetailPage() {
     }
   }
 
-  async function handlePaymentMethod(method: PaymentMethod) {
-    setSelectedPaymentMethod(method)
+  function selectPaymentMethod(method: PaymentMethod) {
+    setSelectedPaymentMethod(current => current === method ? null : method)
     setPaymentMessage(null)
-
-    if (method !== 'credit_card') {
-      setPaymentMessage('Payment recording is staged for the next database pass. No payment was saved yet.')
-      return
+    if (!paymentAmount && opp?.total_amount && opp.total_amount > 0) {
+      setPaymentAmount(String(opp.total_amount))
     }
+  }
 
-    if (!opp) return
-    const amount = Number(paymentAmount || opp.total_amount || 0)
+  async function startStripeCheckout() {
+    if (!opp || !selectedPaymentMethod) return
+    const amount = Number(paymentAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       setPaymentMessage('Enter an amount before starting Stripe Checkout.')
       return
     }
 
     setPaymentLoading(true)
+    setPaymentMessage(null)
     try {
       const res = await fetch('/api/payments/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           opportunityId: opp.id,
+          customerId: opp.customer?.id ?? null,
           amountCents: Math.round(amount * 100),
         }),
       })
@@ -396,9 +412,57 @@ export default function OpportunityDetailPage() {
         return
       }
 
-      if (data.url) {
-        window.location.href = data.url
+      if (data.url) window.location.href = data.url
+    } catch {
+      setPaymentMessage('Unable to reach the payment server.')
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
+  async function recordPayment(methodOverride?: PaymentMethod) {
+    if (!opp) return
+    const method = methodOverride ?? selectedPaymentMethod
+    if (!method) return
+
+    const amount = Number(paymentAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentMessage('Enter an amount before recording payment.')
+      return
+    }
+
+    setPaymentLoading(true)
+    setPaymentMessage(null)
+    try {
+      const res = await fetch('/api/payments/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: opp.id,
+          customerId: opp.customer?.id ?? null,
+          paymentMethod: method === 'credit_card' ? 'credit_card_record' : method === 'debit_card' ? 'debit_card_record' : method,
+          amount,
+          paymentDate,
+          referenceNumber: paymentReference,
+          notes: paymentNotes,
+          status: paymentStatus,
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setPaymentMessage(data.error ?? 'Unable to record payment.')
+        return
       }
+
+      toast.success('Payment recorded')
+      setPaymentDrawerOpen(false)
+      setSelectedPaymentMethod(null)
+      setPaymentAmount('')
+      setPaymentReference('')
+      setPaymentNotes('')
+      setPaymentStatus('received')
+      loadTimeline()
     } catch {
       setPaymentMessage('Unable to reach the payment server.')
     } finally {
@@ -428,6 +492,9 @@ export default function OpportunityDetailPage() {
   const totalPaid = 0
   const balanceDue = Math.max(estimateTotal - totalPaid, 0)
   const profit = opp.total_amount - opp.estimated_cost
+  const selectedPaymentConfig = PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod)
+  const selectedIsRecordOnly = selectedPaymentMethod ? RECORD_ONLY_PAYMENT_METHODS.includes(selectedPaymentMethod) : false
+  const selectedSupportsStripe = selectedPaymentMethod ? STRIPE_PAYMENT_METHODS.includes(selectedPaymentMethod) : false
 
   // Timeline stats
   const callCount  = timeline.filter(t => t._kind === 'communication' && t.type === 'call').length
@@ -980,25 +1047,12 @@ export default function OpportunityDetailPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-500">
-                Amount
-              </label>
-              <div className="mb-5 flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 focus-within:border-kratos focus-within:bg-white focus-within:ring-2 focus-within:ring-kratos/20">
-                <span className="mr-2 text-sm font-semibold text-slate-500">$</span>
-                <input
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(e.target.value)}
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  className="w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
-                />
-              </div>
-
+              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">Payment method</p>
               <div className="space-y-2">
                 {PAYMENT_METHODS.map(({ label, value, icon: Icon, note }) => (
                   <button
                     key={value}
-                    onClick={() => handlePaymentMethod(value)}
+                    onClick={() => selectPaymentMethod(value)}
                     disabled={paymentLoading}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition',
@@ -1023,6 +1077,118 @@ export default function OpportunityDetailPage() {
                 ))}
               </div>
 
+              {selectedPaymentConfig && (
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Selected</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-950">{selectedPaymentConfig.label}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedPaymentMethod(null)}
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-white"
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Amount
+                      <div className="mt-1 flex items-center rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 focus-within:border-kratos focus-within:ring-2 focus-within:ring-kratos/20">
+                        <span className="mr-2 text-sm font-semibold text-slate-500">$</span>
+                        <input
+                          value={paymentAmount}
+                          onChange={e => setPaymentAmount(e.target.value)}
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          className="w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Payment date
+                      <input
+                        type="date"
+                        value={paymentDate}
+                        onChange={e => setPaymentDate(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                      />
+                    </label>
+
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Payment status
+                      <select
+                        value={paymentStatus}
+                        onChange={e => setPaymentStatus(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                      >
+                        <option value="received">Received</option>
+                        <option value="recorded">Recorded</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </label>
+
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Reference / confirmation number
+                      <input
+                        value={paymentReference}
+                        onChange={e => setPaymentReference(e.target.value)}
+                        placeholder="Optional"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                      />
+                    </label>
+
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                      Notes
+                      <textarea
+                        value={paymentNotes}
+                        onChange={e => setPaymentNotes(e.target.value)}
+                        rows={3}
+                        placeholder="Optional"
+                        className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                      />
+                    </label>
+                  </div>
+
+                  {(selectedIsRecordOnly || selectedSupportsStripe) && (
+                    <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                      Record only. No card details are processed or stored in Kratos CRM.
+                    </p>
+                  )}
+
+                  {selectedSupportsStripe ? (
+                    <div className="mt-4 grid gap-2">
+                      <button
+                        onClick={startStripeCheckout}
+                        disabled={paymentLoading}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-50"
+                      >
+                        {paymentLoading && <Loader2 size={14} className="animate-spin" />}
+                        Send Stripe Checkout
+                      </button>
+                      <button
+                        onClick={() => recordPayment(selectedPaymentMethod === 'credit_card' ? 'credit_card_record' : 'debit_card_record')}
+                        disabled={paymentLoading}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                      >
+                        {selectedPaymentMethod === 'credit_card' ? 'Record manual card payment' : 'Record manual debit/card payment'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => recordPayment()}
+                      disabled={paymentLoading}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-50"
+                    >
+                      {paymentLoading && <Loader2 size={14} className="animate-spin" />}
+                      Record Payment
+                    </button>
+                  )}
+                </div>
+              )}
+
               {paymentMessage && (
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                   {paymentMessage}
@@ -1032,7 +1198,7 @@ export default function OpportunityDetailPage() {
 
             <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
               <p className="text-xs leading-5 text-slate-500">
-                Stripe Checkout is server-side only. Record-only methods are UI placeholders until the payments table is added.
+                Stripe Checkout is hosted by Stripe. Kratos CRM never stores card numbers, CVV, or full expiry.
               </p>
             </div>
           </aside>

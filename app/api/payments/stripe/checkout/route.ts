@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const opportunityId = typeof body.opportunityId === 'string' ? body.opportunityId : null
   const quoteId = typeof body.quoteId === 'string' ? body.quoteId : null
+  const customerId = typeof body.customerId === 'string' ? body.customerId : null
   const requestedAmountCents = toPositiveCents(body.amountCents)
 
   if (!opportunityId) {
@@ -55,6 +56,10 @@ export async function POST(req: NextRequest) {
   if (!amountCents || amountCents <= 0) {
     return NextResponse.json({ error: 'Payment amount must be greater than zero' }, { status: 400 })
   }
+  const opportunityTotalCents = Math.round(Number(opportunity.total_amount ?? 0) * 100)
+  if (requestedAmountCents && opportunityTotalCents > 0 && requestedAmountCents > opportunityTotalCents) {
+    return NextResponse.json({ error: 'Payment amount cannot exceed the opportunity total.' }, { status: 400 })
+  }
 
   const origin = req.nextUrl.origin
   const customer = Array.isArray(opportunity.customer) ? opportunity.customer[0] : opportunity.customer
@@ -65,7 +70,7 @@ export async function POST(req: NextRequest) {
   params.set('cancel_url', `${origin}/admin/opportunities/${opportunityId}/quote?payment=cancelled`)
   params.set('metadata[opportunityId]', opportunityId)
   if (quoteId) params.set('metadata[quoteId]', quoteId)
-  if (opportunity.customer_id) params.set('metadata[customerId]', opportunity.customer_id)
+  params.set('metadata[customerId]', customerId ?? opportunity.customer_id)
   params.set('metadata[createdBy]', user.id)
   params.set('metadata[source]', 'kratos_crm')
   params.set('line_items[0][quantity]', '1')

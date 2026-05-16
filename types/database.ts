@@ -199,6 +199,30 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['communications']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['communications']['Insert']>
       }
+      payments: {
+        Row: {
+          id: string
+          opportunity_id: string | null
+          quote_id: string | null
+          customer_id: string | null
+          method: string
+          status: string
+          amount_cents: number
+          currency: string
+          provider: string
+          reference_number: string | null
+          notes: string | null
+          payment_date: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          is_deleted: boolean
+        }
+        Insert: Omit<Database['public']['Tables']['payments']['Row'], 'id' | 'created_at' | 'updated_at' | 'is_deleted'>
+        Update: Partial<Database['public']['Tables']['payments']['Insert']>
+      }
       communication_templates: {
         Row: {
           id: string
