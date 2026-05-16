@@ -241,7 +241,7 @@ export default function OpportunityDetailPage() {
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/opportunities/${id}`)
-      if (!res.ok) { setError('Opportunity not found'); return }
+      if (!res.ok) { setError('Quote not found'); return }
       const data: OppDetail = await res.json()
       setOpp(data)
       setNotes(data.notes ?? '')
@@ -351,7 +351,7 @@ export default function OpportunityDetailPage() {
     try {
       const res = await fetch(`/api/admin/opportunities/${id}`, { method: 'DELETE' })
       if (!res.ok) { toast.error('Delete failed'); return }
-      toast.success('Opportunity deleted')
+      toast.success('Quote deleted')
       router.push('/admin/opportunities')
     } finally { setDeleting(false) }
   }
@@ -543,7 +543,7 @@ export default function OpportunityDetailPage() {
   if (error || !opp) return (
     <div className="flex flex-col items-center justify-center py-32 text-center">
       <p className="text-sm font-medium text-slate-500">{error ?? 'Not found'}</p>
-      <Link href={`/admin/opportunities/${id}`} className="mt-4 text-sm text-kratos hover:underline">← Back to Opportunity Profile</Link>
+      <Link href={`/admin/opportunities/${id}`} className="mt-4 text-sm text-kratos hover:underline">← Back to Quote</Link>
     </div>
   )
 
@@ -569,9 +569,9 @@ export default function OpportunityDetailPage() {
       <div className="space-y-4">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-sm text-slate-500">
-          <Link href="/admin/opportunities" className="hover:text-slate-800">Opportunity Profiles</Link>
+          <Link href="/admin/customers" className="hover:text-slate-800">Customer Profiles</Link>
           <ChevronRight size={14} />
-          <Link href={`/admin/opportunities/${id}`} className="hover:text-slate-800">{opp.customer?.full_name ?? 'Profile'}</Link>
+          <Link href={opp.customer ? `/admin/customers/${opp.customer.id}` : `/admin/opportunities/${id}`} className="hover:text-slate-800">{opp.customer?.full_name ?? 'Profile'}</Link>
           <ChevronRight size={14} />
           <span className="font-mono font-medium text-slate-700">Quote {formatQuoteNumber(opp.opportunity_number)}</span>
         </nav>
@@ -846,7 +846,7 @@ export default function OpportunityDetailPage() {
                             <>
                               <p className="text-sm text-slate-700">
                                 {item.action === 'create'
-                                  ? 'Opportunity created'
+                                  ? 'Quote created'
                                   : item.action === 'status_change'
                                   ? `Status → ${OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? item.diff?.to}`
                                   : item.action === 'update'
@@ -1004,9 +1004,9 @@ export default function OpportunityDetailPage() {
                 </div>
               </div>
 
-              {/* Opportunity Total card */}
+              {/* Quote Total card */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Opportunity Total</h2>
+                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Total</h2>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Total Amount</span>
@@ -1138,7 +1138,7 @@ export default function OpportunityDetailPage() {
 
             {/* Right sidebar */}
             <div className="space-y-3">
-              <PanelSection title="Opportunity Total" icon={ShieldCheck}>
+              <PanelSection title="Quote Total" icon={ShieldCheck}>
                 <MoneyRow label="Subtotal" value={subtotal > 0 ? formatCurrency(subtotal) : '—'} />
                 <MoneyRow label="Discounts" value={discounts > 0 ? `-${formatCurrency(discounts)}` : '—'} />
                 <MoneyRow label="Sales Tax / HST" value={salesTax > 0 ? formatCurrency(salesTax) : '—'} />
@@ -1421,7 +1421,7 @@ export default function OpportunityDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteConfirm(false)} />
           <div className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
-            <h3 className="font-semibold text-slate-900">Delete Opportunity?</h3>
+            <h3 className="font-semibold text-slate-900">Delete Quote?</h3>
             <p className="mt-2 text-sm text-slate-600">
               Delete <span className="font-mono font-medium">{opp.opportunity_number}</span>? This can be recovered by an admin.
             </p>

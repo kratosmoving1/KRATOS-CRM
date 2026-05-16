@@ -7,9 +7,9 @@ interface OpenItemsCardProps {
 export default function OpenItemsCard({ openItems }: OpenItemsCardProps) {
   const items = [
     { label: 'Unassigned',         value: openItems.unassignedLeads,   accent: true },
-    { label: 'Open Opportunities', value: openItems.newLeads,           accent: false },
+    { label: 'Open Quotes', value: openItems.newLeads,           accent: false },
     { label: 'Booked Today',       value: openItems.bookedToday,        accent: false },
-    { label: 'Stale Opportunities',value: openItems.staleOpportunities, accent: true },
+    { label: 'Stale Quotes',value: openItems.staleOpportunities, accent: true },
   ]
 
   return (

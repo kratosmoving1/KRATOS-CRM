@@ -141,6 +141,7 @@ export async function POST(req: NextRequest) {
     customer_id:        customerId,
     sales_agent_id:     body.sales_agent_id ?? user.id,
     lead_source_id:     body.lead_source_id ?? null,
+    company_division:   body.company_division ?? 'kratos_moving',
     service_type:       body.service_type ?? 'local',
     status,
     move_size:          normalizeMoveSizeForDb(body.move_size) ?? null,

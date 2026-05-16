@@ -66,8 +66,8 @@ export default function EditAddressModal({ data, onClose, onSaved }: Props) {
     }))
   }
 
-  function handleAddressChange() {
-    setForm(p => ({ ...p, city: '', province: '', postal_code: '', place_id: '' }))
+  function handleAddressChange(value: string) {
+    setForm(p => ({ ...p, address_line1: value, city: '', province: '', postal_code: '', place_id: '' }))
   }
 
   const showFloor = SHOW_FLOOR_TYPES.has(form.dwelling_type)
@@ -130,7 +130,7 @@ export default function EditAddressModal({ data, onClose, onSaved }: Props) {
             className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
-            Save Address
+            Save {data.prefix === 'origin' ? 'Origin' : 'Destination'} Address
           </button>
         </div>
       }

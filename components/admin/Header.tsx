@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Search, LogOut, Menu, Plus, Briefcase, Target, ListChecks, BellRing } from 'lucide-react'
+import { Bell, Search, LogOut, Menu, Plus, FileText, ListChecks, BellRing } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCreateModal } from '@/contexts/CreationModalsContext'
 
@@ -15,8 +15,7 @@ interface HeaderProps {
 }
 
 const CREATE_OPTIONS = [
-  { label: 'New Opportunity', icon: Briefcase, modal: 'opportunity' as const },
-  { label: 'New Lead',        icon: Target,    modal: 'lead'        as const },
+  { label: 'New Quote',       icon: FileText,  modal: 'opportunity' as const },
   { label: 'New Task',        icon: ListChecks, modal: 'task'       as const },
   { label: 'New Follow-up',   icon: BellRing,  modal: 'followup'   as const },
 ]
@@ -86,16 +85,18 @@ export default function Header({ onMobileMenuToggle, currentUser }: HeaderProps)
           </button>
 
           {dropdownOpen && (
-            <div className="absolute right-0 top-full z-40 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10">
-              <div className="grid grid-cols-2 gap-1.5">
+            <div className="absolute right-0 top-full z-40 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/10">
+              <div className="space-y-0.5">
                 {CREATE_OPTIONS.map(({ label, icon: Icon, modal }) => (
                   <button
                     key={modal}
                     onClick={() => { setDropdownOpen(false); openModal(modal) }}
-                    className="flex flex-col items-center gap-1.5 rounded-xl p-3 text-center text-xs font-medium text-slate-700 transition-colors hover:bg-kratos/10 hover:text-slate-900"
+                    className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-kratos/10 hover:text-slate-900"
                   >
-                    <Icon size={20} className="text-kratos" />
-                    {label}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-kratos/10 text-kratos">
+                      <Icon size={16} />
+                    </span>
+                    <span>{label}</span>
                   </button>
                 ))}
               </div>

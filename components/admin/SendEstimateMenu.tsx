@@ -144,8 +144,8 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
           <button onClick={() => placeholder('Send Invoice')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
             <FileText size={14} /> Send Invoice
           </button>
-          <button onClick={() => placeholder('Duplicate Opportunity')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            <Copy size={14} /> Duplicate Opportunity
+          <button onClick={() => placeholder('Duplicate Quote')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
+            <Copy size={14} /> Duplicate Quote
           </button>
         </div>
       )}

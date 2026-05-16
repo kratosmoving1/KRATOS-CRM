@@ -167,7 +167,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
       })
       const json = await res.json()
       if (!res.ok) { setApiError(json.error ?? 'Something went wrong'); return }
-      toast.success(editId ? 'Opportunity updated' : 'Opportunity created')
+      toast.success(editId ? 'Quote updated' : 'Quote created')
       onClose()
       router.push(`/admin/opportunities/${json.id}`)
     } catch {
@@ -189,7 +189,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
 
   return (
     <ModalShell
-      title={editId ? 'Opportunity' : 'Opportunity'}
+      title={editId ? 'Quote' : 'Quote'}
       subtitle={editId ? 'EDIT' : 'CREATE'}
       steps={STEPS}
       currentStep={step}

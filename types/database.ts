@@ -60,6 +60,7 @@ export type Database = {
           customer_id: string
           sales_agent_id: string | null
           lead_source_id: string | null
+          company_division: string | null
           service_type: 'local' | 'long_distance' | 'commercial' | 'packing' | 'storage' | 'international'
           status: 'opportunity' | 'booked' | 'completed' | 'closed' | 'cancelled'
           move_size: string | null

@@ -7,6 +7,18 @@ export const SERVICE_TYPES = [
   { value: 'international',  label: 'International' },
 ] as const
 
+export const COMPANY_DIVISIONS = [
+  { value: 'kratos_moving', label: 'Kratos Moving' },
+  { value: 'kratos_cleaning', label: 'Kratos Cleaning' },
+  { value: 'kratos_painting', label: 'Kratos Painting' },
+  { value: 'kratos_security', label: 'Kratos Security' },
+  { value: 'other', label: 'Kratos Group / Other' },
+] as const
+
+export const COMPANY_DIVISION_LABELS: Record<string, string> = Object.fromEntries(
+  COMPANY_DIVISIONS.map(division => [division.value, division.label]),
+)
+
 export const MOVE_SIZE_GROUPS = [
   {
     label: 'Houses',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { hasPermission, isActiveUser } from '@/lib/auth/permissions'
+import { hasPermission, isActiveUser, normalizeRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 
@@ -26,9 +26,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (!opp) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const role = normalizeRole(profile?.role)
+  const canUpdateByRole = ['owner', 'admin', 'manager', 'sales', 'dispatcher'].includes(role)
   const canUpdateAny      = hasPermission(profile?.role, 'lead:update')
   const canUpdateAssigned = opp.sales_agent_id === user.id && hasPermission(profile?.role, 'lead:update_assigned')
-  if (!canUpdateAny && !canUpdateAssigned) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canUpdateByRole && !canUpdateAny && !canUpdateAssigned) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
   const { prefix } = body

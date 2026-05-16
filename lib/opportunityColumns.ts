@@ -3,6 +3,7 @@ export const ALLOWED_OPPORTUNITY_COLUMNS = [
   'customer_id',
   'sales_agent_id',
   'lead_source_id',
+  'company_division',
   'service_type',
   'status',
   'move_size',

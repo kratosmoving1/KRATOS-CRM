@@ -87,25 +87,25 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
       title="Edit Customer Contact"
       subtitle="QUICK EDIT"
       onClose={onClose}
-      maxWidth="max-w-md"
+      maxWidth="max-w-2xl"
       footer={
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => { onClose(); onOpenFullEdit() }}
-            className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-white hover:text-slate-900 sm:w-auto"
           >
             Edit Full Move Details
           </button>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100">
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100">
               Cancel
             </button>
             <button
               type="button"
               onClick={handleSave}
               disabled={submitting}
-              className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
+              className="flex min-w-32 items-center justify-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
             >
               {submitting && <Loader2 size={14} className="animate-spin" />}
               Save Changes
@@ -123,11 +123,10 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
           error={errors.customerName}
           placeholder="Jane Smith"
         />
-        <div className="flex items-end gap-2">
+        <div className="grid gap-3 sm:grid-cols-[1fr_140px] sm:items-end">
           <Input
             label="Phone Number"
             required
-            wrapClassName="flex-1"
             value={form.customerPhone}
             onChange={e => update('customerPhone', formatPhone(e.target.value))}
             error={errors.customerPhone}
@@ -135,7 +134,6 @@ export default function QuickEditModal({ data, onClose, onSaved, onOpenFullEdit 
           />
           <Select
             label="Type"
-            wrapClassName="w-28"
             value={form.customerPhoneType}
             onChange={e => update('customerPhoneType', e.target.value)}
             options={PHONE_TYPES.map(p => ({ value: p.value, label: p.label }))}

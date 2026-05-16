@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Search, Plus, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
 import { useCreateModal } from '@/contexts/CreationModalsContext'
 import StatusPill from '@/components/ui/StatusPill'
-import { OPP_STATUSES } from '@/lib/constants'
+import { COMPANY_DIVISION_LABELS, OPP_STATUSES } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
+import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import { cn } from '@/lib/utils'
 
 interface Agent { id: string; full_name: string }
@@ -15,6 +16,8 @@ interface Opp {
   opportunity_number: string
   status: string
   service_type: string
+  company_division: string | null
+  service_date: string | null
   total_amount: number
   customer: { id: string; full_name: string } | null
   agent: { id: string; full_name: string } | null
@@ -28,6 +31,11 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
   packing: 'Packing',
   storage: 'Storage',
   international: 'Moving',
+}
+
+function formatDate(d: string | null | undefined) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function OpportunitiesPage() {
@@ -100,7 +108,7 @@ export default function OpportunitiesPage() {
       <div className="border-b border-slate-200 pb-6">
         <div className="flex items-end justify-between gap-4">
           <div className="flex items-baseline gap-3">
-            <h1 className="text-2xl font-normal tracking-tight text-slate-900">Opportunity Profiles</h1>
+            <h1 className="text-2xl font-normal tracking-tight text-slate-900">Quotes</h1>
             <span className="text-xs font-semibold uppercase text-slate-500">
               {loading ? '...' : `${count.toLocaleString()} total`}
             </span>
@@ -109,7 +117,7 @@ export default function OpportunitiesPage() {
             onClick={() => openModal('opportunity')}
             className="flex items-center gap-2 rounded-md bg-kratos px-4 py-2 text-sm font-semibold text-slate-900 hover:opacity-90"
           >
-            <Plus size={16} /> New Opportunity
+            <Plus size={16} /> New Quote
           </button>
         </div>
       </div>
@@ -117,8 +125,8 @@ export default function OpportunitiesPage() {
       <div className="grid gap-4 lg:grid-cols-[180px_1fr]">
         <aside className="space-y-1 pt-12 text-sm">
           {[
-            ['all', 'Opportunities'],
-            ['opportunity', 'Open Opportunities'],
+            ['all', 'Quotes'],
+            ['opportunity', 'Open Quotes'],
             ['booked', 'Booked'],
             ['completed', 'Completed'],
             ['cancelled', 'Cancelled'],
@@ -153,7 +161,7 @@ export default function OpportunitiesPage() {
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search opportunity profiles..."
+                  placeholder="Search quotes or customers..."
                   className="h-10 w-72 rounded-none border border-slate-300 bg-white pl-3 pr-9 text-sm outline-none focus:border-blue-500"
                 />
               </div>
@@ -170,16 +178,19 @@ export default function OpportunitiesPage() {
 
           <div className="overflow-hidden border border-slate-200 bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px]">
+              <table className="w-full min-w-[1180px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <th className="w-12 px-4 py-3 text-left">
                       <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label="Select all" />
                     </th>
+                    <th className="px-4 py-3 text-left"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Quote #</span></th>
+                    <th className="px-4 py-3 text-left"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Customer</span></th>
+                    <th className="px-4 py-3 text-left"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">KGC</span></th>
+                    <th className="px-4 py-3 text-left"><SortBtn col="service_type" label="Service" /></th>
+                    <th className="px-4 py-3 text-left"><SortBtn col="service_date" label="Date" /></th>
                     <th className="px-4 py-3 text-left"><SortBtn col="status" label="Status" /></th>
-                    <th className="px-4 py-3 text-left"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Name</span></th>
-                    <th className="px-4 py-3 text-left"><SortBtn col="service_type" label="Open Opportunity" /></th>
-                    <th className="px-4 py-3 text-left"><SortBtn col="total_amount" label="Balance" /></th>
+                    <th className="px-4 py-3 text-left"><SortBtn col="total_amount" label="Amount" /></th>
                     <th className="px-4 py-3 text-left"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Source</span></th>
                     <th className="px-4 py-3 text-left"><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Latest Assigned To</span></th>
                   </tr>
@@ -188,7 +199,7 @@ export default function OpportunitiesPage() {
                   {loading ? (
                     Array.from({ length: 9 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
-                        {Array.from({ length: 7 }).map((__, j) => (
+                        {Array.from({ length: 9 }).map((__, j) => (
                           <td key={j} className="px-4 py-4">
                             <div className="h-4 rounded bg-slate-100" style={{ width: `${50 + (j * 9) % 35}%` }} />
                           </td>
@@ -197,7 +208,7 @@ export default function OpportunitiesPage() {
                     ))
                   ) : opps.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-16 text-center text-sm text-slate-500">No opportunity profiles found</td>
+                      <td colSpan={9} className="px-4 py-16 text-center text-sm text-slate-500">No quotes found</td>
                     </tr>
                   ) : (
                     opps.map(opp => (
@@ -207,11 +218,14 @@ export default function OpportunitiesPage() {
                         className="cursor-pointer text-sm transition-colors hover:bg-slate-50"
                       >
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label={`Select ${opp.customer?.full_name ?? 'opportunity'}`} />
+                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label={`Select ${opp.customer?.full_name ?? 'quote'}`} />
                         </td>
-                        <td className="px-4 py-3"><StatusPill status={opp.status} /></td>
+                        <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700">{formatQuoteNumber(opp.opportunity_number)}</td>
                         <td className="px-4 py-3 font-medium text-blue-600">{opp.customer?.full_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-slate-700">{COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'}</td>
                         <td className="px-4 py-3 text-slate-700">{SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type}</td>
+                        <td className="px-4 py-3 text-slate-700">{formatDate(opp.service_date)}</td>
+                        <td className="px-4 py-3"><StatusPill status={opp.status} /></td>
                         <td className="px-4 py-3 text-slate-700">{formatCurrency(opp.total_amount ?? 0)}</td>
                         <td className="px-4 py-3 text-slate-700">{opp.lead_source?.name ?? 'Unknown'}</td>
                         <td className="px-4 py-3 text-slate-700">{opp.agent?.full_name ?? '—'}</td>

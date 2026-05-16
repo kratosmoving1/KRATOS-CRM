@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     .select(`
       *,
       opportunities!customer_id(
-        id, opportunity_number, status, service_type, lead_source_id,
+        id, opportunity_number, status, service_type, company_division, lead_source_id,
         sales_agent_id, total_amount, created_at,
         agent:profiles!sales_agent_id(full_name),
         lead_source:lead_sources(name)

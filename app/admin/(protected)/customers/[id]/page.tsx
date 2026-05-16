@@ -10,10 +10,12 @@ import {
 import StatusPill from '@/components/ui/StatusPill'
 import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
 import { formatCurrency } from '@/lib/format'
+import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
+import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 
 interface Opp {
   id: string; opportunity_number: string; status: string
-  service_type: string; service_date: string | null; total_amount: number
+  service_type: string; service_date: string | null; total_amount: number; company_division: string | null
   created_at: string
   agent: { full_name: string } | null
   lead_source: { name: string } | null
@@ -128,7 +130,7 @@ export default function CustomerDetailPage() {
 
       {/* 4 stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Opportunities" value={opps.length} />
+        <StatCard label="Total Quotes" value={opps.length} />
         <StatCard
           label="Revenue"
           value={totalRevenue > 0 ? formatCurrency(totalRevenue) : '$0'}
@@ -213,25 +215,25 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
-        {/* RIGHT: opportunities table */}
+        {/* RIGHT: quotes table */}
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
               <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-                Opportunities
+                Quotes
                 <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{opps.length}</span>
               </h2>
               <button
                 onClick={() => router.push('/admin/opportunities')}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
               >
-                <Plus size={12} /> New
+                <Plus size={12} /> New Quote
               </button>
             </div>
             {opps.length === 0 ? (
               <div className="py-16 text-center">
                 <Package size={32} className="mx-auto mb-3 text-slate-200" />
-                <p className="text-sm text-slate-400">No opportunities yet</p>
+                <p className="text-sm text-slate-400">No quotes yet</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -239,9 +241,10 @@ export default function CustomerDetailPage() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
                       <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Status</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Opp #</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Quote #</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">KGC</th>
                       <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Service</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Date</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Service Date</th>
                       <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-400">Amount</th>
                       <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-400">Agent</th>
                     </tr>
@@ -254,7 +257,8 @@ export default function CustomerDetailPage() {
                         className="cursor-pointer transition-colors hover:bg-slate-50"
                       >
                         <td className="px-4 py-3"><StatusPill status={opp.status} /></td>
-                        <td className="px-4 py-3 font-mono text-xs font-medium text-slate-600">{opp.opportunity_number}</td>
+                        <td className="px-4 py-3 font-mono text-xs font-medium text-slate-600">{formatQuoteNumber(opp.opportunity_number)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'}</td>
                         <td className="px-4 py-3 text-sm text-slate-700">{SERVICE_LABELS[opp.service_type] ?? opp.service_type}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{formatDate(opp.service_date)}</td>
                         <td className="px-4 py-3 text-right text-sm font-medium text-slate-800">

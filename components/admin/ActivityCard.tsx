@@ -6,7 +6,7 @@ interface ActivityCardProps {
 
 const ROWS = [
   { key: 'leads',         label: 'Leads' },
-  { key: 'opportunities', label: 'Opportunities' },
+  { key: 'opportunities', label: 'Quotes' },
   { key: 'booked',        label: 'Booked' },
   { key: 'cancellations', label: 'Cancellations' },
 ] as const

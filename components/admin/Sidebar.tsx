@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Briefcase,
   Users,
-  FileText,
   Phone,
   Bell,
   Receipt,
@@ -20,9 +19,8 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/admin',           label: 'Dashboard',     icon: LayoutDashboard },
-  { href: '/admin/opportunities', label: 'Opportunities', icon: Briefcase },
   { href: '/admin/customers',     label: 'Customers',     icon: Users },
-  { href: '/admin/estimates',     label: 'Estimates',     icon: FileText },
+  { href: '/admin/opportunities', label: 'Quotes', icon: Briefcase },
   { href: '/admin/calls',         label: 'Calls',         icon: Phone },
   { href: '/admin/follow-ups',    label: 'Follow-ups',    icon: Bell },
   { href: '/admin/invoices',      label: 'Invoices',      icon: Receipt },

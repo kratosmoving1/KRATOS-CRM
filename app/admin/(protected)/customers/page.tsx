@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
 import { formatCurrency } from '@/lib/format'
+import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 interface Opp {
-  status: string; service_type: string; total_amount: number
+  status: string; service_type: string; total_amount: number; company_division: string | null
   agent: { full_name: string } | null
   lead_source: { name: string } | null
 }
@@ -86,7 +87,7 @@ export default function CustomersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Phone</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Open Opportunity</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Open Quote</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-500">Balance</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Source</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Agent</th>
@@ -107,7 +108,7 @@ export default function CustomersPage() {
                 <tr>
                   <td colSpan={7} className="px-4 py-16 text-center">
                     <p className="text-sm font-medium text-slate-500">No customers found</p>
-                    <p className="mt-1 text-xs text-slate-400">Customers are created automatically when you create opportunities</p>
+                    <p className="mt-1 text-xs text-slate-400">Customers are created automatically when you create quotes</p>
                   </td>
                 </tr>
               ) : (
@@ -117,12 +118,12 @@ export default function CustomersPage() {
                     <tr key={c.id} onClick={() => router.push(`/admin/customers/${c.id}`)}
                       className="cursor-pointer transition-colors hover:bg-slate-50">
                       <td className="px-4 py-3">
-                        {opp ? <StatusPill status={opp.status} /> : <span className="text-xs text-slate-400">No opps</span>}
+                        {opp ? <StatusPill status={opp.status} /> : <span className="text-xs text-slate-400">No quotes</span>}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-900">{c.full_name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{c.phone ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">
-                        {opp ? SERVICE_LABELS[opp.service_type] ?? opp.service_type : '—'}
+                        {opp ? `${COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'} · ${SERVICE_LABELS[opp.service_type] ?? opp.service_type}` : '—'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">$0.00</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{opp?.lead_source?.name ?? '—'}</td>

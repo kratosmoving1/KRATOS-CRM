@@ -103,7 +103,7 @@ function ActivityText({ entry }: { entry: AuditEntry }) {
   return (
     <div className="space-y-0.5">
       <p className="text-sm text-slate-700">
-        {entry.action === 'create' ? 'Opportunity created.' : `Opportunity ${entry.action.replace(/_/g, ' ')}.`}
+        {entry.action === 'create' ? 'Quote created.' : `Quote ${entry.action.replace(/_/g, ' ')}.`}
       </p>
       <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">{actor}</p>
       <p className="text-xs text-slate-500">{date}</p>
@@ -125,12 +125,12 @@ export default function OpportunityProfilePage() {
     try {
       const res = await fetch(`/api/admin/opportunities/${id}`)
       if (!res.ok) {
-        setError('Opportunity profile not found')
+        setError('Quote not found')
         return
       }
       setOpp(await res.json())
     } catch {
-      setError('Failed to load opportunity profile')
+      setError('Failed to load quote')
     } finally {
       setLoading(false)
     }
@@ -149,9 +149,9 @@ export default function OpportunityProfilePage() {
   if (error || !opp) {
     return (
       <div className="py-12">
-        <p className="text-sm text-red-500">{error ?? 'Opportunity profile not found'}</p>
+        <p className="text-sm text-red-500">{error ?? 'Quote not found'}</p>
         <Link href="/admin/opportunities" className="mt-4 inline-block text-sm text-kratos hover:underline">
-          Back to opportunity profiles
+          Back to quotes
         </Link>
       </div>
     )
@@ -184,7 +184,7 @@ export default function OpportunityProfilePage() {
           onClick={() => router.push('/admin/opportunities')}
           className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-blue-600 hover:underline"
         >
-          ‹ Back to Opportunity Profiles
+          ‹ Back to Quotes
         </button>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -281,8 +281,8 @@ export default function OpportunityProfilePage() {
               ) : <p>No customer contacts.</p>}
               {opp.customer?.email && <p>{opp.customer.email}</p>}
             </div>
-            <h2 className="mt-8 text-lg font-normal text-slate-900">Opportunity Contacts</h2>
-            <p className="mt-6 text-sm text-slate-600">No opportunity contacts.</p>
+            <h2 className="mt-8 text-lg font-normal text-slate-900">Quote Contacts</h2>
+            <p className="mt-6 text-sm text-slate-600">No quote contacts.</p>
           </section>
 
           <section className="border border-slate-200 bg-white p-6 shadow-sm">
@@ -300,7 +300,7 @@ export default function OpportunityProfilePage() {
         <main className="space-y-4">
           <section className="border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h2 className="text-lg font-normal text-slate-900">Opportunities</h2>
+              <h2 className="text-lg font-normal text-slate-900">Quotes</h2>
               <ChevronDown size={18} className="text-slate-600" />
             </div>
             <div className="overflow-x-auto p-5">
