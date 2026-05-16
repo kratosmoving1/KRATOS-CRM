@@ -574,7 +574,7 @@ export default function OpportunityDetailPage() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => toast.message('SMS sending is not configured yet.')}
+                        onClick={() => toast.message('RingCentral SMS route is not connected yet.')}
                         className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600"
                       >
                         Send SMS using template

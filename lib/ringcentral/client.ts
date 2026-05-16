@@ -29,6 +29,12 @@ type StartRingCentralCallInput = {
   from?: string
 }
 
+type SendRingCentralSmsInput = {
+  to: string
+  from: string
+  text: string
+}
+
 export type StartRingCentralCallResult = {
   id?: string
   uri?: string
@@ -37,6 +43,13 @@ export type StartRingCentralCallResult = {
     callerStatus?: string
     calleeStatus?: string
   }
+  raw: unknown
+}
+
+type SendRingCentralSmsResult = {
+  id?: string
+  uri?: string
+  messageStatus?: string
   raw: unknown
 }
 
@@ -200,15 +213,75 @@ export async function startRingCentralCall({ to, from = RC_FROM }: StartRingCent
   }
 }
 
-export async function sendSmsViaRingCentral({ to, from, text }: { to: string; from: string; text: string }) {
+export async function sendSmsViaRingCentral({ to, from, text }: SendRingCentralSmsInput): Promise<SendRingCentralSmsResult> {
   if (!isRingCentralConfigured()) throw new Error('RingCentral is not configured.')
-  // Placeholder: implement using official SDK when available.
-  // Example flow:
-  // 1. Create SDK client with client id/secret and server
-  // 2. Authenticate using JWT or OAuth
-  // 3. Call POST /restapi/v1.0/account/~/extension/~/sms
-  // 4. Return API result
-  throw new Error('sendSmsViaRingCentral not implemented — install RingCentral SDK and implement')
+
+  const normalizedTo = normalizePhoneToE164(to)
+  const normalizedFrom = normalizePhoneToE164(from)
+
+  if (!normalizedTo.isE164) {
+    throw new RingCentralCallError(`Invalid SMS recipient phone number: ${to}`, { code: 'INVALID_SMS_TO_NUMBER' })
+  }
+
+  if (!normalizedFrom.isE164) {
+    throw new RingCentralCallError(`Invalid RingCentral SMS from number: ${from}`, { code: 'INVALID_SMS_FROM_NUMBER' })
+  }
+
+  const token = await getAccessToken()
+  const endpoint = `${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`
+
+  ringCentralLog('Sending SMS', {
+    endpoint,
+    from: normalizedFrom.normalized,
+    to: normalizedTo.normalized,
+  })
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: { phoneNumber: normalizedFrom.normalized },
+      to: [{ phoneNumber: normalizedTo.normalized }],
+      text,
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const errorObject = data as RingCentralErrorResponse
+    const message = extractRingCentralError(errorObject, 'Unable to send RingCentral SMS.')
+    console.error('[RingCentral] SMS failed', {
+      status: res.status,
+      code: errorObject.errorCode || errorObject.error,
+      message,
+      endpoint,
+      from: normalizedFrom.normalized,
+      to: normalizedTo.normalized,
+    })
+    throw new RingCentralCallError(message, {
+      status: res.status,
+      code: errorObject.errorCode || errorObject.error,
+      details: data,
+    })
+  }
+
+  ringCentralLog('SMS response received', {
+    status: res.status,
+    messageStatus: (data as SendRingCentralSmsResult).messageStatus,
+  })
+
+  const result = data as Omit<SendRingCentralSmsResult, 'raw'>
+  return {
+    id: result.id,
+    uri: result.uri,
+    messageStatus: result.messageStatus,
+    raw: data,
+  }
 }
 
 export async function renderTemplate(body: string, vars: Record<string,string|undefined>) {

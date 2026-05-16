@@ -4,21 +4,21 @@ import { requireActiveProfile } from '@/lib/auth/server'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 import { isRingCentralConfigured, sendSmsViaRingCentral, renderTemplate } from '@/lib/ringcentral/client'
+import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const auth = await requireActiveProfile(supabase)
   if (auth.response) return auth.response
-  const { user, profile } = auth.context
+  const { user } = auth.context
 
   const body = await req.json()
   const { opportunityId, customerId, to, templateId, message, vars } = body
 
   if (!opportunityId && !customerId) return NextResponse.json({ error: 'opportunityId or customerId required' }, { status: 400 })
 
-  if (!isRingCentralConfigured()) {
-    return NextResponse.json({ error: 'RingCentral is not configured.' }, { status: 500 })
-  }
+  if (!isRingCentralConfigured()) return NextResponse.json({ error: 'RingCentral is not configured.' }, { status: 503 })
+  if (!to) return NextResponse.json({ error: 'SMS recipient phone number required' }, { status: 400 })
 
   let text = message ?? null
   if (templateId) {
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
 
   try {
     // Attempt to send via RingCentral
-    const result = await sendSmsViaRingCentral({ to: to, from: process.env.RINGCENTRAL_FROM_NUMBER || '', text })
+    const normalizedTo = normalizePhoneToE164(to)
+    const result = await sendSmsViaRingCentral({ to, from: process.env.RINGCENTRAL_FROM_NUMBER || '', text })
 
     // Save communication record after successful send
     const { data, error } = await supabase.from('communications').insert({
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
       type: 'sms',
       direction: 'outbound',
       body: text,
+      phone_number: normalizedTo.normalized,
+      status: 'sent',
       created_by: user.id,
     }).select().single()
 

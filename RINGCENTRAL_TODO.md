@@ -8,11 +8,13 @@ Features needed
    - Server route added: `POST /api/ringcentral/call`
    - UI confirmation added for phone numbers on opportunity/customer pages
    - Route uses JWT auth and `POST /restapi/v1.0/account/~/extension/~/ring-out`
+   - RingCentral app must include the RingOut application scope/permission. The observed provider error was: `In order to call this API endpoint, application needs to have [RingOut] permission.`
+   - After adding the RingOut scope in RingCentral Developers, create a new JWT for the authorized extension, update Vercel environment variables, and redeploy.
    - Verify the authenticated JWT extension can use RingOut and that `RINGCENTRAL_FROM_NUMBER` is assigned/caller-ID eligible
    - If RingOut is unavailable for the extension/account, the CRM records a failed call activity and returns a controlled error
 
 2. Send SMS from CRM
-   - Implement POST /api/communications/sms/send
+   - `POST /api/communications/sms/send` sends through RingCentral when env vars are configured
    - Render templates server-side and substitute variables
    - Ensure sending number is SMS-enabled and belongs to extension
    - Save communications records and audit logs only after successful send

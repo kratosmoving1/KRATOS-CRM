@@ -42,6 +42,11 @@ export default function RingCentralCallButton({
       }
 
       if (typeof data?.error === 'string') {
+        if (data.error.includes('[RingOut] permission')) {
+          toast.error('RingCentral app is missing RingOut permission. Add the RingOut scope in RingCentral Developers, create a new JWT, update Vercel, and redeploy.')
+          return
+        }
+
         toast.error(data.error)
         return
       }
