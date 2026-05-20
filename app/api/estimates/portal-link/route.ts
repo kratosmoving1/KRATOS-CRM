@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeRole } from '@/lib/auth/permissions'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { getOrCreateEstimatePortalLink, portalEstimateUrl } from '@/lib/estimates/portal'
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const link = await getOrCreateEstimatePortalLink({ supabase, opportunityId, quoteId, createdBy: user.id })
+    const admin = createAdminClient()
+    const link = await getOrCreateEstimatePortalLink({ supabase: admin, opportunityId, quoteId, createdBy: user.id })
     return NextResponse.json({
       token: link.token,
       url: portalEstimateUrl(appOrigin(req), link.token, preview),

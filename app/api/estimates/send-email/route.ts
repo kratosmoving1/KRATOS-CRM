@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeRole } from '@/lib/auth/permissions'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
@@ -145,7 +146,8 @@ export async function POST(req: NextRequest) {
 
   let link: Awaited<ReturnType<typeof getOrCreateEstimatePortalLink>>
   try {
-    link = await getOrCreateEstimatePortalLink({ supabase, opportunityId, quoteId, createdBy: user.id })
+    const admin = createAdminClient()
+    link = await getOrCreateEstimatePortalLink({ supabase: admin, opportunityId, quoteId, createdBy: user.id })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unable to create estimate portal link.'
     await logAuditEvent({
