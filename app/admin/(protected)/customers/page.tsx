@@ -6,10 +6,12 @@ import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
 import { formatCurrency } from '@/lib/format'
 import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
+import { formatDisplayPhone } from '@/lib/phone/formatPhone'
 import { cn } from '@/lib/utils'
 
 interface Opp {
   status: string; service_type: string; total_amount: number; company_division: string | null
+  created_at: string
   agent: { full_name: string } | null
   lead_source: { name: string } | null
 }
@@ -21,11 +23,14 @@ interface Customer {
 
 function latestOpp(opps: Opp[]): Opp | null {
   if (!opps.length) return null
-  const priority = ['opportunity','booked','accepted','quote_sent','contacted','new_lead','completed','closed','cancelled','lost']
-  const sorted = [...opps].sort((a, b) => {
+  const priority = ['opportunity','booked','accepted','quote_sent','contacted','new_lead']
+  const openOpps = opps.filter(opp => priority.includes(opp.status))
+  if (!openOpps.length) return null
+  const sorted = openOpps.sort((a, b) => {
     const aRank = priority.includes(a.status) ? priority.indexOf(a.status) : priority.length
     const bRank = priority.includes(b.status) ? priority.indexOf(b.status) : priority.length
-    return aRank - bRank
+    if (aRank !== bRank) return aRank - bRank
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
   return sorted[0]
 }
@@ -127,12 +132,12 @@ export default function CustomersPage() {
                     <tr key={c.id} onClick={() => router.push(`/admin/customers/${c.id}`)}
                       className="cursor-pointer transition-colors hover:bg-slate-50">
                       <td className="px-4 py-3">
-                        {opp ? <StatusPill status={opp.status} /> : <span className="text-xs text-slate-400">No quotes</span>}
+                        {opp ? <StatusPill status={opp.status} /> : <span className="text-xs text-slate-400">No open quote</span>}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-900">{c.full_name}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{c.phone ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{formatDisplayPhone(c.phone)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">
-                        {opp ? `${COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'} · ${SERVICE_LABELS[opp.service_type] ?? opp.service_type}` : '—'}
+                        {opp ? `${COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'} · ${SERVICE_LABELS[opp.service_type] ?? opp.service_type}` : 'No open quote'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">$0.00</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{opp?.lead_source?.name ?? '—'}</td>

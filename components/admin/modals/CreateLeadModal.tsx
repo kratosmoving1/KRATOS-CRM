@@ -72,7 +72,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
       if (!res.ok) { setApiError(json.error ?? 'Something went wrong'); return }
       toast.success('Lead created')
       onClose()
-      router.push(`/admin/opportunities/${json.id}`)
+      router.push(`/admin/opportunities/${json.id}/quote`)
     } catch {
       setApiError('Network error')
     } finally {

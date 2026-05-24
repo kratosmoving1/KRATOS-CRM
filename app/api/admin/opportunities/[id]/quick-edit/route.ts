@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasPermission, isActiveUser } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import { normalizeEmail, normalizePhone } from '@/lib/customers/matching'
 import type { Json } from '@/types/database'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -49,9 +50,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const customerPayload = {
     full_name:  customerName.trim(),
-    phone:      String(customerPhone).replace(/\D/g, '') || null,
+    phone:      normalizePhone(String(customerPhone)),
     phone_type: customerPhoneType || null,
-    email:      customerEmail?.trim() || null,
+    email:      normalizeEmail(customerEmail),
   }
 
   const { data: updatedCustomer, error: custErr } = await supabase

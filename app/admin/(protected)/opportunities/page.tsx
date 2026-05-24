@@ -208,20 +208,26 @@ export default function OpportunitiesPage() {
                     ))
                   ) : opps.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-16 text-center text-sm text-slate-500">No quotes found</td>
+                      <td colSpan={10} className="px-4 py-16 text-center text-sm text-slate-500">No quotes found</td>
                     </tr>
                   ) : (
                     opps.map(opp => (
                       <tr
                         key={opp.id}
-                        onClick={() => router.push(`/admin/opportunities/${opp.id}`)}
+                        onClick={() => router.push(`/admin/opportunities/${opp.id}/quote`)}
                         className="cursor-pointer text-sm transition-colors hover:bg-slate-50"
                       >
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label={`Select ${opp.customer?.full_name ?? 'quote'}`} />
                         </td>
                         <td className="px-4 py-3 font-mono text-xs font-medium text-slate-700">{formatQuoteNumber(opp.opportunity_number)}</td>
-                        <td className="px-4 py-3 font-medium text-blue-600">{opp.customer?.full_name ?? '—'}</td>
+                        <td className="px-4 py-3 font-medium text-blue-600">
+                          {opp.customer?.full_name ?? (
+                            <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
+                              Missing customer
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-slate-700">{COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'}</td>
                         <td className="px-4 py-3 text-slate-700">{SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type}</td>
                         <td className="px-4 py-3 text-slate-700">{formatDate(opp.service_date)}</td>

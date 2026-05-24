@@ -13,6 +13,7 @@ import { MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
+import { formatDisplayPhone } from '@/lib/phone/formatPhone'
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {
   local: 'Moving',
@@ -77,13 +78,6 @@ function formatDate(d: string | null | undefined) {
 function formatShortDate(d: string | null | undefined) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-CA', { month: 'numeric', day: 'numeric', year: 'numeric' })
-}
-
-function formatPhone(value: string | null | undefined) {
-  if (!value) return null
-  const digits = value.replace(/\D/g, '')
-  if (digits.length !== 10) return value
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
 function compactAddress(parts: Array<string | null | undefined>) {
@@ -158,7 +152,7 @@ export default function OpportunityProfilePage() {
   }
 
   const customerName = opp.customer?.full_name ?? 'Unnamed customer'
-  const phone = formatPhone(opp.customer?.phone)
+  const phone = opp.customer?.phone ? formatDisplayPhone(opp.customer.phone) : null
   const originAddress = compactAddress([
     opp.origin_address_line1,
     opp.origin_address_line2,

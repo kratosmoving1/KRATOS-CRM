@@ -12,6 +12,7 @@ import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
 import { formatCurrency } from '@/lib/format'
 import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
+import { formatDisplayPhone } from '@/lib/phone/formatPhone'
 
 interface Opp {
   id: string; opportunity_number: string; status: string
@@ -161,7 +162,7 @@ export default function CustomerDetailPage() {
                   <div>
                     <RingCentralCallButton
                       phoneNumber={customer.phone}
-                      label={customer.phone}
+                      label={formatDisplayPhone(customer.phone)}
                       customerId={customer.id}
                       opportunityId={mostRecentOpp?.id ?? null}
                       className="font-medium text-slate-800 hover:text-kratos"
@@ -180,7 +181,7 @@ export default function CustomerDetailPage() {
                   <div>
                     <RingCentralCallButton
                       phoneNumber={customer.secondary_phone}
-                      label={customer.secondary_phone}
+                      label={formatDisplayPhone(customer.secondary_phone)}
                       customerId={customer.id}
                       opportunityId={mostRecentOpp?.id ?? null}
                       className="font-medium text-slate-800 hover:text-kratos"
@@ -253,7 +254,7 @@ export default function CustomerDetailPage() {
                     {opps.map(opp => (
                       <tr
                         key={opp.id}
-                        onClick={() => router.push(`/admin/opportunities/${opp.id}`)}
+                        onClick={() => router.push(`/admin/opportunities/${opp.id}/quote`)}
                         className="cursor-pointer transition-colors hover:bg-slate-50"
                       >
                         <td className="px-4 py-3"><StatusPill status={opp.status} /></td>

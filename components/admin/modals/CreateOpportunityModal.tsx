@@ -169,7 +169,7 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
       if (!res.ok) { setApiError(json.error ?? 'Something went wrong'); return }
       toast.success(editId ? 'Quote updated' : 'Quote created')
       onClose()
-      router.push(`/admin/opportunities/${json.id}`)
+      router.push(`/admin/opportunities/${json.id}/quote`)
     } catch {
       setApiError('Network error — please try again')
     } finally {

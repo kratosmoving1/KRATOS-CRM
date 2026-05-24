@@ -6,6 +6,7 @@ import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/op
 import { hasPermission, isAdminRole } from '@/lib/auth/permissions'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import { findOrCreateCustomer } from '@/lib/customers/matching'
 import type { Json } from '@/types/database'
 
 const SERVICE_TYPES = ['local', 'long_distance', 'commercial', 'packing', 'storage', 'international'] as const
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     .from('opportunities')
     .select(`
       *,
-      customer:customers(id, full_name, email, phone),
+      customer:customers!customer_id(id, full_name, email, phone),
       agent:profiles!sales_agent_id(id, full_name),
       lead_source:lead_sources(id, name)
     `, { count: 'exact' })
@@ -106,29 +107,13 @@ export async function POST(req: NextRequest) {
   }
   const opportunityNumber = `KM-${year}-${String(seq).padStart(5, '0')}`
 
-  // Create or find customer
   let customerId: string
-  if (body.customer_id) {
-    customerId = body.customer_id
-  } else {
-    const { data: customer, error: custErr } = await supabase
-      .from('customers')
-      .insert({
-        full_name:           body.customer_name,
-        phone:               body.customer_phone || null,
-        phone_type:          body.customer_phone_type || null,
-        secondary_phone:     body.customer_secondary_phone || null,
-        secondary_phone_type: body.customer_secondary_phone_type || null,
-        email:               body.customer_email || null,
-      })
-      .select()
-      .single()
-
-    if (custErr) {
-      console.error('Customer create error:', custErr)
-      return NextResponse.json({ error: custErr.message }, { status: 500 })
-    }
-    customerId = customer.id
+  try {
+    customerId = await findOrCreateCustomer(supabase, body)
+  } catch (custErr) {
+    const message = custErr instanceof Error ? custErr.message : 'Unable to resolve customer'
+    console.error('Customer resolve error:', custErr)
+    return NextResponse.json({ error: message }, { status: message === 'Customer record not found' ? 400 : 500 })
   }
 
   // Build opportunity payload — only include session-2 cols if they exist

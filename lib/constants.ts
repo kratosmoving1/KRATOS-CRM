@@ -141,7 +141,7 @@ export const FOLLOW_UP_TYPES = [
 ] as const
 
 export const OPP_STATUSES = [
-  { value: 'opportunity', label: 'Opportunity', color: 'green' },
+  { value: 'opportunity', label: 'Open Quote', color: 'green' },
   { value: 'booked',      label: 'Booked',      color: 'orange' },
   { value: 'completed',   label: 'Completed',   color: 'blue' },
   { value: 'closed',      label: 'Closed',      color: 'slate' },
