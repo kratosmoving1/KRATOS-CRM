@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireActiveProfile } from '@/lib/auth/server'
 
 type CustomerRow = {
   id: string
@@ -49,9 +51,10 @@ function dedupeCustomers(customers: CustomerRow[], quotes: QuoteRow[]) {
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authClient = createClient()
+  const auth = await requireActiveProfile(authClient)
+  if (auth.response) return auth.response
+  const supabase = createAdminClient()
 
   const { searchParams } = new URL(req.url)
   const search   = searchParams.get('search')

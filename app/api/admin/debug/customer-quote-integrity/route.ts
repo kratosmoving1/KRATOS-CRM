@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { isActiveUser, normalizeRole } from '@/lib/auth/permissions'
 import { normalizeEmail, normalizePhone } from '@/lib/customers/matching'
 
@@ -43,11 +44,11 @@ function groupDuplicates(customers: CustomerRow[], field: 'phone' | 'email') {
 }
 
 export async function GET() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const authClient = createClient()
+  const { data: { user } } = await authClient.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase
+  const { data: profile } = await authClient
     .from('profiles')
     .select('role, is_active')
     .eq('id', user.id)
@@ -57,6 +58,8 @@ export async function GET() {
   if (!isActiveUser(profile) || !['owner', 'admin', 'manager'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const supabase = createAdminClient()
 
   const [{ count: customersCount, error: customersCountError }, { count: quotesCount, error: quotesCountError }] =
     await Promise.all([

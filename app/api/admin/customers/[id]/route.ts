@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { hasPermission } from '@/lib/auth/permissions'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
@@ -26,9 +27,10 @@ function isAssignedCustomerOpportunity(opps: Array<{ sales_agent_id: string | nu
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authClient = createClient()
+  const auth = await requireActiveProfile(authClient)
+  if (auth.response) return auth.response
+  const supabase = createAdminClient()
 
   const { data: customer, error } = await supabase
     .from('customers')
