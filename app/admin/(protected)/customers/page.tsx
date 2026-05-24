@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
-import StatusPill from '@/components/ui/StatusPill'
 import { formatCurrency } from '@/lib/format'
-import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
+import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import { formatDisplayPhone } from '@/lib/phone/formatPhone'
 import { cn } from '@/lib/utils'
 
 interface Opp {
-  status: string; service_type: string; total_amount: number; company_division: string | null
+  id: string; opportunity_number: string; status: string; service_type: string; total_amount: number
   created_at: string
   agent: { full_name: string } | null
   lead_source: { name: string } | null
@@ -18,26 +17,19 @@ interface Opp {
 
 interface Customer {
   id: string; full_name: string; email: string | null; phone: string | null
-  created_at: string; opportunities: Opp[]
+  created_at: string; opportunities: Opp[]; total_paid_cents: number
 }
 
-function latestOpp(opps: Opp[]): Opp | null {
+function mostRecentQuote(opps: Opp[]): Opp | null {
   if (!opps.length) return null
-  const priority = ['opportunity','booked','accepted','quote_sent','contacted','new_lead']
-  const openOpps = opps.filter(opp => priority.includes(opp.status))
-  if (!openOpps.length) return null
-  const sorted = openOpps.sort((a, b) => {
-    const aRank = priority.includes(a.status) ? priority.indexOf(a.status) : priority.length
-    const bRank = priority.includes(b.status) ? priority.indexOf(b.status) : priority.length
-    if (aRank !== bRank) return aRank - bRank
+  const sorted = [...opps].sort((a, b) => {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
   return sorted[0]
 }
 
-const SERVICE_LABELS: Record<string, string> = {
-  local: 'Local', long_distance: 'Long Distance', commercial: 'Commercial',
-  packing: 'Packing', storage: 'Storage', international: 'International',
+function kratosPoints(totalPaidCents: number) {
+  return Math.floor(totalPaidCents / 100)
 }
 
 export default function CustomersPage() {
@@ -98,20 +90,19 @@ export default function CustomersPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Email</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Phone</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Open Quote</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-500">Balance</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Source</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Agent</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">Most Recent Quote</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-500">Total Paid</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-500">Kratos Points</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 rounded bg-slate-100" style={{ width: `${50 + (j * 9) % 45}%` }} />
                       </td>
@@ -120,28 +111,37 @@ export default function CustomersPage() {
                 ))
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={6} className="px-4 py-16 text-center">
                     <p className="text-sm font-medium text-slate-500">No customers found</p>
                     <p className="mt-1 text-xs text-slate-400">Customers are created automatically when you create quotes</p>
                   </td>
                 </tr>
               ) : (
                 customers.map(c => {
-                  const opp = latestOpp(c.opportunities)
+                  const quote = mostRecentQuote(c.opportunities)
+                  const totalPaidCents = c.total_paid_cents ?? 0
                   return (
                     <tr key={c.id} onClick={() => router.push(`/admin/customers/${c.id}`)}
                       className="cursor-pointer transition-colors hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        {opp ? <StatusPill status={opp.status} /> : <span className="text-xs text-slate-400">No open quote</span>}
-                      </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-900">{c.full_name}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{c.email ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{formatDisplayPhone(c.phone)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">
-                        {opp ? `${COMPANY_DIVISION_LABELS[opp.company_division ?? 'kratos_moving'] ?? 'Kratos Moving'} · ${SERVICE_LABELS[opp.service_type] ?? opp.service_type}` : 'No open quote'}
+                        {quote ? (
+                          <button
+                            type="button"
+                            onClick={event => {
+                              event.stopPropagation()
+                              router.push(`/admin/opportunities/${quote.id}/quote`)
+                            }}
+                            className="font-mono text-xs font-semibold text-blue-600 hover:underline"
+                          >
+                            {formatQuoteNumber(quote.opportunity_number)}
+                          </button>
+                        ) : 'No quote'}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">$0.00</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{opp?.lead_source?.name ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{opp?.agent?.full_name ?? '—'}</td>
+                      <td className="px-4 py-3 text-right text-sm font-medium text-slate-700">{formatCurrency(totalPaidCents / 100)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{kratosPoints(totalPaidCents).toLocaleString()}</td>
                     </tr>
                   )
                 })

@@ -27,12 +27,17 @@ type QuoteRow = {
   customer?: CustomerRow | null
 }
 
+type CustomerWithQuotes = CustomerRow & {
+  opportunities: QuoteRow[]
+  total_paid_cents: number
+}
+
 function normalizeSearch(value: string | null) {
   return value?.trim().toLowerCase() ?? ''
 }
 
 function buildCustomersFromQuotes(quotes: QuoteRow[]) {
-  const customers = new Map<string, CustomerRow & { opportunities: QuoteRow[] }>()
+  const customers = new Map<string, CustomerWithQuotes>()
 
   for (const quote of quotes) {
     if (!quote.customer?.id) continue
@@ -41,14 +46,14 @@ function buildCustomersFromQuotes(quotes: QuoteRow[]) {
       existing.opportunities.push(quote)
       continue
     }
-    customers.set(quote.customer.id, { ...quote.customer, opportunities: [quote] })
+    customers.set(quote.customer.id, { ...quote.customer, opportunities: [quote], total_paid_cents: 0 })
   }
 
   return Array.from(customers.values())
 }
 
-function mergeCustomers(customers: CustomerRow[], quoteCustomers: Array<CustomerRow & { opportunities: QuoteRow[] }>) {
-  const byId = new Map<string, CustomerRow & { opportunities: QuoteRow[] }>()
+function mergeCustomers(customers: CustomerRow[], quoteCustomers: CustomerWithQuotes[]) {
+  const byId = new Map<string, CustomerWithQuotes>()
 
   for (const customer of quoteCustomers) {
     byId.set(customer.id, customer)
@@ -56,10 +61,15 @@ function mergeCustomers(customers: CustomerRow[], quoteCustomers: Array<Customer
 
   for (const customer of customers) {
     if (byId.has(customer.id)) {
-      byId.set(customer.id, { ...customer, opportunities: byId.get(customer.id)?.opportunities ?? [] })
+      const existing = byId.get(customer.id)
+      byId.set(customer.id, {
+        ...customer,
+        opportunities: existing?.opportunities ?? [],
+        total_paid_cents: existing?.total_paid_cents ?? 0,
+      })
       continue
     }
-    byId.set(customer.id, { ...customer, opportunities: [] })
+    byId.set(customer.id, { ...customer, opportunities: [], total_paid_cents: 0 })
   }
 
   return Array.from(byId.values()).sort((a, b) => {
@@ -69,7 +79,7 @@ function mergeCustomers(customers: CustomerRow[], quoteCustomers: Array<Customer
   })
 }
 
-function filterCustomers(customers: Array<CustomerRow & { opportunities: QuoteRow[] }>, search: string | null) {
+function filterCustomers(customers: CustomerWithQuotes[], search: string | null) {
   const term = normalizeSearch(search)
   if (!term) return customers
 
@@ -82,6 +92,19 @@ function filterCustomers(customers: Array<CustomerRow & { opportunities: QuoteRo
     ].map(value => normalizeSearch(value)).join(' ')
     return haystack.includes(term)
   })
+}
+
+function attachPaymentTotals(customers: CustomerWithQuotes[], payments: Array<{ customer_id: string | null; amount_cents: number | null }>) {
+  const totals = new Map<string, number>()
+  for (const payment of payments) {
+    if (!payment.customer_id) continue
+    totals.set(payment.customer_id, (totals.get(payment.customer_id) ?? 0) + (payment.amount_cents ?? 0))
+  }
+
+  return customers.map(customer => ({
+    ...customer,
+    total_paid_cents: totals.get(customer.id) ?? 0,
+  }))
 }
 
 export async function GET(req: NextRequest) {
@@ -98,12 +121,7 @@ export async function GET(req: NextRequest) {
   const { data: quoteRows, error: quoteError } = await supabase
     .from('opportunities')
     .select(`
-<<<<<<< HEAD
       *,
-=======
-      id, customer_id, opportunity_number, status, service_type, company_division,
-      lead_source_id, sales_agent_id, total_amount, created_at,
->>>>>>> 8d8b47f0bfce14c7188a5b969599fbb3fa840581
       customer:customers!customer_id(id, full_name, email, phone, created_at),
       agent:profiles!sales_agent_id(full_name),
       lead_source:lead_sources(name)
@@ -131,7 +149,29 @@ export async function GET(req: NextRequest) {
   }
 
   const merged = mergeCustomers((customerRows ?? []) as CustomerRow[], quoteCustomers)
-  const filtered = filterCustomers(merged, search)
+  const customerIds = merged.map(customer => customer.id)
+  let withPaymentTotals = merged
+
+  if (customerIds.length) {
+    const { data: payments, error: paymentsError } = await supabase
+      .from('payments')
+      .select('customer_id, amount_cents, status')
+      .in('customer_id', customerIds)
+      .eq('is_deleted', false)
+      .not('status', 'in', '("failed","cancelled","canceled","refunded","void")')
+      .limit(10000)
+
+    if (paymentsError) {
+      console.warn('Customer payment totals lookup failed; using zero totals:', paymentsError.message)
+    } else {
+      withPaymentTotals = attachPaymentTotals(
+        merged,
+        (payments ?? []) as Array<{ customer_id: string | null; amount_cents: number | null }>,
+      )
+    }
+  }
+
+  const filtered = filterCustomers(withPaymentTotals, search)
   const start = (page - 1) * pageSize
   const data = filtered.slice(start, start + pageSize)
 
