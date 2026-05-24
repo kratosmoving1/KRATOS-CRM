@@ -98,7 +98,12 @@ export async function GET(req: NextRequest) {
   const { data: quoteRows, error: quoteError } = await supabase
     .from('opportunities')
     .select(`
+<<<<<<< HEAD
       *,
+=======
+      id, customer_id, opportunity_number, status, service_type, company_division,
+      lead_source_id, sales_agent_id, total_amount, created_at,
+>>>>>>> 8d8b47f0bfce14c7188a5b969599fbb3fa840581
       customer:customers!customer_id(id, full_name, email, phone, created_at),
       agent:profiles!sales_agent_id(full_name),
       lead_source:lead_sources(name)
