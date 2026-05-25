@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Minus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -62,6 +62,10 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
   const [errors, setErrors] = useState<Errors>({})
   const [leadSources, setLeadSources] = useState<LeadSource[]>([])
   const [showSecondPhone, setShowSecondPhone] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const phoneRef = useRef<HTMLInputElement>(null)
+  const secondaryPhoneRef = useRef<HTMLInputElement>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
 
   const [s1, setS1] = useState<Step1Form>({
     customer_name: '', customer_phone: '', customer_phone_type: 'mobile',
@@ -85,6 +89,15 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
     setErrors(e => { const n = { ...e }; delete n[k]; return n })
   }
 
+  function getCustomerDraft() {
+    return {
+      name: nameRef.current?.value ?? s1.customer_name,
+      phone: phoneRef.current?.value ?? s1.customer_phone,
+      secondaryPhone: secondaryPhoneRef.current?.value ?? s1.customer_secondary_phone,
+      email: emailRef.current?.value ?? s1.customer_email,
+    }
+  }
+
   function updateAddr(
     side: 'origin' | 'dest',
     setter: typeof setOrigin,
@@ -96,11 +109,12 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
   }
 
   function validateStep1(): boolean {
+    const customer = getCustomerDraft()
     const errs: Errors = {}
-    if (!s1.customer_name.trim()) errs.customer_name = 'Name is required'
-    if (!s1.customer_phone.trim()) errs.customer_phone = 'Phone is required'
-    else if (s1.customer_phone.replace(/\D/g,'').length !== 10) errs.customer_phone = 'Must be 10 digits'
-    if (s1.customer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s1.customer_email)) {
+    if (!customer.name.trim()) errs.customer_name = 'Name is required'
+    if (!customer.phone.trim()) errs.customer_phone = 'Phone is required'
+    else if (customer.phone.replace(/\D/g,'').length !== 10) errs.customer_phone = 'Must be 10 digits'
+    if (customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
       errs.customer_email = 'Invalid email'
     }
     if (!s1.service_date_tbd && !s1.service_date) errs.service_date = 'Set a date or check TBD'
@@ -114,42 +128,46 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
   function validateStep2(): boolean { return true }
   function validateStep3(): boolean { return true }
 
-  const buildPayload = useCallback(() => ({
-    customer_name:               s1.customer_name,
-    customer_phone:              s1.customer_phone.replace(/\D/g,''),
-    customer_phone_type:         s1.customer_phone_type,
-    customer_secondary_phone:    s1.customer_secondary_phone.replace(/\D/g,'') || null,
-    customer_secondary_phone_type: s1.customer_secondary_phone_type || null,
-    customer_email:              s1.customer_email || null,
-    service_date:                s1.service_date_tbd ? null : (s1.service_date || null),
-    service_type:                s1.service_type,
-    move_size:                   s1.move_size || null,
-    lead_source_id:              s1.lead_source_id || null,
-    origin_address_line1:  origin.address_line1 || null,
-    origin_address_line2:  origin.address_line2 || null,
-    origin_city:           origin.city         || null,
-    origin_province:       origin.province     || null,
-    origin_postal_code:    origin.postal_code  || null,
-    origin_place_id:       origin.place_id     || null,
-    origin_dwelling_type:  origin.dwelling_type || null,
-    origin_floor:          origin.floor ? parseInt(origin.floor) : null,
-    origin_has_elevator:   origin.has_elevator || null,
-    origin_stairs_count:   origin.stairs_count ? parseInt(origin.stairs_count) : null,
-    origin_long_carry:     origin.long_carry   || null,
-    origin_parking_notes:  origin.parking_notes || null,
-    dest_address_line1:    dest.address_line1  || null,
-    dest_address_line2:    dest.address_line2  || null,
-    dest_city:             dest.city           || null,
-    dest_province:         dest.province       || null,
-    dest_postal_code:      dest.postal_code    || null,
-    dest_place_id:         dest.place_id       || null,
-    dest_dwelling_type:    dest.dwelling_type  || null,
-    dest_floor:            dest.floor ? parseInt(dest.floor) : null,
-    dest_has_elevator:     dest.has_elevator   || null,
-    dest_stairs_count:     dest.stairs_count ? parseInt(dest.stairs_count) : null,
-    dest_long_carry:       dest.long_carry     || null,
-    dest_parking_notes:    dest.parking_notes  || null,
-  }), [s1, origin, dest])
+  function buildPayload() {
+    const customer = getCustomerDraft()
+
+    return {
+      customer_name: customer.name,
+      customer_phone: customer.phone.replace(/\D/g,''),
+      customer_phone_type: s1.customer_phone_type,
+      customer_secondary_phone: customer.secondaryPhone.replace(/\D/g,'') || null,
+      customer_secondary_phone_type: s1.customer_secondary_phone_type || null,
+      customer_email: customer.email.trim() || null,
+      service_date: s1.service_date_tbd ? null : (s1.service_date || null),
+      service_type: s1.service_type,
+      move_size: s1.move_size || null,
+      lead_source_id: s1.lead_source_id || null,
+      origin_address_line1: origin.address_line1 || null,
+      origin_address_line2: origin.address_line2 || null,
+      origin_city: origin.city || null,
+      origin_province: origin.province || null,
+      origin_postal_code: origin.postal_code || null,
+      origin_place_id: origin.place_id || null,
+      origin_dwelling_type: origin.dwelling_type || null,
+      origin_floor: origin.floor ? parseInt(origin.floor) : null,
+      origin_has_elevator: origin.has_elevator || null,
+      origin_stairs_count: origin.stairs_count ? parseInt(origin.stairs_count) : null,
+      origin_long_carry: origin.long_carry || null,
+      origin_parking_notes: origin.parking_notes || null,
+      dest_address_line1: dest.address_line1 || null,
+      dest_address_line2: dest.address_line2 || null,
+      dest_city: dest.city || null,
+      dest_province: dest.province || null,
+      dest_postal_code: dest.postal_code || null,
+      dest_place_id: dest.place_id || null,
+      dest_dwelling_type: dest.dwelling_type || null,
+      dest_floor: dest.floor ? parseInt(dest.floor) : null,
+      dest_has_elevator: dest.has_elevator || null,
+      dest_stairs_count: dest.stairs_count ? parseInt(dest.stairs_count) : null,
+      dest_long_carry: dest.long_carry || null,
+      dest_parking_notes: dest.parking_notes || null,
+    }
+  }
 
   async function submit(saveAndClose = false) {
     setSubmitting(true)
@@ -245,6 +263,9 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
           <Input
             label="Full Name"
             required
+            ref={nameRef}
+            name="kratos_quote_customer_full_name"
+            autoComplete="off"
             value={s1.customer_name}
             onChange={e => updateS1('customer_name', e.target.value)}
             error={errors.customer_name}
@@ -255,6 +276,10 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
             <Input
               label="Phone Number"
               required
+              ref={phoneRef}
+              name="kratos_quote_customer_phone"
+              autoComplete="off"
+              inputMode="tel"
               wrapClassName="flex-1"
               value={s1.customer_phone}
               onChange={e => updateS1('customer_phone', formatPhone(e.target.value))}
@@ -282,6 +307,10 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
             <div className="flex items-end gap-2">
               <Input
                 label="Second Phone"
+                ref={secondaryPhoneRef}
+                name="kratos_quote_customer_secondary_phone"
+                autoComplete="off"
+                inputMode="tel"
                 wrapClassName="flex-1"
                 value={s1.customer_secondary_phone}
                 onChange={e => updateS1('customer_secondary_phone', formatPhone(e.target.value))}
@@ -300,6 +329,9 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
           <Input
             label="Email"
             type="email"
+            ref={emailRef}
+            name="kratos_quote_customer_email"
+            autoComplete="off"
             value={s1.customer_email}
             onChange={e => updateS1('customer_email', e.target.value)}
             error={errors.customer_email}

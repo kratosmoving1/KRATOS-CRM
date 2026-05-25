@@ -51,7 +51,7 @@ export default function Header({ onMobileMenuToggle, currentUser }: HeaderProps)
   }
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur md:px-6">
+    <header className="relative z-40 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur md:px-6">
       {/* Mobile hamburger */}
       <button
         className="mr-3 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 md:hidden"
@@ -85,7 +85,7 @@ export default function Header({ onMobileMenuToggle, currentUser }: HeaderProps)
           </button>
 
           {dropdownOpen && (
-            <div className="absolute right-0 top-full z-40 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/10">
+            <div className="absolute right-0 top-full z-[120] mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/10">
               <div className="space-y-0.5">
                 {CREATE_OPTIONS.map(({ label, icon: Icon, modal }) => (
                   <button

@@ -42,6 +42,19 @@ function sameExactName(a: string | null | undefined, b: string | null | undefine
   return Boolean(a?.trim() && b?.trim() && a.trim().toLowerCase() === b.trim().toLowerCase())
 }
 
+function sameEmail(a: string | null | undefined, b: string | null | undefined) {
+  return Boolean(normalizeEmail(a) && normalizeEmail(a) === normalizeEmail(b))
+}
+
+function canAttachToIdentityMatch(customer: CustomerCandidate, input: {
+  fullName: string
+  normalizedEmail: string | null
+}) {
+  if (sameExactName(customer.full_name, input.fullName)) return true
+  if (input.normalizedEmail && sameEmail(customer.email, input.normalizedEmail)) return true
+  return false
+}
+
 export async function findOrCreateCustomer(
   supabase: SupabaseClient,
   input: CustomerIdentityInput,
@@ -80,12 +93,19 @@ export async function findOrCreateCustomer(
   const candidates = (customers ?? []) as CustomerCandidate[]
   const phoneMatch = candidates.find(customer => {
     const key = phoneMatchKey(customer.phone)
-    return Boolean(key && (key === primaryPhoneKey || key === secondaryPhoneKey))
+    return Boolean(
+      key &&
+      (key === primaryPhoneKey || key === secondaryPhoneKey) &&
+      canAttachToIdentityMatch(customer, { fullName, normalizedEmail }),
+    )
   })
   if (phoneMatch) return phoneMatch.id
 
   if (normalizedEmail) {
-    const emailMatch = candidates.find(customer => customer.email?.trim().toLowerCase() === normalizedEmail)
+    const emailMatch = candidates.find(customer =>
+      customer.email?.trim().toLowerCase() === normalizedEmail &&
+      (sameExactName(customer.full_name, fullName) || phoneMatchKey(customer.phone) === primaryPhoneKey),
+    )
     if (emailMatch) return emailMatch.id
   }
 

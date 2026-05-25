@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import { forwardRef, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 
 interface FieldWrapperProps {
   label: string
@@ -31,17 +31,21 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   wrapClassName?: string
 }
 
-export function Input({ label, error, wrapClassName, className, required, ...props }: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, error, wrapClassName, className, required, ...props },
+  ref,
+) {
   return (
     <FieldWrapper label={label} error={error} required={required} className={wrapClassName}>
       <input
+        ref={ref}
         className={cn(inputCls, error && errorCls, className)}
         required={required}
         {...props}
       />
     </FieldWrapper>
   )
-}
+})
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string
