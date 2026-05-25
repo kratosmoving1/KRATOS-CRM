@@ -7,6 +7,8 @@ import { formatCurrency } from '@/lib/format'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import { formatDisplayPhone } from '@/lib/phone/formatPhone'
 import { cn } from '@/lib/utils'
+import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
+import RingCentralSmsButton from '@/components/ui/RingCentralSmsButton'
 
 interface Opp {
   id: string; opportunity_number: string; status: string; service_type: string; total_amount: number
@@ -125,7 +127,26 @@ export default function CustomersPage() {
                       className="cursor-pointer transition-colors hover:bg-slate-50">
                       <td className="px-4 py-3 text-sm font-medium text-slate-900">{c.full_name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{c.email ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{formatDisplayPhone(c.phone)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {c.phone ? (
+                          <span className="inline-flex items-center gap-2">
+                            <RingCentralCallButton
+                              phoneNumber={c.phone}
+                              label={formatDisplayPhone(c.phone)}
+                              customerId={c.id}
+                              opportunityId={quote?.id ?? null}
+                              className="font-medium text-slate-700 hover:text-kratos"
+                            />
+                            <RingCentralSmsButton
+                              phoneNumber={c.phone}
+                              customerId={c.id}
+                              opportunityId={quote?.id ?? null}
+                              iconOnly
+                              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-600 hover:no-underline"
+                            />
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-600">
                         {quote ? (
                           <button

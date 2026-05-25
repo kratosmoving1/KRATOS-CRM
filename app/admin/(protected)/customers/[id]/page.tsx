@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
 import RingCentralCallButton from '@/components/ui/RingCentralCallButton'
+import RingCentralSmsButton from '@/components/ui/RingCentralSmsButton'
 import { formatCurrency } from '@/lib/format'
 import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
@@ -159,13 +160,20 @@ export default function CustomerDetailPage() {
               {customer.phone ? (
                 <div className="flex items-center gap-3">
                   <Phone size={15} className="shrink-0 text-slate-400" />
-                  <div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <RingCentralCallButton
                       phoneNumber={customer.phone}
                       label={formatDisplayPhone(customer.phone)}
                       customerId={customer.id}
                       opportunityId={mostRecentOpp?.id ?? null}
                       className="font-medium text-slate-800 hover:text-kratos"
+                    />
+                    <RingCentralSmsButton
+                      phoneNumber={customer.phone}
+                      customerId={customer.id}
+                      opportunityId={mostRecentOpp?.id ?? null}
+                      label="Text"
+                      className="font-medium text-blue-600"
                     />
                     {customer.phone_type && (
                       <span className="ml-2 capitalize rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
@@ -178,13 +186,20 @@ export default function CustomerDetailPage() {
               {customer.secondary_phone ? (
                 <div className="flex items-center gap-3">
                   <Phone size={15} className="shrink-0 text-slate-400" />
-                  <div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <RingCentralCallButton
                       phoneNumber={customer.secondary_phone}
                       label={formatDisplayPhone(customer.secondary_phone)}
                       customerId={customer.id}
                       opportunityId={mostRecentOpp?.id ?? null}
                       className="font-medium text-slate-800 hover:text-kratos"
+                    />
+                    <RingCentralSmsButton
+                      phoneNumber={customer.secondary_phone}
+                      customerId={customer.id}
+                      opportunityId={mostRecentOpp?.id ?? null}
+                      label="Text"
+                      className="font-medium text-blue-600"
                     />
                     {customer.secondary_phone_type && (
                       <span className="ml-2 capitalize rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">

@@ -6,6 +6,7 @@ import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 import {
   getMissingRingCentralSmsEnv,
+  getRingCentralSmsFromNumber,
   isRingCentralSmsConfigured,
   RingCentralCallError,
   sendSmsViaRingCentral,
@@ -215,7 +216,7 @@ export async function POST(req: NextRequest) {
 
     const result = await sendSmsViaRingCentral({
       to: normalizedTo.normalized,
-      from: process.env.RINGCENTRAL_SMS_FROM_NUMBER || '',
+      from: getRingCentralSmsFromNumber(),
       text,
     })
 

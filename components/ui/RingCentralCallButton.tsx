@@ -76,7 +76,7 @@ export default function RingCentralCallButton({
         <span
           role="dialog"
           aria-label="Confirm RingCentral call"
-          className="absolute left-0 top-full z-40 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-xl"
+          className="fixed left-1/2 top-1/2 z-[100] w-[min(92vw,288px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xl"
           onClick={event => event.stopPropagation()}
         >
           <span className="flex items-start justify-between gap-3">

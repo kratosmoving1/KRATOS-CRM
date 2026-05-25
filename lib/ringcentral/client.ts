@@ -90,7 +90,7 @@ export function getMissingRingCentralSmsEnv() {
     ['RINGCENTRAL_CLIENT_SECRET', RC_CLIENT_SECRET],
     ['RINGCENTRAL_JWT', RC_JWT],
     ['RINGCENTRAL_SERVER_URL', process.env.RINGCENTRAL_SERVER_URL],
-    ['RINGCENTRAL_SMS_FROM_NUMBER', RC_SMS_FROM],
+    ['RINGCENTRAL_SMS_FROM_NUMBER or RINGCENTRAL_FROM_NUMBER', getRingCentralSmsFromNumber()],
   ]
     .filter(([, value]) => !value)
     .map(([name]) => name)
@@ -100,6 +100,10 @@ export function isRingCentralSmsConfigured() {
   return getMissingRingCentralSmsEnv().length === 0
 }
 
+export function getRingCentralSmsFromNumber() {
+  return RC_SMS_FROM || RC_FROM || ''
+}
+
 export function getRingCentralConfigStatus() {
   return {
     hasClientId: Boolean(RC_CLIENT_ID),
@@ -107,7 +111,7 @@ export function getRingCentralConfigStatus() {
     hasJwt: Boolean(RC_JWT),
     hasServerUrl: Boolean(process.env.RINGCENTRAL_SERVER_URL),
     hasFromNumber: Boolean(RC_FROM),
-    hasSmsFromNumber: Boolean(RC_SMS_FROM),
+    hasSmsFromNumber: Boolean(getRingCentralSmsFromNumber()),
     serverUrl: RC_SERVER,
   }
 }

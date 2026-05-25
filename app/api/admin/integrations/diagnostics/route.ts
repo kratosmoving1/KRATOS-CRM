@@ -70,7 +70,6 @@ const RC_SMS_REQUIRED = [
   'RINGCENTRAL_CLIENT_SECRET',
   'RINGCENTRAL_JWT',
   'RINGCENTRAL_SERVER_URL',
-  'RINGCENTRAL_SMS_FROM_NUMBER',
 ] as const
 
 function envStatus(name: string): EnvStatus {
@@ -99,7 +98,7 @@ function parseProviderError(data: unknown, fallback: string) {
 async function ringCentralDiagnostics() {
   const serverUrl = process.env.RINGCENTRAL_SERVER_URL || 'https://platform.ringcentral.com'
   const ringOutNumber = process.env.RINGCENTRAL_FROM_NUMBER || ''
-  const smsNumber = process.env.RINGCENTRAL_SMS_FROM_NUMBER || ''
+  const smsNumber = process.env.RINGCENTRAL_SMS_FROM_NUMBER || process.env.RINGCENTRAL_FROM_NUMBER || ''
   const missingEnv = missing(RC_REQUIRED)
   const missingSmsEnv = missing(RC_SMS_REQUIRED)
 
@@ -132,7 +131,11 @@ async function ringCentralDiagnostics() {
       smsCapable: false,
       callCapable: false,
       configured: missingSmsEnv.length === 0,
-      message: missingSmsEnv.length ? `RingCentral SMS is not configured. Missing: ${missingSmsEnv.join(', ')}.` : 'RingCentral SMS number not checked.',
+      message: missingSmsEnv.length
+        ? `RingCentral SMS is not configured. Missing: ${missingSmsEnv.join(', ')}.`
+        : process.env.RINGCENTRAL_SMS_FROM_NUMBER
+        ? 'RingCentral SMS number not checked.'
+        : 'Using RINGCENTRAL_FROM_NUMBER for SMS because RINGCENTRAL_SMS_FROM_NUMBER is not set.',
     },
   }
 
