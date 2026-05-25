@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeRole } from '@/lib/auth/permissions'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
+import { getRingCentralConnectionSummary, getRingCentralRedirectUri } from '@/lib/ringcentral/oauth'
 
 type EnvStatus = {
   present: boolean
@@ -363,14 +364,15 @@ export async function GET(req: NextRequest) {
   const auth = await requireActiveProfile(supabase)
   if (auth.response) return auth.response
 
-  const { role } = auth.context
+  const { role, user } = auth.context
   const normalizedRole = normalizeRole(role)
   if (!['owner', 'admin', 'manager'].includes(normalizedRole)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const [ringcentral, resend, stripe, portal] = await Promise.all([
+  const [ringcentral, ringcentralUser, resend, stripe, portal] = await Promise.all([
     ringCentralDiagnostics(),
+    getRingCentralConnectionSummary(user.id),
     resendDiagnostics(),
     stripeDiagnostics(),
     portalDiagnostics(),
@@ -380,6 +382,10 @@ export async function GET(req: NextRequest) {
     environment: getEnvironment(),
     resend,
     ringcentral,
+    ringcentralUser: {
+      ...ringcentralUser,
+      redirectUri: getRingCentralRedirectUri(),
+    },
     stripe,
     portal,
     generatedAt: new Date().toISOString(),

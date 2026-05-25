@@ -28,12 +28,14 @@ type RingCentralErrorResponse = {
 type StartRingCentralCallInput = {
   to: string
   from?: string
+  accessToken?: string
 }
 
 type SendRingCentralSmsInput = {
   to: string
   from: string
   text: string
+  accessToken?: string
 }
 
 export type StartRingCentralCallResult = {
@@ -180,8 +182,8 @@ async function getAccessToken() {
   return data.access_token
 }
 
-export async function startRingCentralCall({ to, from = RC_FROM }: StartRingCentralCallInput): Promise<StartRingCentralCallResult> {
-  if (!isRingCentralConfigured() || !from) throw new Error('RingCentral is not configured.')
+export async function startRingCentralCall({ to, from = RC_FROM, accessToken }: StartRingCentralCallInput): Promise<StartRingCentralCallResult> {
+  if ((!accessToken && !isRingCentralConfigured()) || !from) throw new Error('RingCentral is not configured.')
 
   const normalizedTo = normalizePhoneToE164(to)
   const normalizedFrom = normalizePhoneToE164(from)
@@ -194,7 +196,7 @@ export async function startRingCentralCall({ to, from = RC_FROM }: StartRingCent
     throw new RingCentralCallError(`Invalid RingCentral from number: ${from}`, { code: 'INVALID_FROM_NUMBER' })
   }
 
-  const token = await getAccessToken()
+  const token = accessToken ?? await getAccessToken()
   const endpoint = `${RC_SERVER}${RINGOUT_ENDPOINT}`
   const requestBody = {
     from: { phoneNumber: normalizedFrom.normalized },
@@ -252,9 +254,9 @@ export async function startRingCentralCall({ to, from = RC_FROM }: StartRingCent
   }
 }
 
-export async function sendSmsViaRingCentral({ to, from, text }: SendRingCentralSmsInput): Promise<SendRingCentralSmsResult> {
+export async function sendSmsViaRingCentral({ to, from, text, accessToken }: SendRingCentralSmsInput): Promise<SendRingCentralSmsResult> {
   const missingEnv = getMissingRingCentralSmsEnv()
-  if (missingEnv.length > 0) {
+  if (!accessToken && missingEnv.length > 0) {
     throw new RingCentralCallError(`RingCentral SMS is not configured. Missing: ${missingEnv.join(', ')}`, {
       code: 'RINGCENTRAL_SMS_NOT_CONFIGURED',
     })
@@ -271,7 +273,7 @@ export async function sendSmsViaRingCentral({ to, from, text }: SendRingCentralS
     throw new RingCentralCallError(`Invalid RingCentral SMS from number: ${from}`, { code: 'INVALID_SMS_FROM_NUMBER' })
   }
 
-  const token = await getAccessToken()
+  const token = accessToken ?? await getAccessToken()
   const endpoint = `${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`
 
   ringCentralLog('Sending SMS', {

@@ -5,10 +5,10 @@ import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizeRole, type CrmRole } from '@/lib/auth/permissions'
 import {
   getRingCentralConfigStatus,
-  isRingCentralConfigured,
   RingCentralCallError,
   startRingCentralCall,
 } from '@/lib/ringcentral/client'
+import { getRingCentralUserConnection } from '@/lib/ringcentral/oauth'
 import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 import type { Json } from '@/types/database'
 
@@ -149,14 +149,22 @@ export async function POST(req: NextRequest) {
     newData: callMetadata,
   })
 
-  if (!isRingCentralConfigured()) {
+  let ringCentralConnection: Awaited<ReturnType<typeof getRingCentralUserConnection>>
+  try {
+    ringCentralConnection = await getRingCentralUserConnection(user.id)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'RingCentral user connection failed.'
+    return jsonError(`RingCentral call failed: ${message}`, 424)
+  }
+
+  if (!ringCentralConnection) {
     const { data: failedActivity } = await writeCallActivity({
       opportunityId,
       customerId,
       phoneNumber,
       status: 'failed',
       createdBy: user.id,
-      body: 'RingCentral call failed: RingCentral is not configured.',
+      body: 'RingCentral call failed: user is not connected.',
     })
 
     await logAuditEvent({
@@ -165,15 +173,19 @@ export async function POST(req: NextRequest) {
       entityId: failedActivity?.id ?? auditContext.entityId,
       newData: {
         ...callMetadata,
-        reason: 'RingCentral is not configured.',
+        reason: 'RingCentral user is not connected.',
       } satisfies Json,
     })
 
-    return jsonError('RingCentral is not configured.', 503)
+    return jsonError('Connect your RingCentral account in Settings > Integrations before placing calls.', 409)
   }
 
   try {
-    const result = await startRingCentralCall({ to: phoneNumber })
+    const result = await startRingCentralCall({
+      to: phoneNumber,
+      from: ringCentralConnection.callFromNumber,
+      accessToken: ringCentralConnection.accessToken,
+    })
     const { data: activity, error: activityError } = await writeCallActivity({
       opportunityId,
       customerId,

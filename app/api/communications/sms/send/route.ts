@@ -6,12 +6,12 @@ import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 import {
   getMissingRingCentralSmsEnv,
-  getRingCentralSmsFromNumber,
   isRingCentralSmsConfigured,
   RingCentralCallError,
   sendSmsViaRingCentral,
   renderTemplate,
 } from '@/lib/ringcentral/client'
+import { getRingCentralUserConnection } from '@/lib/ringcentral/oauth'
 import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 
 const SMS_ALLOWED_ROLES: CrmRole[] = ['owner', 'admin', 'manager', 'sales', 'dispatcher']
@@ -207,16 +207,31 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    if (!isRingCentralSmsConfigured()) {
+    let ringCentralConnection: Awaited<ReturnType<typeof getRingCentralUserConnection>>
+    try {
+      ringCentralConnection = await getRingCentralUserConnection(user.id)
+    } catch (err) {
+      throw new RingCentralCallError(err instanceof Error ? err.message : 'RingCentral user connection failed.', {
+        code: 'RINGCENTRAL_USER_CONNECTION_FAILED',
+      })
+    }
+
+    if (!ringCentralConnection && !isRingCentralSmsConfigured()) {
       const missing = getMissingRingCentralSmsEnv()
       throw new RingCentralCallError(`RingCentral SMS is not configured. Missing: ${missing.join(', ')}`, {
         code: 'RINGCENTRAL_SMS_NOT_CONFIGURED',
       })
     }
+    if (!ringCentralConnection) {
+      throw new RingCentralCallError('Connect your RingCentral account in Settings > Integrations before sending SMS.', {
+        code: 'RINGCENTRAL_USER_NOT_CONNECTED',
+      })
+    }
 
     const result = await sendSmsViaRingCentral({
       to: normalizedTo.normalized,
-      from: getRingCentralSmsFromNumber(),
+      from: ringCentralConnection.smsFromNumber,
+      accessToken: ringCentralConnection.accessToken,
       text,
     })
 

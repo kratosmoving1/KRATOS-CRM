@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw, Send, XCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, LogOut, RefreshCw, Send, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +52,18 @@ type Diagnostics = {
       configured: boolean
       message: string
     }
+  }
+  ringcentralUser: {
+    connected: boolean
+    setupRequired: boolean
+    message: string
+    redirectUri: string
+    display_name?: string | null
+    extension_number?: string | null
+    call_from_number?: string | null
+    sms_from_number?: string | null
+    expires_at?: string | null
+    updated_at?: string | null
   }
   stripe: {
     configured: boolean
@@ -138,6 +150,7 @@ export default function IntegrationDiagnosticsClient() {
   const [testEmail, setTestEmail] = useState('')
   const [testLoading, setTestLoading] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
+  const [disconnectingRingCentral, setDisconnectingRingCentral] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -178,6 +191,21 @@ export default function IntegrationDiagnosticsClient() {
       toast.error(message)
     } finally {
       setTestLoading(false)
+    }
+  }
+
+  async function disconnectRingCentral() {
+    setDisconnectingRingCentral(true)
+    try {
+      const res = await fetch('/api/ringcentral/oauth/disconnect', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Unable to disconnect RingCentral.')
+      toast.success('RingCentral disconnected.')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to disconnect RingCentral.')
+    } finally {
+      setDisconnectingRingCentral(false)
     }
   }
 
@@ -239,6 +267,39 @@ export default function IntegrationDiagnosticsClient() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card title="RingCentral">
+          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">User Connection</p>
+                <p className="mt-1 text-sm text-slate-700">{diagnostics.ringcentralUser.message}</p>
+              </div>
+              {diagnostics.ringcentralUser.connected ? (
+                <button
+                  type="button"
+                  onClick={disconnectRingCentral}
+                  disabled={disconnectingRingCentral}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {disconnectingRingCentral ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                  Disconnect
+                </button>
+              ) : (
+                <a
+                  href="/api/ringcentral/oauth/start"
+                  className="inline-flex items-center gap-2 rounded-lg bg-kratos px-3 py-2 text-sm font-semibold text-slate-950"
+                >
+                  Connect RingCentral
+                </a>
+              )}
+            </div>
+            <div className="mt-3 divide-y divide-slate-100">
+              <DetailRow label="Connected" status={diagnostics.ringcentralUser.connected} value={diagnostics.ringcentralUser.connected ? 'Yes' : 'No'} />
+              <DetailRow label="Extension" value={diagnostics.ringcentralUser.extension_number ?? diagnostics.ringcentralUser.display_name ?? 'Unavailable'} />
+              <DetailRow label="Call from" value={diagnostics.ringcentralUser.call_from_number ?? 'Unavailable'} />
+              <DetailRow label="SMS from" value={diagnostics.ringcentralUser.sms_from_number ?? 'Unavailable'} />
+              <DetailRow label="OAuth redirect URI" value={<span className="font-mono text-xs">{diagnostics.ringcentralUser.redirectUri}</span>} />
+            </div>
+          </div>
           <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{diagnostics.ringcentral.message}</div>
           <div className="mt-3 divide-y divide-slate-100">
             <DetailRow label="Auth status" status={diagnostics.ringcentral.authStatus} value={diagnostics.ringcentral.authStatus.replace(/_/g, ' ')} />
