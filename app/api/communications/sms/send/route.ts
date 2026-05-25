@@ -179,19 +179,30 @@ export async function POST(req: NextRequest) {
   })
 
   async function saveCommunication(status: 'sent' | 'failed', providerMessageId: string | null, errorMessage: string | null) {
-    return supabase.from('communications').insert({
+    const baseRecord = {
       opportunity_id: opportunityId,
       customer_id: customerId,
       type: 'sms',
       direction: 'outbound',
       body: text,
+      created_by: user.id,
+    }
+    const metadataRecord = {
+      ...baseRecord,
       phone_number: normalizedTo.normalized,
       status,
       provider: 'ringcentral',
       provider_message_id: providerMessageId,
       error_message: errorMessage,
-      created_by: user.id,
-    }).select().single()
+    }
+
+    const result = await supabase.from('communications').insert(metadataRecord).select().single()
+    if (!result.error || result.error.code !== '42703') return result
+
+    console.warn('SMS communication metadata columns are missing; saving minimal communication record.', {
+      message: result.error.message,
+    })
+    return supabase.from('communications').insert(baseRecord).select().single()
   }
 
   try {

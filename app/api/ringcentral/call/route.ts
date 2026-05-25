@@ -44,23 +44,38 @@ async function writeCallActivity({
   body: string
 }) {
   const supabase = createClient()
+  const baseRecord = {
+    opportunity_id: opportunityId,
+    customer_id: customerId,
+    type: 'call',
+    direction: 'outbound',
+    subject: 'RingCentral call',
+    body,
+    call_outcome: status === 'initiated' ? 'pending' : null,
+    call_duration_seconds: null,
+    email_to: null,
+    email_cc: null,
+    created_by: createdBy,
+  }
+  const metadataRecord = {
+    ...baseRecord,
+    phone_number: phoneNumber,
+    status,
+  }
+
+  const result = await supabase
+    .from('communications')
+    .insert(metadataRecord)
+    .select()
+    .single()
+  if (!result.error || result.error.code !== '42703') return result
+
+  console.warn('RingCentral call metadata columns are missing; saving minimal communication record.', {
+    message: result.error.message,
+  })
   return supabase
     .from('communications')
-    .insert({
-      opportunity_id: opportunityId,
-      customer_id: customerId,
-      type: 'call',
-      direction: 'outbound',
-      subject: 'RingCentral call',
-      body,
-      call_outcome: status === 'initiated' ? 'pending' : null,
-      call_duration_seconds: null,
-      email_to: null,
-      email_cc: null,
-      phone_number: phoneNumber,
-      status,
-      created_by: createdBy,
-    })
+    .insert(baseRecord)
     .select()
     .single()
 }
