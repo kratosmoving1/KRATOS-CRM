@@ -6,7 +6,6 @@ import type { ReactNode } from 'react'
 import {
   AlertCircle,
   CheckCircle2,
-  Copy,
   CreditCard,
   ExternalLink,
   Loader2,
@@ -164,7 +163,6 @@ export default function IntegrationDiagnosticsClient() {
   const [testLoading, setTestLoading] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [disconnectingRingCentral, setDisconnectingRingCentral] = useState(false)
-  const [callbackRegistered, setCallbackRegistered] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -184,10 +182,6 @@ export default function IntegrationDiagnosticsClient() {
   useEffect(() => {
     load()
   }, [load])
-
-  useEffect(() => {
-    setCallbackRegistered(window.localStorage.getItem('ringcentral_callback_registered') === 'true')
-  }, [])
 
   useEffect(() => {
     const message = searchParams.get('message')
@@ -235,17 +229,6 @@ export default function IntegrationDiagnosticsClient() {
     }
   }
 
-  async function copyCallbackUrl() {
-    if (!diagnostics?.ringcentralUser.redirectUri) return
-    await navigator.clipboard.writeText(diagnostics.ringcentralUser.redirectUri)
-    toast.success('Callback URL copied.')
-  }
-
-  function toggleCallbackRegistered(checked: boolean) {
-    setCallbackRegistered(checked)
-    window.localStorage.setItem('ringcentral_callback_registered', checked ? 'true' : 'false')
-  }
-
   if (loading) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
@@ -274,7 +257,6 @@ export default function IntegrationDiagnosticsClient() {
     Boolean(diagnostics.ringcentralUser.call_from_number)
   const ringcentralStatus = ringcentralReady ? 'ok' : diagnostics.ringcentralUser.setupRequired ? 'not_configured' : 'warning'
   const ringcentralStatusLabel = ringcentralReady ? 'Ready' : diagnostics.ringcentralUser.connected ? 'Review' : 'Needs setup'
-  const canStartRingCentralOAuth = callbackRegistered && !diagnostics.ringcentralUser.setupRequired
   const ringcentralAction = diagnostics.ringcentralUser.connected ? (
     <button
       type="button"
@@ -285,20 +267,11 @@ export default function IntegrationDiagnosticsClient() {
       {disconnectingRingCentral ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
       Disconnect
     </button>
-  ) : canStartRingCentralOAuth ? (
+  ) : (
     <a href="/api/ringcentral/oauth/start" className="inline-flex items-center gap-2 rounded-lg bg-kratos px-3 py-2 text-sm font-semibold text-slate-950">
       Connect
       <ExternalLink size={14} />
     </a>
-  ) : (
-    <button
-      type="button"
-      disabled
-      className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-400"
-    >
-      Connect
-      <ExternalLink size={14} />
-    </button>
   )
 
   return (
@@ -324,9 +297,9 @@ export default function IntegrationDiagnosticsClient() {
             </SetupNotice>
           )}
 
-          {!diagnostics.ringcentralUser.setupRequired && !diagnostics.ringcentralUser.connected && !callbackRegistered && (
+          {!diagnostics.ringcentralUser.setupRequired && !diagnostics.ringcentralUser.connected && (
             <SetupNotice>
-              RingCentral is blocking login because the OAuth callback URL is not registered on the RingCentral Developer app. Copy the URL below, add it to the app, then confirm it here to enable Connect.
+              Before connecting, add the OAuth callback URL below to the RingCentral Developer app. The current RingCentral error means this URL is not registered.
             </SetupNotice>
           )}
 
@@ -344,32 +317,11 @@ export default function IntegrationDiagnosticsClient() {
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">OAuth Callback URL</p>
-              <button
-                type="button"
-                onClick={copyCallbackUrl}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <Copy size={13} />
-                Copy
-              </button>
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">OAuth Callback URL</p>
             <p className="mt-2 break-all font-mono text-sm text-slate-800">{diagnostics.ringcentralUser.redirectUri}</p>
             <p className="mt-2 text-sm text-slate-500">
               Add this exact URL in RingCentral Developer Console under the app&apos;s OAuth redirect/callback URLs.
             </p>
-            {!diagnostics.ringcentralUser.connected && (
-              <label className="mt-3 flex items-start gap-2 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={callbackRegistered}
-                  onChange={event => toggleCallbackRegistered(event.target.checked)}
-                  className="mt-0.5 size-4 rounded border-slate-300 text-kratos focus:ring-kratos"
-                />
-                I added this callback URL to the RingCentral Developer app.
-              </label>
-            )}
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
