@@ -1,19 +1,25 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { ReactNode } from 'react'
-import { AlertCircle, CheckCircle2, Loader2, LogOut, RefreshCw, Send, XCircle } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  LogOut,
+  Mail,
+  PhoneCall,
+  RefreshCw,
+  Send,
+  XCircle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-type EnvItem = {
-  present: boolean
-  value?: string
-  note?: string
-}
-
 type Diagnostics = {
-  environment: Record<string, EnvItem>
   resend: {
     configured: boolean
     status: string
@@ -26,30 +32,21 @@ type Diagnostics = {
     authStatus: string
     message: string
     serverUrl: string
+    scopes: string[]
     authenticatedExtension: null | {
-      id?: string
       extensionNumber?: string
       name?: string
       email?: string
     }
-    scopes: string[]
-    phoneNumbers: Array<{
-      phoneNumber: string
-      type: string
-      features: string[]
-    }>
     fromNumber: {
       value: string
       ownedByAuthenticatedExtension: boolean
-      smsCapable: boolean
       callCapable: boolean
     }
     smsFromNumber?: {
       value: string
       ownedByAuthenticatedExtension: boolean
       smsCapable: boolean
-      callCapable: boolean
-      configured: boolean
       message: string
     }
   }
@@ -62,7 +59,6 @@ type Diagnostics = {
     extension_number?: string | null
     call_from_number?: string | null
     sms_from_number?: string | null
-    expires_at?: string | null
     updated_at?: string | null
   }
   stripe: {
@@ -73,40 +69,20 @@ type Diagnostics = {
   }
   portal: {
     appUrlPresent: boolean
-    appUrl: string | null
     portalBaseUrl: string | null
     estimatePortalLinksTable: { available: boolean; message: string }
     estimateSignaturesTable: { available: boolean; message: string }
   }
-  generatedAt?: string
 }
 
-const ENV_ORDER = [
-  'NEXT_PUBLIC_APP_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'EMAIL_PROVIDER',
-  'RESEND_API_KEY',
-  'EMAIL_FROM_DEFAULT',
-  'EMAIL_REPLY_TO_DEFAULT',
-  'RINGCENTRAL_CLIENT_ID',
-  'RINGCENTRAL_CLIENT_SECRET',
-  'RINGCENTRAL_JWT',
-  'RINGCENTRAL_SERVER_URL',
-  'RINGCENTRAL_FROM_NUMBER',
-  'RINGCENTRAL_SMS_FROM_NUMBER',
-  'STRIPE_SECRET_KEY',
-  'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
-  'STRIPE_WEBHOOK_SECRET',
-]
-
-function statusTone(status: string | boolean) {
-  if (status === true || status === 'ok' || status === 'present') return 'emerald'
-  if (status === 'not_configured' || status === 'error' || status === false || status === 'missing') return 'red'
+function toneFor(status: string | boolean) {
+  if (status === true || status === 'ok') return 'emerald'
+  if (status === false || status === 'error' || status === 'not_configured') return 'red'
   return 'amber'
 }
 
 function StatusBadge({ status, label }: { status: string | boolean; label?: string }) {
-  const tone = statusTone(status)
+  const tone = toneFor(status)
   return (
     <span
       className={cn(
@@ -117,33 +93,69 @@ function StatusBadge({ status, label }: { status: string | boolean; label?: stri
       )}
     >
       {tone === 'emerald' ? <CheckCircle2 size={12} /> : tone === 'red' ? <XCircle size={12} /> : <AlertCircle size={12} />}
-      {label ?? (typeof status === 'boolean' ? (status ? 'Present' : 'Missing') : status.replace(/_/g, ' '))}
+      {label ?? (typeof status === 'boolean' ? (status ? 'Connected' : 'Needs setup') : status.replace(/_/g, ' '))}
     </span>
   )
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function IntegrationCard({
+  icon,
+  title,
+  description,
+  status,
+  statusLabel,
+  action,
+  children,
+}: {
+  icon: ReactNode
+  title: string
+  description: string
+  status: string | boolean
+  statusLabel?: string
+  action?: ReactNode
+  children: ReactNode
+}) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-950">{title}</h2>
-      <div className="mt-4">{children}</div>
+    <section className="rounded-lg border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+            {icon}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+              <StatusBadge status={status} label={statusLabel} />
+            </div>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">{description}</p>
+          </div>
+        </div>
+        {action}
+      </div>
+      <div className="px-5 py-4">{children}</div>
     </section>
   )
 }
 
-function DetailRow({ label, value, status }: { label: string; value: ReactNode; status?: string | boolean }) {
+function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-3 last:border-0">
-      <span className="text-sm font-medium text-slate-600">{label}</span>
-      <span className="flex items-center gap-2 text-right text-sm text-slate-900">
-        {status !== undefined && <StatusBadge status={status} />}
-        {value}
-      </span>
+    <div className="min-w-0">
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</p>
+      <div className="mt-1 truncate text-sm font-medium text-slate-800">{value}</div>
+    </div>
+  )
+}
+
+function SetupNotice({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      {children}
     </div>
   )
 }
 
 export default function IntegrationDiagnosticsClient() {
+  const searchParams = useSearchParams()
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -158,10 +170,10 @@ export default function IntegrationDiagnosticsClient() {
     try {
       const res = await fetch('/api/admin/integrations/diagnostics', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Unable to load diagnostics.')
+      if (!res.ok) throw new Error(data.error ?? 'Unable to load integrations.')
       setDiagnostics(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load diagnostics.')
+      setError(err instanceof Error ? err.message : 'Unable to load integrations.')
     } finally {
       setLoading(false)
     }
@@ -170,6 +182,14 @@ export default function IntegrationDiagnosticsClient() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const message = searchParams.get('message')
+    const status = searchParams.get('ringcentral')
+    if (!message || !status) return
+    if (status === 'connected') toast.success(message)
+    else toast.error(message)
+  }, [searchParams])
 
   async function sendTestEmail() {
     setTestLoading(true)
@@ -211,16 +231,16 @@ export default function IntegrationDiagnosticsClient() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+      <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
         <Loader2 className="mx-auto mb-3 animate-spin text-kratos" size={22} />
-        Loading integration diagnostics...
+        Loading integrations...
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-5">
         <p className="text-sm font-semibold text-red-800">{error}</p>
         <button onClick={load} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-red-700 ring-1 ring-red-200">
           <RefreshCw size={14} /> Retry
@@ -231,6 +251,29 @@ export default function IntegrationDiagnosticsClient() {
 
   if (!diagnostics) return null
 
+  const ringcentralReady =
+    diagnostics.ringcentralUser.connected &&
+    diagnostics.ringcentral.fromNumber.callCapable &&
+    Boolean(diagnostics.ringcentralUser.call_from_number)
+  const ringcentralStatus = ringcentralReady ? 'ok' : diagnostics.ringcentralUser.setupRequired ? 'not_configured' : 'warning'
+  const ringcentralStatusLabel = ringcentralReady ? 'Ready' : diagnostics.ringcentralUser.connected ? 'Review' : 'Needs setup'
+  const ringcentralAction = diagnostics.ringcentralUser.connected ? (
+    <button
+      type="button"
+      onClick={disconnectRingCentral}
+      disabled={disconnectingRingCentral}
+      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+    >
+      {disconnectingRingCentral ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+      Disconnect
+    </button>
+  ) : (
+    <a href="/api/ringcentral/oauth/start" className="inline-flex items-center gap-2 rounded-lg bg-kratos px-3 py-2 text-sm font-semibold text-slate-950">
+      Connect
+      <ExternalLink size={14} />
+    </a>
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -239,118 +282,80 @@ export default function IntegrationDiagnosticsClient() {
         </button>
       </div>
 
-      <Card title="Environment Variables">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px]">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
-                <th className="py-2 pr-4">Variable</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2">Safe Value / Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {ENV_ORDER.map(name => {
-                const item = diagnostics.environment[name]
-                return (
-                  <tr key={name}>
-                    <td className="py-3 pr-4 font-mono text-xs text-slate-700">{name}</td>
-                    <td className="py-3 pr-4"><StatusBadge status={item?.present ?? false} /></td>
-                    <td className="py-3 text-sm text-slate-600">{item?.value ?? item?.note ?? (item?.present ? 'Set, hidden for security' : 'Missing')}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      <IntegrationCard
+        icon={<PhoneCall size={19} />}
+        title="RingCentral"
+        description="Connect each CRM user to their RingCentral account so calls and texts are sent from the correct extension."
+        status={ringcentralStatus}
+        statusLabel={ringcentralStatusLabel}
+        action={ringcentralAction}
+      >
+        <div className="space-y-4">
+          {diagnostics.ringcentralUser.setupRequired && (
+            <SetupNotice>
+              RingCentral connection storage is not installed yet. Run the RingCentral setup SQL in Supabase, then refresh this page.
+            </SetupNotice>
+          )}
+
+          {!diagnostics.ringcentralUser.setupRequired && !diagnostics.ringcentralUser.connected && (
+            <SetupNotice>
+              Before connecting, add the OAuth callback URL below to the RingCentral Developer app. The current RingCentral error means this URL is not registered.
+            </SetupNotice>
+          )}
+
+          {diagnostics.ringcentral.smsFromNumber && !diagnostics.ringcentral.smsFromNumber.smsCapable && (
+            <SetupNotice>
+              The current SMS number is not SMS-capable for this RingCentral extension. Pick one of the extension numbers with SmsSender enabled or add SMS capability in RingCentral.
+            </SetupNotice>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="User connection" value={diagnostics.ringcentralUser.connected ? 'Connected' : 'Not connected'} />
+            <Field label="Extension" value={diagnostics.ringcentralUser.extension_number ?? diagnostics.ringcentral.authenticatedExtension?.extensionNumber ?? 'Unavailable'} />
+            <Field label="Call from" value={diagnostics.ringcentralUser.call_from_number ?? diagnostics.ringcentral.fromNumber.value ?? 'Unavailable'} />
+            <Field label="SMS from" value={diagnostics.ringcentralUser.sms_from_number ?? diagnostics.ringcentral.smsFromNumber?.value ?? 'Unavailable'} />
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">OAuth Callback URL</p>
+            <p className="mt-2 break-all font-mono text-sm text-slate-800">{diagnostics.ringcentralUser.redirectUri}</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Add this exact URL in RingCentral Developer Console under the app&apos;s OAuth redirect/callback URLs.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">OAuth/JWT Check</p>
+              <div className="mt-2"><StatusBadge status={diagnostics.ringcentral.authStatus} label={diagnostics.ringcentral.authStatus === 'ok' ? 'Verified' : 'Issue'} /></div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Calling</p>
+              <div className="mt-2"><StatusBadge status={diagnostics.ringcentral.fromNumber.callCapable} label={diagnostics.ringcentral.fromNumber.callCapable ? 'Available' : 'Unavailable'} /></div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Texting</p>
+              <div className="mt-2"><StatusBadge status={diagnostics.ringcentral.smsFromNumber?.smsCapable ?? false} label={diagnostics.ringcentral.smsFromNumber?.smsCapable ? 'Available' : 'Unavailable'} /></div>
+            </div>
+          </div>
         </div>
-      </Card>
+      </IntegrationCard>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card title="RingCentral">
-          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">User Connection</p>
-                <p className="mt-1 text-sm text-slate-700">{diagnostics.ringcentralUser.message}</p>
-              </div>
-              {diagnostics.ringcentralUser.connected ? (
-                <button
-                  type="button"
-                  onClick={disconnectRingCentral}
-                  disabled={disconnectingRingCentral}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {disconnectingRingCentral ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-                  Disconnect
-                </button>
-              ) : (
-                <a
-                  href="/api/ringcentral/oauth/start"
-                  className="inline-flex items-center gap-2 rounded-lg bg-kratos px-3 py-2 text-sm font-semibold text-slate-950"
-                >
-                  Connect RingCentral
-                </a>
-              )}
-            </div>
-            <div className="mt-3 divide-y divide-slate-100">
-              <DetailRow label="Connected" status={diagnostics.ringcentralUser.connected} value={diagnostics.ringcentralUser.connected ? 'Yes' : 'No'} />
-              <DetailRow label="Extension" value={diagnostics.ringcentralUser.extension_number ?? diagnostics.ringcentralUser.display_name ?? 'Unavailable'} />
-              <DetailRow label="Call from" value={diagnostics.ringcentralUser.call_from_number ?? 'Unavailable'} />
-              <DetailRow label="SMS from" value={diagnostics.ringcentralUser.sms_from_number ?? 'Unavailable'} />
-              <DetailRow label="OAuth redirect URI" value={<span className="font-mono text-xs">{diagnostics.ringcentralUser.redirectUri}</span>} />
-            </div>
+        <IntegrationCard
+          icon={<Mail size={19} />}
+          title="Email"
+          description="Outbound email for estimates, notifications, and customer communication."
+          status={diagnostics.resend.status}
+          statusLabel={diagnostics.resend.status === 'ok' ? 'Ready' : 'Needs setup'}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="From" value={diagnostics.resend.fromDefault ?? 'Unavailable'} />
+            <Field label="Reply-to" value={diagnostics.resend.replyToDefault ?? 'Unavailable'} />
           </div>
-          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{diagnostics.ringcentral.message}</div>
-          <div className="mt-3 divide-y divide-slate-100">
-            <DetailRow label="Auth status" status={diagnostics.ringcentral.authStatus} value={diagnostics.ringcentral.authStatus.replace(/_/g, ' ')} />
-            <DetailRow label="Server URL" value={diagnostics.ringcentral.serverUrl} />
-            <DetailRow label="Authenticated extension" value={diagnostics.ringcentral.authenticatedExtension?.name ?? 'Unavailable'} />
-            <DetailRow label="Extension number" value={diagnostics.ringcentral.authenticatedExtension?.extensionNumber ?? 'Unavailable'} />
-            <DetailRow label="RingOut from number" value={diagnostics.ringcentral.fromNumber.value || 'Missing'} />
-            <DetailRow label="RingOut number owned by extension" status={diagnostics.ringcentral.fromNumber.ownedByAuthenticatedExtension} value={diagnostics.ringcentral.fromNumber.ownedByAuthenticatedExtension ? 'Yes' : 'No'} />
-            <DetailRow label="RingOut likely" status={diagnostics.ringcentral.fromNumber.callCapable} value={diagnostics.ringcentral.fromNumber.callCapable ? 'Yes' : 'No'} />
-            <DetailRow label="SMS from number" value={diagnostics.ringcentral.smsFromNumber?.value || 'Missing'} />
-            <DetailRow label="SMS number owned by extension" status={diagnostics.ringcentral.smsFromNumber?.ownedByAuthenticatedExtension ?? false} value={diagnostics.ringcentral.smsFromNumber?.ownedByAuthenticatedExtension ? 'Yes' : 'No'} />
-            <DetailRow label="SMS capable" status={diagnostics.ringcentral.smsFromNumber?.smsCapable ?? false} value={diagnostics.ringcentral.smsFromNumber?.smsCapable ? 'Yes' : 'No'} />
-          </div>
-          {diagnostics.ringcentral.smsFromNumber?.message && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{diagnostics.ringcentral.smsFromNumber.message}</p>
-          )}
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Scopes</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {diagnostics.ringcentral.scopes.length ? diagnostics.ringcentral.scopes.map(scope => (
-                <span key={scope} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{scope}</span>
-              )) : (
-                <span className="text-sm text-slate-500">Unable to read token scopes from SDK/API response. Verify scopes in RingCentral Developer Console.</span>
-              )}
-            </div>
-          </div>
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Extension Phone Numbers</p>
-            <div className="mt-2 space-y-2">
-              {diagnostics.ringcentral.phoneNumbers.length ? diagnostics.ringcentral.phoneNumbers.map(number => (
-                <div key={`${number.phoneNumber}-${number.type}`} className="rounded-lg border border-slate-200 px-3 py-2">
-                  <p className="text-sm font-semibold text-slate-900">{number.phoneNumber}</p>
-                  <p className="mt-1 text-xs text-slate-500">{number.type || 'Unknown type'} · {number.features.length ? number.features.join(', ') : 'No features returned'}</p>
-                </div>
-              )) : (
-                <p className="text-sm text-slate-500">No phone numbers returned.</p>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        <Card title="Resend Email">
-          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{diagnostics.resend.message}</div>
-          <div className="mt-3 divide-y divide-slate-100">
-            <DetailRow label="Status" status={diagnostics.resend.status} value={diagnostics.resend.status.replace(/_/g, ' ')} />
-            <DetailRow label="From default" value={diagnostics.resend.fromDefault ?? 'Missing'} />
-            <DetailRow label="Reply-To default" value={diagnostics.resend.replyToDefault ?? 'Missing'} />
-          </div>
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Test recipient email
+              Test recipient
               <input
                 value={testEmail}
                 onChange={event => setTestEmail(event.target.value)}
@@ -364,29 +369,21 @@ export default function IntegrationDiagnosticsClient() {
             </button>
             {testResult && <p className="mt-3 text-sm text-slate-600">{testResult}</p>}
           </div>
-        </Card>
+        </IntegrationCard>
 
-        <Card title="Stripe">
-          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{diagnostics.stripe.message}</div>
-          <div className="mt-3 divide-y divide-slate-100">
-            <DetailRow label="Status" status={diagnostics.stripe.status} value={diagnostics.stripe.status.replace(/_/g, ' ')} />
-            <DetailRow label="Mode" value={diagnostics.stripe.mode ?? 'Unknown'} />
+        <IntegrationCard
+          icon={<CreditCard size={19} />}
+          title="Payments"
+          description="Stripe payment collection and payment status syncing."
+          status={diagnostics.stripe.status}
+          statusLabel={diagnostics.stripe.status === 'ok' ? 'Ready' : 'Needs setup'}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Mode" value={diagnostics.stripe.mode ?? 'Unknown'} />
+            <Field label="Status" value={diagnostics.stripe.message} />
           </div>
-        </Card>
-
-        <Card title="Customer Portal">
-          <div className="divide-y divide-slate-100">
-            <DetailRow label="App URL" status={diagnostics.portal.appUrlPresent} value={diagnostics.portal.appUrl ?? 'Missing'} />
-            <DetailRow label="Portal base URL" value={diagnostics.portal.portalBaseUrl ?? 'Unavailable'} />
-            <DetailRow label="estimate_portal_links" status={diagnostics.portal.estimatePortalLinksTable.available} value={diagnostics.portal.estimatePortalLinksTable.message} />
-            <DetailRow label="estimate_signatures" status={diagnostics.portal.estimateSignaturesTable.available} value={diagnostics.portal.estimateSignaturesTable.message} />
-          </div>
-        </Card>
+        </IntegrationCard>
       </div>
-
-      {diagnostics.generatedAt && (
-        <p className="text-right text-xs text-slate-400">Generated {new Date(diagnostics.generatedAt).toLocaleString()}</p>
-      )}
     </div>
   )
 }

@@ -29,9 +29,9 @@ export default async function IntegrationsDiagnosticsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Settings</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Integrations Diagnostics</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Integrations</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            Verify production configuration for RingCentral, Resend, Stripe, Supabase, and the customer portal.
+            Manage connected services for calls, texts, email, payments, and customer communication.
           </p>
         </div>
         <Link href="/admin/settings" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
