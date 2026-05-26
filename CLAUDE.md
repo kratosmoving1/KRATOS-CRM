@@ -1,3 +1,40 @@
+# READ THIS FIRST OR YOU WILL BREAK THE PROJECT
+
+Before writing any code that references the database, you MUST:
+
+1. Open `SCHEMA.md` at the repo root.
+2. Confirm every column name you're about to reference exists EXACTLY as written there. Watch especially for shortened names — see the "Common Mistakes" section at the bottom of SCHEMA.md.
+3. If a column doesn't exist, STOP and tell AJ. Do not guess names. Do not infer from context. Do not invent. Past sessions where you violated this rule have cost AJ 4+ wasted iterations.
+
+Before changing architecture, tooling, or approach:
+
+1. Read `DECISIONS.md`.
+2. If you're about to do something already decided against, STOP and ask AJ.
+
+Before starting a new feature:
+
+1. Read `ROADMAP.md`.
+2. Confirm the feature is the next item up. If it isn't, ask before working ahead.
+
+When ending a session:
+
+1. Update `ROADMAP.md` to reflect what's done.
+2. If you made an architectural decision, append it to `DECISIONS.md`.
+3. If you changed the database schema, update `SCHEMA.md`.
+4. **Verify your work in production (Vercel) in an incognito browser window before claiming done.** AJ has been burned by sessions that claimed success based on `npm run build` passing. Build success ≠ feature working.
+
+---
+
+## Companion files at the repo root
+
+- `SCHEMA.md` — flat reference of every database table and column. Source of truth for schema state. Read before touching any DB column.
+- `DECISIONS.md` — running log of architectural decisions. What was decided and why. Read before changing patterns or libraries.
+- `ROADMAP.md` — what's done, what's in progress, what's coming. Confirms the order of work.
+
+All three should be kept current. If you make changes that affect them, update them in the same commit.
+
+---
+
 # Kratos CRM — Project Context
 
 ## What this is
@@ -23,7 +60,8 @@ The product is internally called "Kratos CRM" (the GitHub repo is `KRATOS-CRM`).
 - **Charts:** recharts
 - **Icons:** lucide-react (no emoji)
 - **Auth:** `@supabase/ssr`
-- **Maps:** `use-places-autocomplete` + `@types/google.maps` with Google Maps Places API (custom dropdown — NOT @reach/combobox which is React 16/17 only)
+- **Maps:** `@googlemaps/js-api-loader` v2 with a custom-built dropdown (NOT `use-places-autocomplete` or `@reach/combobox` — both removed, see DECISIONS.md)
+- **Telephony:** RingCentral (OAuth per user, call + SMS logging)
 - **Background jobs (when added):** Inngest or Trigger.dev
 - **AI (when added):** Anthropic API (Claude)
 - **Vector search (when added):** pgvector extension on Supabase
@@ -54,42 +92,54 @@ KRATOS-CRM/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx          # Dashboard
 │   │   ├── login/page.tsx
-│   │   ├── opportunities/    # List + [id] detail
+│   │   ├── opportunities/    # List + [id] detail + [id]/quote detail
 │   │   ├── customers/        # List + [id] detail
 │   │   ├── estimates/        # stub
 │   │   ├── calls/            # stub
 │   │   ├── follow-ups/       # stub
 │   │   ├── invoices/         # stub
 │   │   ├── reports/          # stub
-│   │   └── settings/         # stub
+│   │   └── settings/         # stub + templates page
+│   ├── portal/estimate/[token]/  # Customer-facing estimate portal
 │   └── api/admin/            # All internal API routes
 ├── components/
-│   ├── admin/                # Admin UI components
-│   └── ui/                   # shadcn primitives
+│   ├── admin/                # Admin UI components + modals
+│   └── ui/                   # shadcn primitives + AddressAutocomplete
 ├── lib/
 │   ├── supabase/             # server.ts, client.ts, middleware.ts
+│   ├── auth/permissions.ts   # hasPermission(), isActiveUser(), normalizeRole()
+│   ├── audit/logAuditEvent.ts# writes to audit_logs table
+│   ├── estimates/portal.ts   # portal token generation/lookup
 │   ├── queries/              # dashboard.ts etc.
+│   ├── opportunityColumns.ts # ALLOWED_OPPORTUNITY_COLUMNS allowlist for PATCH
 │   ├── format.ts             # currency, date formatters
 │   └── utils.ts              # cn() helper
-├── types/database.ts         # generated Supabase types
-├── supabase/                 # migrations folder, but see "Database changes" below
+├── types/database.ts         # generated Supabase types — source of truth
+├── supabase/                 # migrations folder (DO NOT USE — see Database changes)
 ├── public/                   # logo.png, static assets
 ├── middleware.ts             # auth redirect for /admin/*
-└── CLAUDE.md                 # this file
+├── CLAUDE.md                 # this file
+├── SCHEMA.md                 # database column reference
+├── DECISIONS.md              # architectural decisions log
+└── ROADMAP.md                # what's done, what's next
 
 ## Database state
 
 The hosted Supabase database is the **source of truth**. AJ runs all schema changes manually via the Supabase SQL Editor — not via the Supabase CLI, not via `db push`, not via local migrations.
 
-Existing tables (as of session 3):
+Current tables (verify exact columns in SCHEMA.md):
 - `profiles` (mirrors auth.users with role + name)
 - `lead_sources`
 - `customers`
 - `opportunities`
-- `audit_log`
+- `audit_log` (lightweight timeline feed)
+- `audit_logs` (detailed structured audit trail)
 - `tasks`
 - `follow_ups`
 - `communications`
+- `payments`
+- `estimate_portal_links`
+- `communication_templates`
 
 The `get_dashboard_data()` RPC powers the admin dashboard. All RLS is enabled with permissive policies (`authenticated users can do anything`) for now — proper role-based RLS comes in a later session.
 
@@ -119,6 +169,7 @@ When you need a schema change:
 3. For functions, use named dollar quotes like `$func$ ... $func$` instead of `$$ ... $$` (Supabase's editor auto-injects RLS statements that break unnamed dollar quotes)
 4. Tell AJ to paste it into Supabase SQL Editor → click Run
 5. Wait for him to confirm "success" before continuing
+6. After confirming, update `SCHEMA.md` and regenerate `types/database.ts`
 
 **Never run destructive SQL (DROP TABLE, TRUNCATE, DELETE without WHERE) without explicit AJ confirmation first.**
 
@@ -134,6 +185,9 @@ Env vars (in `.env.local` and Vercel):
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- `RINGCENTRAL_CLIENT_ID`
+- `RINGCENTRAL_CLIENT_SECRET`
+- `RINGCENTRAL_SERVER_URL`
 
 When updating env vars on Vercel, always set all three environments: `production`, `preview`, `development`. Then redeploy with `npx vercel --prod`.
 
@@ -149,8 +203,9 @@ When updating env vars on Vercel, always set all three environments: `production
 8. **Format numbers/dates on the client.** Server returns raw numbers and ISO dates. Client uses `Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })`.
 9. **All API routes return typed responses.** No `any` types except where genuinely necessary, commented why.
 10. **Soft delete only.** All business tables have `is_deleted boolean default false`. Never `DELETE FROM` business tables.
-11. **Audit log everything.** Status changes, creates, edits, deletes — write to `audit_log`.
+11. **Audit log everything.** Status changes, creates, edits, deletes — write to both `audit_log` (timeline) and `audit_logs` (structured) via `logAuditEvent()`.
 12. **Mobile-responsive by default.** AJ tests on iPhone often. Modals should be full-screen on narrow viewports; tables should scroll horizontally.
+13. **Column name discipline.** Before any Supabase query, cross-check every column name against `SCHEMA.md`. The wrong column name silently returns null or throws a DB error with no TypeScript warning.
 
 ## Hand-off etiquette
 
@@ -160,28 +215,6 @@ At the end of every session, AJ wants:
 3. Which files changed
 4. What's still stubbed / coming next
 5. The Vercel preview URL to test on
-
-## Roadmap (where we are and what's next)
-
-### Done
-- Session 1: Foundation — Next.js + Supabase scaffold, schema, auth, admin shell, dashboard with seeded data
-- Session 2: `+` button menu, 3-step New Opportunity modal, opportunities list, opportunity detail, customers list, customers detail, logo, status model
-- Session 3: 5-status migration, mandatory field cleanup, Google Maps autocomplete (partially — autocomplete bug being fixed), customer detail redesign, opportunity detail with Sales + Estimate tabs, communications table
-
-### In progress
-- Bug fixes: Google Maps autocomplete not firing on production; logo broken image in some views
-
-### Coming
-- **Session 4:** Tariff configuration (AJ inputs his pricing rules) → automatic estimate pricing engine → "Send Estimate" wired to a customer-facing estimate portal at `/estimate/[token]` with Stripe deposit collection + e-signature
-- **Session 5:** Native invoicing + per-opportunity Accounting tab + Profitability tab with real cost tracking (labor, truck, materials, fuel)
-- **Session 6:** Calls module (manual logging functional, RingCentral integration), follow-ups dashboard, real email sending via Resend
-- **Session 7+:** Dispatch board, crew app (mobile PWA), Telegram bot integration, AI summarization for calls + leads, dashboards/reports deepening
-
-### Not soon (deliberately deferred)
-- Multi-company / multi-tenant UI
-- Franchise/owner-operator support
-- Real-time subscriptions
-- Full SmartMoving migration cutover (parallel running phase)
 
 ## SmartMoving reference
 
