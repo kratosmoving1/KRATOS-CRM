@@ -19,6 +19,10 @@ import CreateOpportunityModal from '@/components/admin/modals/CreateOpportunityM
 import CreateFollowUpModal from '@/components/admin/modals/CreateFollowUpModal'
 import QuickEditModal from '@/components/admin/modals/QuickEditModal'
 import EditAddressModal, { type EditAddressData } from '@/components/admin/modals/EditAddressModal'
+import ChargesSection from '@/components/admin/charges/ChargesSection'
+import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
+import type { OpportunityCharge } from '@/components/admin/charges/types'
+import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
@@ -219,6 +223,13 @@ export default function OpportunityDetailPage() {
   // Address edit modal
   const [addressEditData, setAddressEditData] = useState<EditAddressData | null>(null)
 
+  // Charges
+  const [charges, setCharges] = useState<OpportunityCharge[]>([])
+  const [chargesLoading, setChargesLoading] = useState(false)
+  const [chargePanelOpen, setChargePanelOpen] = useState(false)
+  const [editingCharge, setEditingCharge] = useState<OpportunityCharge | null>(null)
+  const [deletingChargeId, setDeletingChargeId] = useState<string | null>(null)
+
   // Communication composer
   const [commType, setCommType] = useState<CommType>('note')
   const [commBody, setCommBody] = useState('')
@@ -355,6 +366,35 @@ export default function OpportunityDetailPage() {
       long_carry:     (isOrigin ? opp.origin_long_carry    : opp.dest_long_carry)      ?? false,
       parking_notes:  (isOrigin ? opp.origin_parking_notes : opp.dest_parking_notes)   ?? '',
     })
+  }
+
+  const fetchCharges = useCallback(async () => {
+    setChargesLoading(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/charges`)
+      if (res.ok) setCharges(await res.json())
+    } catch {}
+    finally { setChargesLoading(false) }
+  }, [id])
+
+  useEffect(() => { if (tab === 'estimate') fetchCharges() }, [tab, fetchCharges])
+
+  async function deleteCharge(chargeId: string) {
+    setDeletingChargeId(chargeId)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/charges/${chargeId}`, { method: 'DELETE' })
+      if (!res.ok && res.status !== 204) {
+        const json = await res.json().catch(() => ({}))
+        toast.error(json.error ?? 'Failed to delete charge')
+        return
+      }
+      toast.success('Charge removed.')
+      await fetchCharges()
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setDeletingChargeId(null)
+    }
   }
 
   async function handleDelete() {
@@ -558,10 +598,11 @@ export default function OpportunityDetailPage() {
     </div>
   )
 
-  const subtotal = opp.total_amount > 0 ? opp.total_amount : 0
-  const discounts = 0
-  const salesTax = 0
-  const estimateTotal = Math.max(subtotal - discounts + salesTax, 0)
+  const chargeTotals = calculateEstimate(charges, 0.13, false)
+  const subtotal = chargeTotals.subtotal
+  const discounts = chargeTotals.total_discounts
+  const salesTax = chargeTotals.sales_tax
+  const estimateTotal = chargeTotals.estimate_total
   const totalPaid = 0
   const balanceDue = Math.max(estimateTotal - totalPaid, 0)
   const profit = opp.total_amount - opp.estimated_cost
@@ -1070,7 +1111,7 @@ export default function OpportunityDetailPage() {
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Total</p>
                   <p className="mt-1 text-lg font-bold text-slate-900">
-                    {opp.total_amount > 0 ? formatCurrency(opp.total_amount) : '—'}
+                    {estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -1131,6 +1172,15 @@ export default function OpportunityDetailPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Charges */}
+              <ChargesSection
+                charges={charges}
+                onAddCharge={() => { setEditingCharge(null); setChargePanelOpen(true) }}
+                onEditCharge={c => { setEditingCharge(c); setChargePanelOpen(true) }}
+                onDeleteCharge={deleteCharge}
+                deleting={deletingChargeId}
+              />
 
               {/* Notes */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -1481,6 +1531,15 @@ export default function OpportunityDetailPage() {
           onSaved={load}
         />
       )}
+
+      <ChargeSidePanel
+        open={chargePanelOpen}
+        oppId={opp.id}
+        editingCharge={editingCharge}
+        charges={charges}
+        onClose={() => { setChargePanelOpen(false); setEditingCharge(null) }}
+        onSaved={fetchCharges}
+      />
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

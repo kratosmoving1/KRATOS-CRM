@@ -4,7 +4,7 @@ This file is the authoritative reference for the current state of the Supabase d
 
 If you need to add a column, follow the workflow in CLAUDE.md (SQL via Supabase Editor, then update this file and `types/database.ts`).
 
-**Last updated:** 2026-05-26
+**Last updated:** 2026-05-26 (added opportunity_charges, tax_rate, tax_exempt)
 **Generated from:** `types/database.ts`
 
 ---
@@ -328,6 +328,42 @@ Reusable message templates for SMS and email, linked to workflow triggers (e.g. 
 | `is_active` | `boolean` | False = hidden from dropdowns |
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
+
+---
+
+## Table: `opportunity_charges`
+
+Line-item charges attached to an opportunity. Powers the Estimate tab charges builder.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `opportunity_id` | `uuid` | FK to `opportunities.id` (cascade delete) |
+| `charge_type` | `text` | One of: `moving_labor`, `transportation`, `packing`, `materials`, `additional_services`, `trip_and_travel`, `fuel_surcharge`, `valuation`, `bulky_item`, `storage`, `storage_in_transit` |
+| `name` | `text` | Display name for this line item |
+| `description` | `text \| null` | Auto-generated detail string (e.g. "4h @ $189.99/hr") |
+| `config` | `jsonb` | Type-specific config — see `lib/charges/calculate.ts` for shape per type |
+| `subtotal` | `numeric(10,2)` | Computed subtotal before discount |
+| `discount_type` | `'percent' \| 'amount' \| null` | Discount mode |
+| `discount_value` | `numeric(10,2) \| null` | Entered discount value (percent or dollar) |
+| `discount_amount` | `numeric(10,2)` | Computed dollar discount |
+| `total` | `numeric(10,2)` | Final total after discount |
+| `is_overridden` | `boolean` | If true, subtotal was manually set (override_reason required) |
+| `override_reason` | `text \| null` | Why the subtotal was overridden |
+| `sort_order` | `integer` | Display order within this opportunity |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `updated_by` | `uuid \| null` | FK to `profiles.id` |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+### New columns added to `opportunities`
+
+| Column | Type | Description |
+|---|---|---|
+| `tax_rate` | `numeric(5,4)` | HST/tax rate (default 0.13 = Ontario 13%) |
+| `tax_exempt` | `boolean` | If true, no tax applied to estimate total |
 
 ---
 
