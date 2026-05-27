@@ -649,7 +649,7 @@ export default function OpportunityDetailPage() {
               opportunity={{
                 id: opp.id,
                 opportunityNumber: formatQuoteNumber(opp.opportunity_number),
-                estimateTotal: opp.total_amount ?? 0,
+                estimateTotal: estimateTotal,
                 depositAmount: opp.deposit_amount ?? null,
                 moveSize: opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : null,
                 moveDate: opp.service_date ? formatDateShort(opp.service_date) : null,
