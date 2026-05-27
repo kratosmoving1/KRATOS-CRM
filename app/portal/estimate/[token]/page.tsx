@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { formatCurrency } from '@/lib/format'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
+import { calculateEstimate } from '@/lib/charges/calculate'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,10 +67,21 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     )
   }
 
+  const { data: charges } = await supabase
+    .from('opportunity_charges')
+    .select('name, charge_type, subtotal, discount_amount, total')
+    .eq('opportunity_id', link.opportunity_id)
+    .eq('is_deleted', false)
+    .order('sort_order')
+    .order('created_at')
+
+  const chargeTotals = calculateEstimate(charges ?? [], 0.13, false)
+
   const customer = one(opp.customer as CustomerField)
-  const subtotal = Number(opp.total_amount ?? 0)
-  const hst = 0
-  const total = subtotal + hst
+  const subtotal = chargeTotals.subtotal
+  const discounts = chargeTotals.total_discounts
+  const hst = chargeTotals.sales_tax
+  const total = chargeTotals.estimate_total
   const savedDeposit = Number(opp.deposit_amount ?? 150)
   const deposit = Number.isFinite(savedDeposit) && savedDeposit > 0 ? savedDeposit : 150
   const moveSize = opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? String(opp.move_size).replace(/_/g, ' ')) : 'To be confirmed'
@@ -128,8 +140,22 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
           <div className="mt-5 divide-y divide-slate-100 text-sm">
             <DetailRow label="Service" value={String(opp.service_type ?? 'Moving').replace(/_/g, ' ')} />
             <DetailRow label="Move size" value={moveSize} />
+            {(charges ?? []).length > 0 && (
+              <>
+                <div className="py-2">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Charges</p>
+                </div>
+                {(charges ?? []).map((c, i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 py-2.5 pl-3">
+                    <span className="text-slate-600">{c.name}</span>
+                    <span className="font-semibold text-slate-700">{formatCurrency(c.total)}</span>
+                  </div>
+                ))}
+              </>
+            )}
             <DetailRow label="Subtotal" value={formatCurrency(subtotal)} />
-            <DetailRow label="HST" value={hst > 0 ? formatCurrency(hst) : 'Included / not yet itemized'} />
+            {discounts > 0 && <DetailRow label="Discounts" value={`−${formatCurrency(discounts)}`} />}
+            <DetailRow label="HST (13%)" value={hst > 0 ? formatCurrency(hst) : charges && charges.length > 0 ? formatCurrency(0) : 'Not yet itemized'} />
             <DetailRow label="Total" value={formatCurrency(total)} strong />
             <DetailRow label="Deposit" value={formatCurrency(deposit)} strong />
           </div>
