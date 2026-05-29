@@ -4,7 +4,7 @@ This file is the authoritative reference for the current state of the Supabase d
 
 If you need to add a column, follow the workflow in CLAUDE.md (SQL via Supabase Editor, then update this file and `types/database.ts`).
 
-**Last updated:** 2026-05-26 (added opportunity_charges, tax_rate, tax_exempt)
+**Last updated:** 2026-05-27 (added office_calendar_events)
 **Generated from:** `types/database.ts`
 
 ---
@@ -391,3 +391,28 @@ These column name mistakes have appeared repeatedly in past sessions and broken 
 | `dest_parking` | `dest_parking_notes` |
 
 Any AI tool that writes code using a column name from the left column is wrong. The canonical names are in `types/database.ts`.
+
+---
+
+## Table: `office_calendar_events`
+
+Office/team scheduling events — IPCs, surveys, follow-ups, meetings, admin tasks. Separate from booked moving jobs.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `title` | `text` | Event title |
+| `description` | `text \| null` | Notes |
+| `event_type` | `text` | One of: `IPC`, `On-site Estimate`, `Survey`, `Follow-up`, `Call-back`, `Internal Task`, `Meeting`, `Admin`, `Dispatch`, `Other` |
+| `start_at` | `timestamptz` | Event start (required) |
+| `end_at` | `timestamptz \| null` | Event end |
+| `assigned_to` | `uuid \| null` | FK to `profiles.id` |
+| `customer_id` | `uuid \| null` | FK to `customers.id` (optional link) |
+| `opportunity_id` | `uuid \| null` | FK to `opportunities.id` (optional link) |
+| `location` | `text \| null` | Address or room |
+| `status` | `text` | One of: `scheduled`, `completed`, `cancelled`, `no-show` |
+| `is_deleted` | `boolean` | Soft delete — never hard-delete |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | |
