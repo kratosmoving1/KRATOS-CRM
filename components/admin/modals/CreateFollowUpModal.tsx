@@ -9,20 +9,47 @@ import { FOLLOW_UP_TYPES } from '@/lib/constants'
 
 interface Profile { id: string; full_name: string }
 
-export default function CreateFollowUpModal({ onClose }: { onClose: () => void }) {
+interface Props {
+  opportunityId?: string
+  customerId?: string
+  defaultNotes?: string
+  defaultType?: string
+  onClose: () => void
+}
+
+export default function CreateFollowUpModal({
+  opportunityId,
+  customerId,
+  defaultNotes,
+  defaultType,
+  onClose,
+}: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [profiles, setProfiles] = useState<Profile[]>([])
 
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+
   const [form, setForm] = useState({
-    follow_up_date: '', follow_up_time: '', type: 'call',
-    notes: '', assigned_to_id: '', opportunity_id: '',
+    follow_up_date: tomorrowStr,
+    follow_up_time: '10:00',
+    type: defaultType ?? 'call',
+    notes: defaultNotes ?? '',
+    assigned_to_id: '',
+    opportunity_id: opportunityId ?? '',
   })
 
   useEffect(() => {
     fetch('/api/admin/profiles').then(r => r.json()).then(setProfiles).catch(() => {})
   }, [])
+
+  // Keep opportunity_id in sync if prop changes
+  useEffect(() => {
+    if (opportunityId) setForm(p => ({ ...p, opportunity_id: opportunityId }))
+  }, [opportunityId])
 
   function update<K extends keyof typeof form>(k: K, v: string) {
     setForm(p => ({ ...p, [k]: v }))
@@ -39,10 +66,12 @@ export default function CreateFollowUpModal({ onClose }: { onClose: () => void }
     setSubmitting(true)
     setApiError(null)
     try {
+      const payload: Record<string, unknown> = { ...form }
+      if (customerId) payload.customer_id = customerId
       const res = await fetch('/api/admin/follow-ups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       const json = await res.json()
       if (!res.ok) { setApiError(json.error ?? 'Something went wrong'); return }

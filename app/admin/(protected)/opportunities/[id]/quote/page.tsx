@@ -84,7 +84,7 @@ interface OppDetail {
 
 interface TimelineItem {
   id: string
-  _kind: 'communication' | 'audit'
+  _kind: 'communication' | 'audit' | 'follow_up'
   type?: string
   direction?: string
   subject?: string
@@ -93,8 +93,28 @@ interface TimelineItem {
   call_duration_seconds?: number
   action?: string
   diff?: Record<string, unknown> | null
+  // follow_up fields
+  follow_up_date?: string
+  follow_up_time?: string | null
+  notes?: string | null
+  status?: string
+  completed_at?: string | null
+  assignee_name?: string | null
   created_at: string
   actor: string | null
+}
+
+type ActivityFilter = 'all' | 'notes' | 'emails' | 'calls' | 'texts' | 'follow_ups'
+
+function getDaysUntilMove(moveDate: string | null | undefined): string | null {
+  if (!moveDate) return null
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+  if (moveDate === todayKey) return 'Today'
+  const diff = Math.round((new Date(moveDate).getTime() - new Date(todayKey).getTime()) / 86_400_000)
+  if (diff === 1) return 'Tomorrow'
+  if (diff > 1) return `${diff} days`
+  return 'Move passed'
 }
 
 interface CommunicationTemplate {
@@ -243,9 +263,10 @@ export default function OpportunityDetailPage() {
   const [noAnswerEmailTemplateId, setNoAnswerEmailTemplateId] = useState('')
   const [noAnswerSmsSending, setNoAnswerSmsSending] = useState(false)
 
-  // Timeline
+  // Timeline + filters
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [timelineLoading, setTimelineLoading] = useState(false)
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all')
 
   // Notes (estimate tab)
   const [notes, setNotes] = useState('')
@@ -611,10 +632,22 @@ export default function OpportunityDetailPage() {
   const selectedSupportsStripe = selectedPaymentMethod ? STRIPE_PAYMENT_METHODS.includes(selectedPaymentMethod) : false
 
   // Timeline stats
-  const callCount  = timeline.filter(t => t._kind === 'communication' && t.type === 'call').length
-  const noteCount  = timeline.filter(t => t._kind === 'communication' && t.type === 'note').length
-  const emailCount = timeline.filter(t => t._kind === 'communication' && t.type === 'email').length
-  const smsCount   = timeline.filter(t => t._kind === 'communication' && t.type === 'sms').length
+  const callCount     = timeline.filter(t => t._kind === 'communication' && t.type === 'call').length
+  const noteCount     = timeline.filter(t => t._kind === 'communication' && t.type === 'note').length
+  const emailCount    = timeline.filter(t => t._kind === 'communication' && t.type === 'email').length
+  const smsCount      = timeline.filter(t => t._kind === 'communication' && t.type === 'sms').length
+  const followUpCount = timeline.filter(t => t._kind === 'follow_up').length
+  const daysUntilMove = getDaysUntilMove(opp.service_date)
+
+  const filteredTimeline = timeline.filter(item => {
+    if (activityFilter === 'all') return true
+    if (activityFilter === 'notes')     return item._kind === 'communication' && item.type === 'note'
+    if (activityFilter === 'emails')    return item._kind === 'communication' && item.type === 'email'
+    if (activityFilter === 'calls')     return item._kind === 'communication' && item.type === 'call'
+    if (activityFilter === 'texts')     return item._kind === 'communication' && item.type === 'sms'
+    if (activityFilter === 'follow_ups') return item._kind === 'follow_up'
+    return true
+  })
 
   return (
     <>
@@ -706,19 +739,40 @@ export default function OpportunityDetailPage() {
             {/* Left: composer + timeline */}
             <div className="space-y-4 lg:col-span-2">
               {/* Stats strip */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-5 gap-2">
                 {[
-                  { label: 'Calls',  value: callCount },
-                  { label: 'Texts',  value: smsCount },
-                  { label: 'Emails', value: emailCount },
-                  { label: 'Notes',  value: noteCount },
+                  { label: 'Calls',       value: String(callCount) },
+                  { label: 'Texts',       value: String(smsCount) },
+                  { label: 'Emails',      value: String(emailCount) },
+                  { label: 'Notes',       value: String(noteCount) },
+                  { label: 'Follow-ups',  value: String(followUpCount) },
                 ].map(({ label, value }) => (
-                  <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center">
+                  <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center">
                     <p className="text-xl font-bold text-slate-900">{value}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
                   </div>
                 ))}
               </div>
+              {/* Days until move banner */}
+              {daysUntilMove && (
+                <div className={cn(
+                  'flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold',
+                  daysUntilMove === 'Move passed'
+                    ? 'border-slate-200 bg-slate-50 text-slate-500'
+                    : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow'
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border-slate-200 bg-slate-50 text-slate-700',
+                )}>
+                  <Clock size={14} className="shrink-0" />
+                  {daysUntilMove === 'Move passed'
+                    ? 'Move date has passed'
+                    : daysUntilMove === 'Today'
+                    ? 'Move is today'
+                    : daysUntilMove === 'Tomorrow'
+                    ? 'Move is tomorrow'
+                    : `Move in ${daysUntilMove}`}
+                </div>
+              )}
 
               {/* Communication composer */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -786,6 +840,22 @@ export default function OpportunityDetailPage() {
                   }
                   className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                 />
+                {/* SMS reality check */}
+                {commType === 'sms' && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-5 text-amber-800">
+                    <p className="font-semibold">SMS sending is not currently active.</p>
+                    <p className="mt-0.5">RingCentral diagnostics show the configured extension is not SMS-capable (IVR/1-800 numbers cannot send API SMS). Logging this will record the SMS in your activity history but will not deliver a message. To enable SMS, configure an SMS-capable direct number on the RingCentral extension.</p>
+                  </div>
+                )}
+
+                {/* Email context note */}
+                {commType === 'email' && (
+                  <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-xs leading-5 text-blue-800">
+                    <p className="font-semibold">Logging an email records it in your activity history.</p>
+                    <p className="mt-0.5">To send an actual estimate email to the customer, use the <span className="font-semibold">Send Estimate</span> button at the top of the page.</p>
+                  </div>
+                )}
+
                 {commType === 'call' && commCallOutcome === 'no_answer' && (
                   <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
                     <p className="mb-2 text-sm font-medium text-slate-700">No Answer — follow-up actions</p>
@@ -833,7 +903,14 @@ export default function OpportunityDetailPage() {
                   </div>
                 )}
 
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateFollowUp(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <CalendarPlus size={13} /> Create follow-up
+                  </button>
                   <button
                     onClick={submitComm}
                     disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
@@ -846,78 +923,147 @@ export default function OpportunityDetailPage() {
               </div>
 
               {showCreateFollowUp && (
-                <CreateFollowUpModal onClose={() => setShowCreateFollowUp(false)} />
+                <CreateFollowUpModal
+                  opportunityId={opp.id}
+                  customerId={opp.customer?.id}
+                  defaultNotes={
+                    commType === 'call' && commCallOutcome === 'no_answer'
+                      ? `Call back ${opp.customer?.full_name ?? 'customer'} — no answer`
+                      : commType === 'email'
+                      ? `Follow up on estimate email with ${opp.customer?.full_name ?? 'customer'}`
+                      : `Follow up with ${opp.customer?.full_name ?? 'customer'}`
+                  }
+                  defaultType={commType === 'call' ? 'call' : commType === 'sms' ? 'sms' : commType === 'email' ? 'email' : 'call'}
+                  onClose={() => { setShowCreateFollowUp(false); loadTimeline() }}
+                />
               )}
 
               {/* Activity timeline */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Activity</h2>
-                {timelineLoading ? (
-                  <div className="space-y-4 animate-pulse">
-                    {[0,1,2].map(i => (
-                      <div key={i} className="flex gap-3">
-                        <div className="h-6 w-6 rounded-full bg-slate-100 shrink-0" />
-                        <div className="flex-1 space-y-1">
-                          <div className="h-3 w-1/3 rounded bg-slate-100" />
-                          <div className="h-3 w-2/3 rounded bg-slate-100" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : timeline.length === 0 ? (
-                  <p className="text-sm text-slate-400">No activity yet — log a call, note, or email above.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {timeline.map(item => (
-                      <div key={item.id} className="flex gap-3">
-                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
-                          {item._kind === 'communication' ? (
-                            <CommTypeIcon type={item.type ?? 'note'} />
-                          ) : (
-                            <CheckCircle2 size={12} className="text-kratos" />
+              <div className="rounded-xl border border-slate-200 bg-white">
+                {/* Header + filter tabs */}
+                <div className="flex items-center justify-between border-b border-slate-200 px-5 pt-4">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Activity</h2>
+                  <div className="flex items-center gap-0.5 pb-0">
+                    {([ 'all', 'notes', 'calls', 'texts', 'emails', 'follow_ups' ] as ActivityFilter[]).map(f => {
+                      const labels: Record<ActivityFilter, string> = {
+                        all: 'All', notes: 'Notes', calls: 'Calls',
+                        texts: 'Texts', emails: 'Emails', follow_ups: 'Follow-ups',
+                      }
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setActivityFilter(f)}
+                          className={cn(
+                            'px-2.5 py-2 text-xs font-medium transition-colors',
+                            activityFilter === f
+                              ? 'border-b-2 border-kratos text-slate-900'
+                              : 'text-slate-400 hover:text-slate-700',
                           )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {item._kind === 'communication' ? (
-                            <>
-                              <div className="flex items-baseline gap-2 flex-wrap">
-                                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 capitalize">{item.type}</span>
-                                {item.call_outcome && (
-                                  <span className="text-xs text-slate-400">— {CALL_OUTCOMES[item.call_outcome] ?? item.call_outcome}</span>
-                                )}
-                                {item.subject && (
-                                  <span className="text-xs font-medium text-slate-600 truncate">&ldquo;{item.subject}&rdquo;</span>
-                                )}
-                              </div>
-                              <p className="mt-0.5 text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>
-                              <p className="mt-1 text-xs text-slate-400">
-                                {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
-                              </p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-sm text-slate-700">
-                                {item.action === 'create'
-                                  ? 'Quote created'
-                                  : item.action === 'status_change'
-                                  ? `Status → ${OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? item.diff?.to}`
-                                  : item.action === 'update'
-                                  ? 'Details updated'
-                                  : item.action}
-                                {!!item.diff?.reason && (
-                                  <span className="text-slate-500"> — {String(item.diff.reason)}</span>
-                                )}
-                              </p>
-                              <p className="mt-0.5 text-xs text-slate-400">
-                                {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        >
+                          {labels[f]}
+                        </button>
+                      )
+                    })}
                   </div>
-                )}
+                </div>
+
+                <div className="p-5">
+                  {timelineLoading ? (
+                    <div className="space-y-4 animate-pulse">
+                      {[0,1,2].map(i => (
+                        <div key={i} className="flex gap-3">
+                          <div className="h-6 w-6 rounded-full bg-slate-100 shrink-0" />
+                          <div className="flex-1 space-y-1">
+                            <div className="h-3 w-1/3 rounded bg-slate-100" />
+                            <div className="h-3 w-2/3 rounded bg-slate-100" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filteredTimeline.length === 0 ? (
+                    <p className="text-sm text-slate-400">
+                      {activityFilter === 'all'
+                        ? 'No activity yet — log a note, call, text, or email above.'
+                        : `No ${activityFilter.replace('_', '-')} yet.`}
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {filteredTimeline.map(item => (
+                        <div key={item.id} className="flex gap-3">
+                          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
+                            {item._kind === 'communication' ? (
+                              <CommTypeIcon type={item.type ?? 'note'} />
+                            ) : item._kind === 'follow_up' ? (
+                              <CalendarPlus size={12} className="text-kratos" />
+                            ) : (
+                              <CheckCircle2 size={12} className="text-kratos" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {item._kind === 'communication' ? (
+                              <>
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 capitalize">{item.type}</span>
+                                  {item.direction && item.direction !== 'internal' && (
+                                    <span className="text-[10px] rounded-full bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-500 capitalize">{item.direction}</span>
+                                  )}
+                                  {item.call_outcome && (
+                                    <span className="text-xs text-slate-400">— {CALL_OUTCOMES[item.call_outcome] ?? item.call_outcome}</span>
+                                  )}
+                                  {item.subject && (
+                                    <span className="text-xs font-medium text-slate-600 truncate">&ldquo;{item.subject}&rdquo;</span>
+                                  )}
+                                </div>
+                                {item.body && <p className="mt-0.5 text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>}
+                                <p className="mt-1 text-xs text-slate-400">
+                                  {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
+                                </p>
+                              </>
+                            ) : item._kind === 'follow_up' ? (
+                              <>
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Follow-up</span>
+                                  <span className="text-xs text-slate-500 capitalize">{item.type?.replace(/_/g,' ')}</span>
+                                  {item.status === 'completed' ? (
+                                    <span className="text-[10px] rounded-full bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">Completed</span>
+                                  ) : (
+                                    <span className="text-[10px] rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">Pending</span>
+                                  )}
+                                </div>
+                                <p className="mt-0.5 text-sm text-slate-700">
+                                  Due {item.follow_up_date}{item.follow_up_time ? ` at ${item.follow_up_time.slice(0,5)}` : ''}
+                                  {item.assignee_name ? ` · ${item.assignee_name}` : ''}
+                                </p>
+                                {item.notes && <p className="mt-0.5 text-sm text-slate-500 italic">{item.notes}</p>}
+                                <p className="mt-1 text-xs text-slate-400">
+                                  Created by {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-sm text-slate-700">
+                                  {item.action === 'create'
+                                    ? 'Quote created'
+                                    : item.action === 'status_change'
+                                    ? `Status → ${OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? item.diff?.to}`
+                                    : item.action === 'update'
+                                    ? 'Details updated'
+                                    : item.action}
+                                  {!!item.diff?.reason && (
+                                    <span className="text-slate-500"> — {String(item.diff.reason)}</span>
+                                  )}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-400">
+                                  {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
