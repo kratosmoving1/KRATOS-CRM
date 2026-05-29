@@ -1,4 +1,6 @@
-import { Loader2 } from 'lucide-react'
+'use client'
+
+import Image from 'next/image'
 import { cn } from '@/lib/utils'
 
 type WelcomeLoadingProps = {
@@ -8,24 +10,59 @@ type WelcomeLoadingProps = {
 }
 
 export default function WelcomeLoading({ name, className = '', fullScreen = false }: WelcomeLoadingProps) {
-  const displayName = name?.trim() || 'back'
-  const headline = displayName === 'back' ? 'Welcome back.' : `Welcome, ${displayName.split(' ')[0]}.`
+  const first = name?.trim() ? name.trim().split(' ')[0] : null
+  const headline = first ? `Welcome, ${first}` : 'Welcome'
 
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-center bg-slate-50',
-        fullScreen ? 'min-h-screen' : 'min-h-[60vh]',
-        className,
-      )}
-    >
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white px-8 py-9 text-center shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
-        <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-kratos to-transparent" />
-        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-kratos/20 bg-kratos/10 text-slate-900">
-          <Loader2 size={21} className="animate-spin" />
+  if (fullScreen) {
+    return (
+      <div className={cn('flex min-h-screen flex-col items-center justify-center bg-[#0b1220]', className)}>
+        <div
+          className="flex flex-col items-center gap-6"
+          style={{ animation: 'kratosEnter 1.1s cubic-bezier(0.22,1,0.36,1) forwards', opacity: 0 }}
+        >
+          <div className="relative flex items-center justify-center">
+            {/* orange glow behind the mark */}
+            <div
+              className="absolute rounded-full bg-kratos opacity-20 blur-2xl"
+              style={{ width: 120, height: 120 }}
+            />
+            <Image
+              src="/logo.png"
+              alt="Kratos"
+              width={72}
+              height={72}
+              className="relative object-contain"
+              style={{ filter: 'drop-shadow(0 0 18px rgba(255,173,51,0.45))' }}
+              priority
+            />
+          </div>
+          <div
+            className="text-center"
+            style={{ animation: 'kratosFadeIn 0.7s 0.55s cubic-bezier(0.22,1,0.36,1) forwards', opacity: 0 }}
+          >
+            <p className="text-xl font-semibold tracking-tight text-white">{headline}</p>
+            <p className="mt-1.5 text-sm text-slate-400">Loading your dashboard…</p>
+          </div>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">{headline}</h1>
-        <p className="mt-2 text-sm text-slate-500">Loading your command dashboard...</p>
+      </div>
+    )
+  }
+
+  // Inline variant used while page data loads
+  return (
+    <div className={cn('flex min-h-[60vh] items-center justify-center', className)}>
+      <div
+        className="flex flex-col items-center gap-3"
+        style={{ animation: 'kratosEnter 0.8s cubic-bezier(0.22,1,0.36,1) forwards', opacity: 0 }}
+      >
+        <Image
+          src="/logo.png"
+          alt="Kratos"
+          width={38}
+          height={38}
+          className="object-contain opacity-50"
+        />
+        <p className="text-sm text-slate-400">Loading…</p>
       </div>
     </div>
   )

@@ -35,16 +35,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-4">
-          <Image
-            src="/logo.png"
-            alt="Kratos Moving"
-            width={80}
-            height={80}
-            className="object-contain"
-          />
+        <div
+          className="mb-8 flex flex-col items-center gap-4"
+          style={{ animation: 'kratosEnter 0.9s cubic-bezier(0.22,1,0.36,1) forwards', opacity: 0 }}
+        >
+          <div className="relative flex items-center justify-center">
+            <div
+              className="absolute rounded-full bg-kratos opacity-10 blur-2xl"
+              style={{ width: 100, height: 100 }}
+            />
+            <Image
+              src="/logo.png"
+              alt="Kratos Moving"
+              width={72}
+              height={72}
+              className="relative object-contain"
+              priority
+            />
+          </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight">
               <span className="text-kratos">Kratos</span>

@@ -48,19 +48,20 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center border-b border-white/10 px-3">
+      <div className={cn('flex h-16 items-center border-b border-white/10', collapsed ? 'justify-center px-0' : 'px-4')}>
         <div className="flex items-center gap-2.5 overflow-hidden">
           <Image
             src="/logo.png"
             alt="Kratos"
-            width={32}
+            width={28}
             height={32}
-            className="shrink-0 object-contain drop-shadow-sm"
+            className="shrink-0 object-contain"
+            style={{ filter: 'drop-shadow(0 0 6px rgba(255,173,51,0.25))' }}
           />
           {!collapsed && (
             <span className="whitespace-nowrap text-sm font-semibold tracking-tight">
               <span className="text-kratos">Kratos</span>
-              <span className="text-white"> CRM</span>
+              <span className="text-white/90"> CRM</span>
             </span>
           )}
         </div>
