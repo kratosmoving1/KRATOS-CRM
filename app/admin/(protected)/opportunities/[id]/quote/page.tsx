@@ -250,6 +250,10 @@ export default function OpportunityDetailPage() {
   const [editingCharge, setEditingCharge] = useState<OpportunityCharge | null>(null)
   const [deletingChargeId, setDeletingChargeId] = useState<string | null>(null)
 
+  // SMS delivery status (fetched once)
+  const [smsStatus, setSmsStatus] = useState<{ canSend: boolean; provider: string; reason?: string; recommendation?: string } | null>(null)
+  const [smsStatusLoading, setSmsStatusLoading] = useState(false)
+
   // Communication composer
   const [commType, setCommType] = useState<CommType>('note')
   const [commBody, setCommBody] = useState('')
@@ -302,7 +306,19 @@ export default function OpportunityDetailPage() {
   }, [id])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { if (tab === 'sales') loadTimeline() }, [tab, loadTimeline])
+  useEffect(() => {
+    if (tab !== 'sales') return
+    loadTimeline()
+    if (!smsStatus && !smsStatusLoading) {
+      setSmsStatusLoading(true)
+      fetch('/api/admin/sms/status')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setSmsStatus(d) })
+        .catch(() => {})
+        .finally(() => setSmsStatusLoading(false))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, loadTimeline])
 
   useEffect(() => {
     async function loadNoAnswerTemplates() {
@@ -464,6 +480,53 @@ export default function OpportunityDetailPage() {
       setCommCallOutcome('')
       setCommSubject('')
       setCommEmailTo('')
+      loadTimeline()
+    } catch { toast.error('Network error') }
+    finally { setCommSubmitting(false) }
+  }
+
+  async function sendSmsDirectly() {
+    if (!opp || !commBody.trim()) { toast.error('Enter message content'); return }
+    setCommSubmitting(true)
+    try {
+      const res = await fetch('/api/admin/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: id,
+          customerId: opp.customer?.id ?? null,
+          body: commBody.trim(),
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = json.error ?? 'SMS send failed'
+        toast.error(msg)
+      } else {
+        toast.success('SMS sent.')
+        setCommBody('')
+        loadTimeline()
+      }
+    } catch { toast.error('Network error') }
+    finally { setCommSubmitting(false) }
+  }
+
+  async function logSmsOnly() {
+    if (!opp || !commBody.trim()) { toast.error('Enter message content'); return }
+    setCommSubmitting(true)
+    try {
+      const res = await fetch('/api/admin/sms/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: id,
+          customerId: opp.customer?.id ?? null,
+          body: commBody.trim(),
+        }),
+      })
+      if (!res.ok) { toast.error('Failed to log SMS'); return }
+      toast.success('SMS logged (not sent).')
+      setCommBody('')
       loadTimeline()
     } catch { toast.error('Network error') }
     finally { setCommSubmitting(false) }
@@ -840,12 +903,23 @@ export default function OpportunityDetailPage() {
                   }
                   className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                 />
-                {/* SMS reality check */}
+                {/* SMS delivery status */}
                 {commType === 'sms' && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-5 text-amber-800">
-                    <p className="font-semibold">SMS sending is not currently active.</p>
-                    <p className="mt-0.5">RingCentral diagnostics show the configured extension is not SMS-capable (IVR/1-800 numbers cannot send API SMS). Logging this will record the SMS in your activity history but will not deliver a message. To enable SMS, configure an SMS-capable direct number on the RingCentral extension.</p>
-                  </div>
+                  smsStatusLoading ? (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                      <Loader2 size={12} className="animate-spin" /> Checking SMS status…
+                    </div>
+                  ) : smsStatus && !smsStatus.canSend ? (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-5 text-amber-800">
+                      <p className="font-semibold">SMS delivery is not active — you can log the message, but it will not be sent.</p>
+                      <p className="mt-0.5">{smsStatus.reason}</p>
+                      {smsStatus.recommendation && <p className="mt-1 italic">{smsStatus.recommendation}</p>}
+                    </div>
+                  ) : smsStatus?.canSend ? (
+                    <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-3.5 py-2 text-xs text-green-800">
+                      SMS delivery active via <span className="font-semibold capitalize">{smsStatus.provider}</span>. Message will be sent to the customer&apos;s phone.
+                    </div>
+                  ) : null
                 )}
 
                 {/* Email context note */}
@@ -911,14 +985,37 @@ export default function OpportunityDetailPage() {
                   >
                     <CalendarPlus size={13} /> Create follow-up
                   </button>
-                  <button
-                    onClick={submitComm}
-                    disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
-                    className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
-                  >
-                    {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                    {commType === 'note' ? 'Save Note' : `Log ${commType.charAt(0).toUpperCase() + commType.slice(1)}`}
-                  </button>
+
+                  {commType === 'sms' ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={logSmsOnly}
+                        disabled={commSubmitting || !commBody.trim()}
+                        className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {commSubmitting && <Loader2 size={13} className="animate-spin" />}
+                        Log Only
+                      </button>
+                      <button
+                        onClick={sendSmsDirectly}
+                        disabled={commSubmitting || !commBody.trim() || !smsStatus?.canSend}
+                        title={!smsStatus?.canSend ? (smsStatus?.reason ?? 'SMS delivery not configured') : undefined}
+                        className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                        Send SMS
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={submitComm}
+                      disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
+                      className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
+                    >
+                      {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                      {commType === 'note' ? 'Save Note' : `Log ${commType.charAt(0).toUpperCase() + commType.slice(1)}`}
+                    </button>
+                  )}
                 </div>
               </div>
 

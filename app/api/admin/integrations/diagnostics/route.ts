@@ -5,6 +5,7 @@ import { normalizeRole } from '@/lib/auth/permissions'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 import { getRingCentralConnectionSummary, getRingCentralRedirectUri } from '@/lib/ringcentral/oauth'
+import { getSmsProvider, getSmsDeliveryStatus } from '@/lib/sms/provider'
 
 type EnvStatus = {
   present: boolean
@@ -370,6 +371,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const smsStatus = getSmsDeliveryStatus()
+  const smsEnvVars: Record<string, { present: boolean }> = {
+    SMS_PROVIDER: { present: Boolean(process.env.SMS_PROVIDER) },
+    TWILIO_ACCOUNT_SID: { present: Boolean(process.env.TWILIO_ACCOUNT_SID) },
+    TWILIO_AUTH_TOKEN: { present: Boolean(process.env.TWILIO_AUTH_TOKEN) },
+    TWILIO_FROM_NUMBER: { present: Boolean(process.env.TWILIO_FROM_NUMBER) },
+  }
+
   const [ringcentral, ringcentralUser, resend, stripe, portal] = await Promise.all([
     ringCentralDiagnostics(),
     getRingCentralConnectionSummary(user.id),
@@ -380,6 +389,13 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     environment: getEnvironment(),
+    sms: {
+      provider: getSmsProvider(),
+      canSend: smsStatus.canSend,
+      reason: smsStatus.reason ?? null,
+      recommendation: smsStatus.recommendation ?? null,
+      envVars: smsEnvVars,
+    },
     resend,
     ringcentral,
     ringcentralUser: {
