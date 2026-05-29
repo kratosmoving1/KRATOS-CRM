@@ -4,9 +4,9 @@ import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizeRole, type CrmRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
+import { getSmsProvider } from '@/lib/sms/provider'
+import { sendSmsTwilio } from '@/lib/sms/twilio'
 import {
-  getMissingRingCentralSmsEnv,
-  isRingCentralSmsConfigured,
   RingCentralCallError,
   sendSmsViaRingCentral,
   renderTemplate,
@@ -56,8 +56,8 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
-function quoteLink(opportunityId: string | null) {
-  return opportunityId ? `/admin/opportunities/${opportunityId}/quote` : ''
+function maskPhone(phone: string) {
+  return phone.length > 4 ? `****${phone.slice(-4)}` : '****'
 }
 
 export async function POST(req: NextRequest) {
@@ -86,6 +86,14 @@ export async function POST(req: NextRequest) {
 
   if (!opportunityId && !customerId) {
     return NextResponse.json({ error: 'opportunityId or customerId required' }, { status: 400 })
+  }
+
+  // ── Check provider before any expensive queries ─────────────────
+  const provider = getSmsProvider()
+  if (provider === 'disabled') {
+    return NextResponse.json({
+      error: 'SMS is not configured. Set SMS_PROVIDER in your environment variables.',
+    }, { status: 503 })
   }
 
   let opportunity: OpportunityRecord | null = null
@@ -122,7 +130,7 @@ export async function POST(req: NextRequest) {
 
   const normalizedTo = normalizePhoneToE164(recipientRaw)
   if (!normalizedTo.isE164) {
-    return NextResponse.json({ error: `RingCentral SMS failed: Invalid recipient phone number: ${recipientRaw}` }, { status: 400 })
+    return NextResponse.json({ error: `Invalid recipient phone number: ${recipientRaw}` }, { status: 400 })
   }
 
   const { data: profile } = await supabase
@@ -141,8 +149,6 @@ export async function POST(req: NextRequest) {
     move_date: opportunity?.service_date ?? '',
     origin_city: opportunity?.origin_city ?? '',
     destination_city: opportunity?.dest_city ?? '',
-    estimate_link: quoteLink(opportunityId),
-    booking_link: quoteLink(opportunityId),
     ...(body.vars ?? {}),
   }
 
@@ -169,18 +175,13 @@ export async function POST(req: NextRequest) {
     entityType: 'communication',
     entityId: opportunityId ?? customerId,
     oldData: null,
-    newData: {
-      opportunityId,
-      customerId,
-      phoneNumber: normalizedTo.normalized,
-      templateId,
-    } as unknown as Json,
+    newData: { provider, opportunityId, customerId, to: maskPhone(normalizedTo.normalized), templateId } as unknown as Json,
     ipAddress: req.headers.get('x-forwarded-for'),
     userAgent: req.headers.get('user-agent'),
   })
 
-  async function saveCommunication(status: 'sent' | 'failed', providerMessageId: string | null, errorMessage: string | null) {
-    const baseRecord = {
+  async function saveComm(status: 'sent' | 'failed', providerMessageId: string | null, errorMessage: string | null) {
+    const base = {
       opportunity_id: opportunityId,
       customer_id: customerId,
       type: 'sms',
@@ -188,107 +189,116 @@ export async function POST(req: NextRequest) {
       body: text,
       created_by: user.id,
     }
-    const metadataRecord = {
-      ...baseRecord,
+    const full = {
+      ...base,
       phone_number: normalizedTo.normalized,
       status,
-      provider: 'ringcentral',
+      provider,
       provider_message_id: providerMessageId,
       error_message: errorMessage,
     }
-
-    const result = await supabase.from('communications').insert(metadataRecord).select().single()
-    if (!result.error || result.error.code !== '42703') return result
-
-    console.warn('SMS communication metadata columns are missing; saving minimal communication record.', {
-      message: result.error.message,
-    })
-    return supabase.from('communications').insert(baseRecord).select().single()
+    const result = await supabase.from('communications').insert(full).select().single()
+    // Graceful fallback if extended columns are missing
+    if (result.error?.code === '42703') {
+      return supabase.from('communications').insert(base).select().single()
+    }
+    return result
   }
 
-  try {
+  // ── Twilio path — never touches ringcentral_user_connections ─────
+  if (provider === 'twilio') {
+    try {
+      const result = await sendSmsTwilio(normalizedTo.normalized, text)
+      const { data, error } = await saveComm('sent', result.sid, null)
+      if (error) {
+        console.error('[SMS/Twilio] Failed to save communication record:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      await logAuditEvent({
+        actorUserId: user.id,
+        action: 'sms_sent',
+        entityType: 'communication',
+        entityId: data?.id ?? opportunityId ?? customerId,
+        newData: { provider: 'twilio', sid: result.sid, to: maskPhone(normalizedTo.normalized) } as unknown as Json,
+        ipAddress: req.headers.get('x-forwarded-for'),
+        userAgent: req.headers.get('user-agent'),
+      })
+      return NextResponse.json({ success: true, provider: 'twilio', sid: result.sid }, { status: 200 })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Twilio SMS failed.'
+      console.error('[SMS/Twilio] Send error:', msg)
+      await saveComm('failed', null, msg)
+      await logAuditEvent({
+        actorUserId: user.id,
+        action: 'sms_failed',
+        entityType: 'communication',
+        entityId: opportunityId ?? customerId,
+        newData: { provider: 'twilio', error: msg, to: maskPhone(normalizedTo.normalized) } as unknown as Json,
+        ipAddress: req.headers.get('x-forwarded-for'),
+        userAgent: req.headers.get('user-agent'),
+      })
+      return NextResponse.json({ error: msg }, { status: 502 })
+    }
+  }
+
+  // ── RingCentral path — only reached when SMS_PROVIDER=ringcentral ─
+  if (provider === 'ringcentral') {
     let ringCentralConnection: Awaited<ReturnType<typeof getRingCentralUserConnection>>
     try {
       ringCentralConnection = await getRingCentralUserConnection(user.id)
     } catch (err) {
-      throw new RingCentralCallError(err instanceof Error ? err.message : 'RingCentral user connection failed.', {
-        code: 'RINGCENTRAL_USER_CONNECTION_FAILED',
-      })
+      const msg = err instanceof Error ? err.message : 'RingCentral connection failed.'
+      console.error('[SMS/RingCentral] Connection error:', msg)
+      await saveComm('failed', null, msg)
+      return NextResponse.json({ error: msg }, { status: 503 })
     }
 
-    if (!ringCentralConnection && !isRingCentralSmsConfigured()) {
-      const missing = getMissingRingCentralSmsEnv()
-      throw new RingCentralCallError(`RingCentral SMS is not configured. Missing: ${missing.join(', ')}`, {
-        code: 'RINGCENTRAL_SMS_NOT_CONFIGURED',
-      })
-    }
     if (!ringCentralConnection) {
-      throw new RingCentralCallError('Connect your RingCentral account in Settings > Integrations before sending SMS.', {
-        code: 'RINGCENTRAL_USER_NOT_CONNECTED',
+      const msg = 'Connect your RingCentral account in Settings > Integrations before sending SMS.'
+      await saveComm('failed', null, msg)
+      return NextResponse.json({ error: msg }, { status: 503 })
+    }
+
+    try {
+      const result = await sendSmsViaRingCentral({
+        to: normalizedTo.normalized,
+        from: ringCentralConnection.smsFromNumber,
+        accessToken: ringCentralConnection.accessToken,
+        text,
       })
+      const { data, error } = await saveComm('sent', result.id ?? null, null)
+      if (error) {
+        console.error('[SMS/RingCentral] Failed to save communication record:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      await logAuditEvent({
+        actorUserId: user.id,
+        action: 'sms_sent',
+        entityType: 'communication',
+        entityId: data?.id ?? opportunityId ?? customerId,
+        newData: { provider: 'ringcentral', messageId: result.id ?? null, to: maskPhone(normalizedTo.normalized) } as unknown as Json,
+        ipAddress: req.headers.get('x-forwarded-for'),
+        userAgent: req.headers.get('user-agent'),
+      })
+      return NextResponse.json({ success: true, provider: 'ringcentral', result }, { status: 200 })
+    } catch (err) {
+      const msg = err instanceof RingCentralCallError
+        ? err.message
+        : err instanceof Error ? err.message : 'RingCentral SMS failed.'
+      console.error('[SMS/RingCentral] Send error:', msg)
+      await saveComm('failed', null, msg)
+      await logAuditEvent({
+        actorUserId: user.id,
+        action: 'sms_failed',
+        entityType: 'communication',
+        entityId: opportunityId ?? customerId,
+        newData: { provider: 'ringcentral', error: msg, to: maskPhone(normalizedTo.normalized) } as unknown as Json,
+        ipAddress: req.headers.get('x-forwarded-for'),
+        userAgent: req.headers.get('user-agent'),
+      })
+      return NextResponse.json({ error: msg }, { status: err instanceof RingCentralCallError && err.status ? err.status : 502 })
     }
-
-    const result = await sendSmsViaRingCentral({
-      to: normalizedTo.normalized,
-      from: ringCentralConnection.smsFromNumber,
-      accessToken: ringCentralConnection.accessToken,
-      text,
-    })
-
-    const { data, error } = await saveCommunication('sent', result.id ?? null, null)
-
-    if (error) {
-      console.error('Saving SMS communication failed:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    await logAuditEvent({
-      actorUserId: user.id,
-      action: 'sms_sent',
-      entityType: 'communication',
-      entityId: data.id,
-      oldData: null,
-      newData: data,
-      ipAddress: req.headers.get('x-forwarded-for'),
-      userAgent: req.headers.get('user-agent'),
-    })
-
-    return NextResponse.json({ success: true, result, comm: data }, { status: 200 })
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'SMS send failed'
-    const responseMessage = errorMessage.startsWith('RingCentral is not configured.')
-      ? errorMessage
-      : `RingCentral SMS failed: ${errorMessage}`
-
-    const { data: failedComm, error: failedCommError } = await saveCommunication('failed', null, errorMessage)
-    if (failedCommError) console.error('Saving failed SMS communication failed:', failedCommError)
-
-    console.error('SMS send error:', {
-      message: errorMessage,
-      status: err instanceof RingCentralCallError ? err.status : undefined,
-      code: err instanceof RingCentralCallError ? err.code : undefined,
-      details: err instanceof RingCentralCallError ? err.details : undefined,
-    })
-
-    await logAuditEvent({
-      actorUserId: user.id,
-      action: 'sms_failed',
-      entityType: 'communication',
-      entityId: failedComm?.id ?? null,
-      oldData: null,
-      newData: {
-        error: errorMessage,
-        opportunityId,
-        customerId,
-        phoneNumber: normalizedTo.normalized,
-        templateId,
-      } as unknown as Json,
-      ipAddress: req.headers.get('x-forwarded-for'),
-      userAgent: req.headers.get('user-agent'),
-    })
-    return NextResponse.json(
-      { error: responseMessage, comm: failedComm ?? null },
-      { status: err instanceof RingCentralCallError && err.status ? err.status : 500 },
-    )
   }
+
+  return NextResponse.json({ error: 'SMS provider is not configured.' }, { status: 503 })
 }
