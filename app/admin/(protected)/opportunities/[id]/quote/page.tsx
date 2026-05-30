@@ -21,6 +21,7 @@ import QuickEditModal from '@/components/admin/modals/QuickEditModal'
 import EditAddressModal, { type EditAddressData } from '@/components/admin/modals/EditAddressModal'
 import ChargesSection from '@/components/admin/charges/ChargesSection'
 import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
+import TariffRecommendationPanel from '@/components/admin/charges/TariffRecommendationPanel'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
@@ -247,6 +248,7 @@ export default function OpportunityDetailPage() {
   const [charges, setCharges] = useState<OpportunityCharge[]>([])
   const [chargesLoading, setChargesLoading] = useState(false)
   const [chargePanelOpen, setChargePanelOpen] = useState(false)
+  const [tariffPreFill, setTariffPreFill] = useState<Record<string, unknown> | null>(null)
   const [editingCharge, setEditingCharge] = useState<OpportunityCharge | null>(null)
   const [deletingChargeId, setDeletingChargeId] = useState<string | null>(null)
 
@@ -1420,11 +1422,24 @@ export default function OpportunityDetailPage() {
                 </div>
               </div>
 
+              {/* Tariff recommendation */}
+              <TariffRecommendationPanel
+                serviceType={opp.service_type}
+                moveSize={opp.move_size}
+                moveDate={opp.service_date}
+                hasExistingLaborCharge={charges.some(c => c.charge_type === 'moving_labor')}
+                onApplyPackage={config => {
+                  setTariffPreFill(config as unknown as Record<string, unknown>)
+                  setEditingCharge(null)
+                  setChargePanelOpen(true)
+                }}
+              />
+
               {/* Charges */}
               <ChargesSection
                 charges={charges}
-                onAddCharge={() => { setEditingCharge(null); setChargePanelOpen(true) }}
-                onEditCharge={c => { setEditingCharge(c); setChargePanelOpen(true) }}
+                onAddCharge={() => { setTariffPreFill(null); setEditingCharge(null); setChargePanelOpen(true) }}
+                onEditCharge={c => { setTariffPreFill(null); setEditingCharge(c); setChargePanelOpen(true) }}
                 onDeleteCharge={deleteCharge}
                 deleting={deletingChargeId}
               />
@@ -1784,8 +1799,9 @@ export default function OpportunityDetailPage() {
         oppId={opp.id}
         editingCharge={editingCharge}
         charges={charges}
-        onClose={() => { setChargePanelOpen(false); setEditingCharge(null) }}
-        onSaved={fetchCharges}
+        defaultLaborConfig={tariffPreFill}
+        onClose={() => { setChargePanelOpen(false); setEditingCharge(null); setTariffPreFill(null) }}
+        onSaved={() => { fetchCharges(); setTariffPreFill(null) }}
       />
 
       {showDeleteConfirm && (

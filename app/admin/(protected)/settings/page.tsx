@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { PlugZap } from 'lucide-react'
+import { PlugZap, Tag } from 'lucide-react'
 
 export default function SettingsPage() {
   return (
@@ -21,6 +21,20 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-sm font-semibold text-slate-950">Integrations</h2>
               <p className="mt-1 text-sm text-slate-500">Diagnostics for RingCentral, Resend, Stripe, Supabase, and portal config.</p>
+            </div>
+          </div>
+        </Link>
+        <Link
+          href="/admin/settings/tariffs"
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-kratos/60 hover:shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-kratos/10 text-kratos">
+              <Tag size={20} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-950">Tariffs & Packages</h2>
+              <p className="mt-1 text-sm text-slate-500">Silver & Gold package rates, move size rules, and return travel logic.</p>
             </div>
           </div>
         </Link>

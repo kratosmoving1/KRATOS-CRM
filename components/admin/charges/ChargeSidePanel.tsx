@@ -566,9 +566,11 @@ interface ChargeSidePanelProps {
   charges: OpportunityCharge[]
   onClose: () => void
   onSaved: () => void
+  /** Pre-filled config for Moving Labor when opened from the tariff recommendation panel */
+  defaultLaborConfig?: Record<string, unknown> | null
 }
 
-export default function ChargeSidePanel({ open, oppId, editingCharge, charges, onClose, onSaved }: ChargeSidePanelProps) {
+export default function ChargeSidePanel({ open, oppId, editingCharge, charges, onClose, onSaved, defaultLaborConfig }: ChargeSidePanelProps) {
   const [screen, setScreen] = useState<'categories' | 'form'>('categories')
   const [selectedType, setSelectedType] = useState<ChargeType | null>(null)
   const [formResult, setFormResult] = useState<Partial<ChargeFormResult> | null>(null)
@@ -579,17 +581,20 @@ export default function ChargeSidePanel({ open, oppId, editingCharge, charges, o
     .filter(c => c.charge_type === 'moving_labor')
     .reduce((s, c) => s + c.subtotal, 0)
 
-  // Pre-select type when editing
+  // Pre-select type when editing or when tariff pre-fill is provided
   useEffect(() => {
     if (editingCharge) {
       setSelectedType(editingCharge.charge_type)
+      setScreen('form')
+    } else if (defaultLaborConfig) {
+      setSelectedType('moving_labor')
       setScreen('form')
     } else {
       setScreen('categories')
       setSelectedType(null)
     }
     setFormResult(null)
-  }, [editingCharge, open])
+  }, [editingCharge, open, defaultLaborConfig])
 
   function handleCategorySelect(type: ChargeType) {
     setSelectedType(type)
@@ -640,6 +645,8 @@ export default function ChargeSidePanel({ open, oppId, editingCharge, charges, o
         subtotal: editingCharge.subtotal,
         is_overridden: editingCharge.is_overridden,
       }
+    : defaultLaborConfig && selectedType === 'moving_labor'
+    ? { config: defaultLaborConfig }
     : undefined
 
   function renderForm() {
