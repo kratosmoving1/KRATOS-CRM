@@ -24,7 +24,7 @@ import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
 import TariffRecommendationPanel from '@/components/admin/charges/TariffRecommendationPanel'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
-import { OPP_STATUSES, MOVE_SIZE_LABELS } from '@/lib/constants'
+import { OPP_STATUSES, MOVE_SIZE_LABELS, MOVE_SIZE_VOLUME } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { formatCurrency } from '@/lib/format'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
@@ -116,6 +116,23 @@ function getDaysUntilMove(moveDate: string | null | undefined): string | null {
   if (diff === 1) return 'Tomorrow'
   if (diff > 1) return `${diff} days`
   return 'Move passed'
+}
+
+// Maps DB move_size values to MOVE_SIZE_VOLUME keys
+const MOVE_SIZE_VOLUME_MAP: Record<string, string> = {
+  studio: 'studio', studio_apartment: 'studio',
+  '1_bedroom': '1_bed', '1_bedroom_apartment': '1_bed', '1_bedroom_house': '1_bed',
+  '2_bedroom': '2_bed', '2_bedroom_apartment': '2_bed', '2_bedroom_house': '2_bed',
+  '3_bedroom': '3_bed', '3_bedroom_apartment': '3_bed', '3_bedroom_house': '3_bed',
+  '4_bedroom': '4_bed', '4_bedroom_apartment': '4_bed', '4_bedroom_house': '4_bed',
+  '5_bedroom_plus': '5_bed_plus', '5_bedroom_house_plus': '5_bed_plus',
+  office: 'small_office', storage: 'pod',
+}
+
+function getVolumeForMoveSize(moveSize: string | null | undefined) {
+  if (!moveSize) return null
+  const key = MOVE_SIZE_VOLUME_MAP[moveSize]
+  return key ? (MOVE_SIZE_VOLUME[key] ?? null) : null
 }
 
 interface CommunicationTemplate {
@@ -286,6 +303,7 @@ export default function OpportunityDetailPage() {
   const [paymentStatus, setPaymentStatus] = useState('received')
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [notesTab, setNotesTab] = useState<'internal' | 'customer' | 'crew' | 'dispatcher'>('internal')
 
   const load = useCallback(async () => {
     try {
@@ -1310,21 +1328,31 @@ export default function OpportunityDetailPage() {
                 <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Total</h2>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Total Amount</span>
+                    <span className="text-slate-500">Estimate total</span>
                     <span className="font-semibold text-slate-900">
-                      {opp.total_amount > 0 ? formatCurrency(opp.total_amount) : '—'}
+                      {estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Est. Cost</span>
+                    <span className="text-slate-500">Deposit required</span>
                     <span className="font-semibold text-slate-900">
-                      {opp.can_view_profitability && opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
+                      {formatCurrency(opp.deposit_amount ?? 150)}
                     </span>
                   </div>
-                  {opp.can_view_profitability && opp.total_amount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total paid</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-100 pt-2">
+                    <span className="font-medium text-slate-700">Balance due</span>
+                    <span className={`font-bold ${balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid'}
+                    </span>
+                  </div>
+                  {opp.can_view_profitability && estimateTotal > 0 && (
                     <div className="flex justify-between border-t border-slate-100 pt-2">
-                      <span className="font-medium text-slate-600">Profit</span>
-                      <span className={`font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      <span className="text-slate-500">Est. profit</span>
+                      <span className={`font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                         {formatCurrency(profit)}
                       </span>
                     </div>
@@ -1355,33 +1383,94 @@ export default function OpportunityDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Left: move details + addresses + notes */}
             <div className="space-y-4 lg:col-span-2">
-              {/* 4 stat cards */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Total</p>
-                  <p className="mt-1 text-lg font-bold text-slate-900">
-                    {estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Cost</p>
-                  <p className="mt-1 text-lg font-bold text-slate-900">
-                    {opp.can_view_profitability && opp.estimated_cost > 0 ? formatCurrency(opp.estimated_cost) : '—'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Profit</p>
-                  <p className={`mt-1 text-lg font-bold ${profit < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                    {opp.can_view_profitability && opp.total_amount > 0 ? formatCurrency(profit) : '—'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Size</p>
-                  <p className="mt-1 text-lg font-bold text-slate-900 capitalize">
-                    {opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'}
-                  </p>
-                </div>
-              </div>
+              {/* Stat cards */}
+              {(() => {
+                const vol = getVolumeForMoveSize(opp.move_size)
+                const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
+                const lc = laborCharge?.config ?? {}
+                const pkgName = lc.package_name as string | null
+                const numTrucks = Number(lc.num_trucks ?? 1)
+                const numCrew = Number(lc.num_crew ?? 2)
+                const hourlyRate = Number(lc.hourly_rate ?? 0)
+                const billableHours = Number(lc.billable_hours ?? lc.labor_hours ?? 0)
+                const travelHours = Number(lc.travel_hours ?? 0)
+                const loadHours = Number(lc.load_hours ?? 0)
+                const unloadHours = Number(lc.unload_hours ?? 0)
+                const bufferHours = Number(lc.handling_buffer_hours ?? 0)
+                const hasLaborCharge = Boolean(laborCharge)
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {/* Move Size + Volume */}
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Size</p>
+                        <p className="mt-1 text-base font-bold text-slate-900 capitalize leading-tight">
+                          {opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'}
+                        </p>
+                        {vol && <p className="mt-0.5 text-[10px] text-slate-400">{vol.cuft.toLocaleString()} cu ft · {vol.lbs.toLocaleString()} lbs</p>}
+                      </div>
+                      {/* Estimated Total */}
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Total</p>
+                        <p className="mt-1 text-base font-bold text-slate-900">
+                          {estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'}
+                        </p>
+                        {balanceDue > 0 && <p className="mt-0.5 text-[10px] text-slate-400">Balance: {formatCurrency(balanceDue)}</p>}
+                      </div>
+                      {/* Profit */}
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Profit</p>
+                        <p className={`mt-1 text-base font-bold ${profit < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {opp.can_view_profitability && estimateTotal > 0 ? formatCurrency(profit) : '—'}
+                        </p>
+                        {opp.can_view_profitability && estimateTotal > 0 && (
+                          <p className="mt-0.5 text-[10px] text-slate-400">{Math.round((profit / estimateTotal) * 100)}% margin</p>
+                        )}
+                      </div>
+                      {/* Package / Rate */}
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Package</p>
+                        <p className="mt-1 text-base font-bold text-slate-900">{pkgName ?? '—'}</p>
+                        {hourlyRate > 0 && <p className="mt-0.5 text-[10px] text-slate-400">{formatCurrency(hourlyRate)}/hr</p>}
+                      </div>
+                    </div>
+
+                    {/* Job Summary — only shown when a Moving Labor charge exists */}
+                    {hasLaborCharge && (
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Job Summary</h2>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 text-sm">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Crew</p>
+                            <p className="mt-0.5 font-semibold text-slate-900">{numTrucks} truck · {numCrew} movers</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Hourly rate</p>
+                            <p className="mt-0.5 font-semibold text-slate-900">{formatCurrency(hourlyRate)}/hr</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Labour time</p>
+                            <p className="mt-0.5 font-semibold text-slate-900">{billableHours}h billable</p>
+                            {(loadHours > 0 || unloadHours > 0 || bufferHours > 0) && (
+                              <p className="text-[10px] text-slate-400">
+                                {loadHours}h load · {unloadHours}h unload · {bufferHours}h buffer
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Travel time</p>
+                            <p className="mt-0.5 font-semibold text-slate-900">{travelHours}h</p>
+                            {lc.distance_km != null && (
+                              <p className="text-[10px] text-slate-400">{String(lc.distance_km)} km · {String(lc.drive_time_minutes ?? '?')} min drive</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* Trip info: origin + dest */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -1445,18 +1534,50 @@ export default function OpportunityDetailPage() {
                 deleting={deletingChargeId}
               />
 
-              {/* Notes */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Internal Notes</h2>
-                <textarea
-                  rows={5}
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  onBlur={saveNotes}
-                  placeholder="Add internal notes…"
-                  className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
-                />
-                {notesSaving && <p className="mt-1 text-xs text-slate-400">Saving…</p>}
+              {/* Notes — tabbed */}
+              <div className="rounded-xl border border-slate-200 bg-white">
+                {/* Tab bar */}
+                <div className="flex items-center gap-0 border-b border-slate-200 px-4 pt-3">
+                  {([
+                    { key: 'internal',   label: 'Internal Notes' },
+                    { key: 'customer',   label: 'Customer Notes' },
+                    { key: 'crew',       label: 'Crew Notes' },
+                    { key: 'dispatcher', label: 'Dispatcher Notes' },
+                  ] as const).map(t => (
+                    <button
+                      key={t.key}
+                      onClick={() => setNotesTab(t.key)}
+                      className={cn(
+                        'mr-1 rounded-t px-3 py-2 text-xs font-semibold transition-colors',
+                        notesTab === t.key
+                          ? 'border-b-2 border-kratos text-slate-900'
+                          : 'text-slate-400 hover:text-slate-700',
+                      )}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="p-4">
+                  {notesTab === 'internal' ? (
+                    <>
+                      <textarea
+                        rows={5}
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        onBlur={saveNotes}
+                        placeholder="Add internal notes visible only to agents…"
+                        className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                      />
+                      {notesSaving && <p className="mt-1 text-xs text-slate-400">Saving…</p>}
+                    </>
+                  ) : (
+                    <div className="py-6 text-center text-sm text-slate-400">
+                      <p className="font-medium capitalize">{notesTab.replace('_', ' ')} coming soon.</p>
+                      <p className="mt-1 text-xs">This note type will be available after the next schema update.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1472,8 +1593,9 @@ export default function OpportunityDetailPage() {
               </PanelSection>
 
               <PanelSection title="Payments" icon={CreditCard}>
-                <MoneyRow label="Total Paid" value={formatCurrency(totalPaid)} />
-                <MoneyRow label="Balance Due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
+                <MoneyRow label="Deposit required" value={opp.deposit_amount ? formatCurrency(opp.deposit_amount) : formatCurrency(150)} />
+                <MoneyRow label="Total paid" value={formatCurrency(totalPaid)} />
+                <MoneyRow label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
                 <button
                   onClick={() => setPaymentDrawerOpen(true)}
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:-translate-y-px hover:shadow-md"
@@ -1500,7 +1622,10 @@ export default function OpportunityDetailPage() {
                 title="Inventory"
                 icon={Boxes}
                 body={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g, ' ')) : 'No inventory yet'}
-                detail="Inventory itemization will be added to the quote builder."
+                detail={(() => {
+                  const v = getVolumeForMoveSize(opp.move_size)
+                  return v ? `~${v.cuft.toLocaleString()} cu ft · ~${v.lbs.toLocaleString()} lbs estimated` : 'Inventory itemization will be added to the quote builder.'
+                })()}
               />
 
               <PanelActionSection
