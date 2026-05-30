@@ -821,41 +821,47 @@ export default function OpportunityDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Left: composer + timeline */}
             <div className="space-y-4 lg:col-span-2">
-              {/* Stats strip */}
-              <div className="grid grid-cols-5 gap-2">
+              {/* Stats strip — 6 cards */}
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                 {[
-                  { label: 'Calls',       value: String(callCount) },
-                  { label: 'Texts',       value: String(smsCount) },
-                  { label: 'Emails',      value: String(emailCount) },
-                  { label: 'Notes',       value: String(noteCount) },
-                  { label: 'Follow-ups',  value: String(followUpCount) },
+                  { label: 'Calls',      value: String(callCount) },
+                  { label: 'Texts',      value: String(smsCount) },
+                  { label: 'Emails',     value: String(emailCount) },
+                  { label: 'Notes',      value: String(noteCount) },
+                  { label: 'Follow-ups', value: String(followUpCount) },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center">
                     <p className="text-xl font-bold text-slate-900">{value}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
                   </div>
                 ))}
-              </div>
-              {/* Days until move banner */}
-              {daysUntilMove && (
+                {/* Days Until Move as 6th card */}
                 <div className={cn(
-                  'flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold',
-                  daysUntilMove === 'Move passed'
-                    ? 'border-slate-200 bg-slate-50 text-slate-500'
+                  'rounded-xl border px-3 py-3 text-center',
+                  !daysUntilMove
+                    ? 'border-slate-200 bg-white'
+                    : daysUntilMove === 'Move passed'
+                    ? 'border-slate-200 bg-slate-50'
                     : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow'
-                    ? 'border-amber-200 bg-amber-50 text-amber-800'
-                    : 'border-slate-200 bg-slate-50 text-slate-700',
+                    ? 'border-amber-200 bg-amber-50'
+                    : 'border-slate-200 bg-white',
                 )}>
-                  <Clock size={14} className="shrink-0" />
-                  {daysUntilMove === 'Move passed'
-                    ? 'Move date has passed'
-                    : daysUntilMove === 'Today'
-                    ? 'Move is today'
-                    : daysUntilMove === 'Tomorrow'
-                    ? 'Move is tomorrow'
-                    : `Move in ${daysUntilMove}`}
+                  <p className={cn(
+                    'text-base font-bold leading-tight',
+                    !daysUntilMove ? 'text-slate-400'
+                    : daysUntilMove === 'Move passed' ? 'text-slate-400'
+                    : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow' ? 'text-amber-700'
+                    : 'text-slate-900',
+                  )}>
+                    {!daysUntilMove ? '—'
+                      : daysUntilMove === 'Move passed' ? 'Passed'
+                      : daysUntilMove === 'Today' ? 'Today'
+                      : daysUntilMove === 'Tomorrow' ? 'Tmrw'
+                      : daysUntilMove}
+                  </p>
+                  <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Days to Move</p>
                 </div>
-              )}
+              </div>
 
               {/* Communication composer */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -1472,41 +1478,55 @@ export default function OpportunityDetailPage() {
                 )
               })()}
 
-              {/* Trip info: origin + dest */}
+              {/* Stops — numbered SmartMoving-style */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Trip Info</h2>
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                        <MapPin size={12} /> Origin
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => openAddressEdit('origin')}
-                        className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        title="Edit origin address"
-                      >
-                        <Pencil size={12} />
-                      </button>
+                <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Stops</h2>
+                <div className="space-y-4">
+                  {/* Stop 1 — Origin / Pickup */}
+                  <div className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">1</div>
+                      <div className="mt-1 w-px flex-1 bg-slate-200" />
                     </div>
-                    <AddressBlock prefix="origin" data={opp} />
+                    <div className="min-w-0 flex-1 pb-4">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
+                          <MapPin size={11} /> Pickup / Origin
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => openAddressEdit('origin')}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Edit origin"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      </div>
+                      <AddressBlock prefix="origin" data={opp} />
+                    </div>
                   </div>
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                        <MapPin size={12} /> Destination
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => openAddressEdit('dest')}
-                        className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        title="Edit destination address"
-                      >
-                        <Pencil size={12} />
-                      </button>
+
+                  {/* Stop 2 — Destination / Drop-off */}
+                  <div className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-kratos text-[11px] font-bold text-slate-950">2</div>
                     </div>
-                    <AddressBlock prefix="dest" data={opp} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
+                          <MapPin size={11} /> Drop-off / Destination
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => openAddressEdit('dest')}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Edit destination"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      </div>
+                      <AddressBlock prefix="dest" data={opp} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1583,6 +1603,25 @@ export default function OpportunityDetailPage() {
 
             {/* Right sidebar */}
             <div className="space-y-3">
+              {/* Information card */}
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                    <ClipboardCheck size={14} />
+                  </span>
+                  <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Information</h2>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <InfoRow label="Quote #" value={formatQuoteNumber(opp.opportunity_number)} />
+                  <InfoRow label="Status" value={OPP_STATUSES.find(s => s.value === opp.status)?.label ?? opp.status} />
+                  <InfoRow label="Agent" value={opp.agent?.full_name ?? '—'} />
+                  <InfoRow label="Source" value={opp.lead_source?.name ?? '—'} />
+                  <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
+                  <InfoRow label="Move date" value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} />
+                  <InfoRow label="Move size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
+                </div>
+              </section>
+
               <PanelSection title="Quote Total" icon={ShieldCheck}>
                 <MoneyRow label="Subtotal" value={subtotal > 0 ? formatCurrency(subtotal) : '—'} />
                 <MoneyRow label="Discounts" value={discounts > 0 ? `-${formatCurrency(discounts)}` : '—'} />
