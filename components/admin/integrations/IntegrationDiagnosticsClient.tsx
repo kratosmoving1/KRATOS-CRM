@@ -11,6 +11,7 @@ import {
   Loader2,
   LogOut,
   Mail,
+  MessageSquare,
   PhoneCall,
   RefreshCw,
   Send,
@@ -20,6 +21,18 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 type Diagnostics = {
+  sms?: {
+    provider: string
+    canSend: boolean
+    reason?: string | null
+    recommendation?: string | null
+    envVars?: {
+      SMS_PROVIDER?:       { present: boolean; value?: string | null }
+      TWILIO_ACCOUNT_SID?: { present: boolean }
+      TWILIO_AUTH_TOKEN?:  { present: boolean }
+      TWILIO_FROM_NUMBER?: { present: boolean; masked?: string | null }
+    }
+  }
   resend: {
     configured: boolean
     status: string
@@ -274,6 +287,13 @@ export default function IntegrationDiagnosticsClient() {
     </a>
   )
 
+  const twilioReady = diagnostics.sms?.provider === 'twilio' && diagnostics.sms?.canSend
+  const twilioStatus = twilioReady ? 'ok' : diagnostics.sms?.provider === 'twilio' ? 'not_configured' : 'warning'
+  const smsProviderLabel = diagnostics.sms?.provider === 'twilio' ? 'Twilio'
+    : diagnostics.sms?.provider === 'ringcentral' ? 'RingCentral'
+    : diagnostics.sms?.provider ?? 'Not set'
+  const ev = diagnostics.sms?.envVars
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -282,10 +302,84 @@ export default function IntegrationDiagnosticsClient() {
         </button>
       </div>
 
+      {/* ── Twilio SMS ─────────────────────────────────────────── */}
+      {diagnostics.sms && (
+        <IntegrationCard
+          icon={<MessageSquare size={19} />}
+          title="Twilio SMS"
+          description="Outbound SMS for estimates, follow-ups, and customer communication. Twilio is the SMS provider — RingCentral is for calling only."
+          status={twilioStatus}
+          statusLabel={twilioReady ? 'Ready' : 'Needs setup'}
+        >
+          <div className="space-y-4">
+            {!twilioReady && (
+              <SetupNotice>
+                {diagnostics.sms.reason ?? 'Twilio SMS is not configured.'}
+                {diagnostics.sms.recommendation && (
+                  <span> {diagnostics.sms.recommendation}</span>
+                )}
+              </SetupNotice>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="SMS Provider" value={<span className="font-semibold">{smsProviderLabel}</span>} />
+              <Field
+                label="SMS_PROVIDER env var"
+                value={ev?.SMS_PROVIDER?.present ? (ev.SMS_PROVIDER.value ?? 'set') : 'Not set — Twilio auto-detected when vars present'}
+              />
+              <Field
+                label="From number"
+                value={
+                  ev?.TWILIO_FROM_NUMBER?.present
+                    ? (ev.TWILIO_FROM_NUMBER.masked ?? 'set')
+                    : <span className="text-red-600">Missing</span>
+                }
+              />
+              <Field label="Delivery" value={
+                <StatusBadge
+                  status={diagnostics.sms.canSend ? 'ok' : 'not_configured'}
+                  label={diagnostics.sms.canSend ? 'Active' : 'Not active'}
+                />
+              } />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Account SID</p>
+                <div className="mt-2">
+                  <StatusBadge
+                    status={ev?.TWILIO_ACCOUNT_SID?.present ?? false}
+                    label={ev?.TWILIO_ACCOUNT_SID?.present ? 'Present' : 'Missing'}
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Auth Token</p>
+                <div className="mt-2">
+                  <StatusBadge
+                    status={ev?.TWILIO_AUTH_TOKEN?.present ?? false}
+                    label={ev?.TWILIO_AUTH_TOKEN?.present ? 'Present' : 'Missing'}
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">From Number</p>
+                <div className="mt-2">
+                  <StatusBadge
+                    status={ev?.TWILIO_FROM_NUMBER?.present ?? false}
+                    label={ev?.TWILIO_FROM_NUMBER?.present ? `${ev.TWILIO_FROM_NUMBER.masked}` : 'Missing'}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </IntegrationCard>
+      )}
+
       <IntegrationCard
         icon={<PhoneCall size={19} />}
         title="RingCentral"
-        description="Connect each CRM user to their RingCentral account so calls and texts are sent from the correct extension."
+        description="Click-to-call only. Connect each CRM user to their RingCentral account for outbound calling. SMS is handled by Twilio."
         status={ringcentralStatus}
         statusLabel={ringcentralStatusLabel}
         action={ringcentralAction}
@@ -324,7 +418,7 @@ export default function IntegrationDiagnosticsClient() {
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">OAuth/JWT Check</p>
               <div className="mt-2"><StatusBadge status={diagnostics.ringcentral.authStatus} label={diagnostics.ringcentral.authStatus === 'ok' ? 'Verified' : 'Issue'} /></div>
@@ -332,10 +426,6 @@ export default function IntegrationDiagnosticsClient() {
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Calling</p>
               <div className="mt-2"><StatusBadge status={diagnostics.ringcentral.fromNumber.callCapable} label={diagnostics.ringcentral.fromNumber.callCapable ? 'Available' : 'Unavailable'} /></div>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Texting</p>
-              <div className="mt-2"><StatusBadge status={diagnostics.ringcentral.smsFromNumber?.smsCapable ?? false} label={diagnostics.ringcentral.smsFromNumber?.smsCapable ? 'Available' : 'Unavailable'} /></div>
             </div>
           </div>
         </div>

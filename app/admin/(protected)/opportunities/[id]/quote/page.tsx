@@ -917,7 +917,11 @@ export default function OpportunityDetailPage() {
                     </div>
                   ) : smsStatus?.canSend ? (
                     <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-3.5 py-2 text-xs text-green-800">
-                      SMS delivery active via <span className="font-semibold capitalize">{smsStatus.provider}</span>. Message will be sent to the customer&apos;s phone.
+                      SMS delivery active via <span className="font-semibold">{
+                        smsStatus.provider === 'twilio' ? 'Twilio'
+                        : smsStatus.provider === 'ringcentral' ? 'RingCentral'
+                        : smsStatus.provider
+                      }</span>. Message will be sent to the customer&apos;s phone.
                     </div>
                   ) : null
                 )}

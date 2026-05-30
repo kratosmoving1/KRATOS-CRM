@@ -372,11 +372,15 @@ export async function GET(req: NextRequest) {
   }
 
   const smsStatus = getSmsDeliveryStatus()
-  const smsEnvVars: Record<string, { present: boolean }> = {
-    SMS_PROVIDER: { present: Boolean(process.env.SMS_PROVIDER) },
+  const rawFromNumber = process.env.TWILIO_FROM_NUMBER ?? ''
+  const maskedFromNumber = rawFromNumber.length >= 4
+    ? `****${rawFromNumber.slice(-4)}`
+    : rawFromNumber ? '****' : null
+  const smsEnvVars = {
+    SMS_PROVIDER:       { present: Boolean(process.env.SMS_PROVIDER), value: process.env.SMS_PROVIDER ?? null },
     TWILIO_ACCOUNT_SID: { present: Boolean(process.env.TWILIO_ACCOUNT_SID) },
-    TWILIO_AUTH_TOKEN: { present: Boolean(process.env.TWILIO_AUTH_TOKEN) },
-    TWILIO_FROM_NUMBER: { present: Boolean(process.env.TWILIO_FROM_NUMBER) },
+    TWILIO_AUTH_TOKEN:  { present: Boolean(process.env.TWILIO_AUTH_TOKEN) },
+    TWILIO_FROM_NUMBER: { present: Boolean(process.env.TWILIO_FROM_NUMBER), masked: maskedFromNumber },
   }
 
   const [ringcentral, ringcentralUser, resend, stripe, portal] = await Promise.all([
