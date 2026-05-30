@@ -1424,6 +1424,7 @@ export default function OpportunityDetailPage() {
 
               {/* Tariff recommendation */}
               <TariffRecommendationPanel
+                opportunityId={id}
                 serviceType={opp.service_type}
                 moveSize={opp.move_size}
                 moveDate={opp.service_date}

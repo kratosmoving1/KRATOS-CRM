@@ -391,8 +391,20 @@ export async function GET(req: NextRequest) {
     portalDiagnostics(),
   ])
 
+  const googleMapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_SERVER_API_KEY
+  const googleMaps = {
+    configured: Boolean(googleMapsKey),
+    hasPublicKey: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
+    hasServerKey: Boolean(process.env.GOOGLE_MAPS_SERVER_API_KEY),
+    status: googleMapsKey ? 'ok' : 'not_configured',
+    message: googleMapsKey
+      ? 'Google Maps API key is configured. Address autocomplete and travel time estimation are active.'
+      : 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set. Address autocomplete and travel time estimation are disabled.',
+  }
+
   return NextResponse.json({
     environment: getEnvironment(),
+    googleMaps,
     sms: {
       provider: getSmsProvider(),
       canSend: smsStatus.canSend,

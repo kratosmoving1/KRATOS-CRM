@@ -11,6 +11,7 @@ import {
   Loader2,
   LogOut,
   Mail,
+  MapPin,
   MessageSquare,
   PhoneCall,
   RefreshCw,
@@ -21,6 +22,13 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 type Diagnostics = {
+  googleMaps?: {
+    configured: boolean
+    hasPublicKey: boolean
+    hasServerKey: boolean
+    status: string
+    message: string
+  }
   sms?: {
     provider: string
     canSend: boolean
@@ -301,6 +309,43 @@ export default function IntegrationDiagnosticsClient() {
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
+
+      {/* ── Google Maps ─────────────────────────────────────────── */}
+      {diagnostics.googleMaps && (
+        <IntegrationCard
+          icon={<MapPin size={19} />}
+          title="Google Maps"
+          description="Address autocomplete and server-side travel time estimation for quotes."
+          status={diagnostics.googleMaps.status}
+          statusLabel={diagnostics.googleMaps.configured ? 'Configured' : 'Not configured'}
+        >
+          <div className="space-y-3">
+            {!diagnostics.googleMaps.configured && (
+              <SetupNotice>
+                {diagnostics.googleMaps.message}
+                {' Add '}
+                <span className="font-mono">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</span>
+                {' in Vercel to enable address autocomplete and travel time estimates on quotes.'}
+              </SetupNotice>
+            )}
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Status" value={
+                <StatusBadge status={diagnostics.googleMaps.configured} label={diagnostics.googleMaps.configured ? 'Configured' : 'Missing'} />
+              } />
+              <Field label="Public key (autocomplete)" value={
+                <StatusBadge status={diagnostics.googleMaps.hasPublicKey} label={diagnostics.googleMaps.hasPublicKey ? 'Present' : 'Missing'} />
+              } />
+              <Field label="Server key (travel time)" value={
+                <StatusBadge
+                  status={diagnostics.googleMaps.hasServerKey || diagnostics.googleMaps.hasPublicKey}
+                  label={diagnostics.googleMaps.hasServerKey ? 'Dedicated key' : diagnostics.googleMaps.hasPublicKey ? 'Using public key' : 'Missing'}
+                />
+              } />
+            </div>
+            <p className="text-xs text-slate-500">{diagnostics.googleMaps.message}</p>
+          </div>
+        </IntegrationCard>
+      )}
 
       {/* ── Twilio SMS ─────────────────────────────────────────── */}
       {diagnostics.sms && (
