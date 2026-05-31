@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronRight, Edit2, RefreshCw, Trash2, Loader2,
-  MapPin, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
+  MapPin, Map, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
   ClipboardCheck, ShieldCheck, Calendar, Pencil,
@@ -38,6 +38,49 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
 const CALL_OUTCOMES: Record<string, string> = {
   connected: 'Connected', voicemail: 'Voicemail', no_answer: 'No Answer',
   wrong_number: 'Wrong Number', busy: 'Busy',
+}
+
+const DISPATCH_ADDRESS = '27 Roytec Rd, Woodbridge, ON L4L 8E3, Canada'
+
+interface TripLeg {
+  label: string
+  from: string
+  to: string
+  distanceKm: number
+  driveTimeMinutes: number
+}
+
+type TravelEstimateResult =
+  | {
+      ok: true
+      distanceKm: number
+      driveTimeMinutes: number
+      directDriveHours: number
+      returnTravelHours: number
+      recommendedTravelHours: number | null
+      manualReviewRequired: boolean
+      note: string | null
+      provider: string
+      legs?: TripLeg[]
+      totalDistanceKm?: number
+      totalDriveTimeMinutes?: number
+      dispatchAddress?: string
+    }
+  | { ok: false; reason: string; message: string; provider?: string }
+
+function formatMinutes(m: number): string {
+  if (m < 60) return `${m} min`
+  const h = Math.floor(m / 60)
+  const mins = m % 60
+  return mins > 0 ? `${h}h ${mins}m` : `${h}h`
+}
+
+function buildMapsUrl(opp: OppDetail): string | null {
+  const origin = [opp.origin_address_line1, opp.origin_city, opp.origin_province].filter(Boolean).join(', ')
+  const dest = [opp.dest_address_line1, opp.dest_city, opp.dest_province].filter(Boolean).join(', ')
+  if (!origin || !dest) return null
+  const stops = [DISPATCH_ADDRESS, origin, dest, DISPATCH_ADDRESS]
+  return `https://www.google.com/maps/dir/${stops.map(encodeURIComponent).join('/')}`
 }
 
 function formatDate(d: string | null | undefined) {
@@ -276,6 +319,10 @@ export default function OpportunityDetailPage() {
   const [editingCharge, setEditingCharge] = useState<OpportunityCharge | null>(null)
   const [deletingChargeId, setDeletingChargeId] = useState<string | null>(null)
 
+  // Trip data (distances between stops — fetched when estimate tab opens)
+  const [tripData, setTripData] = useState<TravelEstimateResult | null>(null)
+  const [tripDataLoading, setTripDataLoading] = useState(false)
+
   // SMS delivery status (fetched once)
   const [smsStatus, setSmsStatus] = useState<{ canSend: boolean; provider: string; reason?: string; recommendation?: string } | null>(null)
   const [smsStatusLoading, setSmsStatusLoading] = useState(false)
@@ -489,7 +536,21 @@ export default function OpportunityDetailPage() {
     finally { setChargesLoading(false) }
   }, [id])
 
-  useEffect(() => { if (tab === 'estimate') fetchCharges() }, [tab, fetchCharges])
+  const fetchTripData = useCallback(async () => {
+    setTripDataLoading(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/travel-estimate`, { cache: 'no-store' })
+      if (res.ok) setTripData(await res.json())
+    } catch {}
+    finally { setTripDataLoading(false) }
+  }, [id])
+
+  useEffect(() => {
+    if (tab === 'estimate') {
+      fetchCharges()
+      fetchTripData()
+    }
+  }, [tab, fetchCharges, fetchTripData])
 
   async function deleteCharge(chargeId: string) {
     setDeletingChargeId(chargeId)
@@ -1577,58 +1638,127 @@ export default function OpportunityDetailPage() {
                 )
               })()}
 
-              {/* Stops — numbered SmartMoving-style */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Stops</h2>
-                <div className="space-y-4">
-                  {/* Stop 1 — Origin / Pickup */}
-                  <div className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">1</div>
-                      <div className="mt-1 w-px flex-1 bg-slate-200" />
-                    </div>
-                    <div className="min-w-0 flex-1 pb-4">
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
-                          <MapPin size={11} /> Pickup / Origin
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => openAddressEdit('origin')}
-                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="Edit origin"
+              {/* Trip Info — SmartMoving-style with dispatch, legs, map */}
+              {(() => {
+                const mapsUrl = buildMapsUrl(opp)
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                      <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Stops</h2>
+                      {mapsUrl && (
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
                         >
-                          <Pencil size={11} />
-                        </button>
-                      </div>
-                      <AddressBlock prefix="origin" data={opp} />
+                          <Map size={12} /> Map
+                        </a>
+                      )}
                     </div>
-                  </div>
 
-                  {/* Stop 2 — Destination / Drop-off */}
-                  <div className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-kratos text-[11px] font-bold text-slate-950">2</div>
+                    {/* Leg badge strip */}
+                    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-2.5 min-h-[38px]">
+                      {tripDataLoading ? (
+                        <>
+                          <div className="h-5 w-32 animate-pulse rounded-full bg-slate-100" />
+                          <div className="h-5 w-24 animate-pulse rounded-full bg-slate-100" />
+                          <div className="h-5 w-28 animate-pulse rounded-full bg-slate-100" />
+                          <div className="h-5 w-28 animate-pulse rounded-full bg-slate-100" />
+                        </>
+                      ) : tripData?.ok && tripData.legs?.length ? (
+                        <>
+                          <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-bold text-white">
+                            RT {formatMinutes(tripData.totalDriveTimeMinutes ?? 0)} / {tripData.totalDistanceKm ?? 0} km
+                          </span>
+                          {tripData.legs.map(leg => (
+                            <span key={leg.label} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                              {leg.label}&nbsp;&nbsp;{formatMinutes(leg.driveTimeMinutes)} / {leg.distanceKm} km
+                            </span>
+                          ))}
+                        </>
+                      ) : tripData?.ok === false && tripData.reason !== 'missing_addresses' ? (
+                        <span className="text-[10px] text-amber-600">{tripData.message}</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">
+                          {(!opp.origin_address_line1 || !opp.dest_address_line1)
+                            ? 'Add addresses to see trip distances'
+                            : 'Calculating distances…'}
+                        </span>
+                      )}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
-                          <MapPin size={11} /> Drop-off / Destination
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => openAddressEdit('dest')}
-                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="Edit destination"
-                        >
-                          <Pencil size={11} />
-                        </button>
+
+                    {/* Stop list */}
+                    <div className="p-5">
+                      {/* DISPATCH */}
+                      <div className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white">
+                            <div className="h-2 w-2 rounded-full bg-slate-400" />
+                          </div>
+                          <div className="mt-1 w-px flex-1 bg-slate-200" style={{ minHeight: 20 }} />
+                        </div>
+                        <div className="pb-4 min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Dispatch</p>
+                          <p className="text-sm text-slate-600">{DISPATCH_ADDRESS}</p>
+                        </div>
                       </div>
-                      <AddressBlock prefix="dest" data={opp} />
+
+                      {/* ORIGIN */}
+                      <div className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">
+                            1
+                          </div>
+                          <div className="mt-1 w-px flex-1 bg-slate-200" style={{ minHeight: 20 }} />
+                        </div>
+                        <div className="pb-4 min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                              <MapPin size={10} /> Pick-up / Origin
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => openAddressEdit('origin')}
+                              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              title="Edit origin"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          </div>
+                          <AddressBlock prefix="origin" data={opp} />
+                        </div>
+                      </div>
+
+                      {/* DESTINATION */}
+                      <div className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-kratos text-[11px] font-bold text-slate-950">
+                            2
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                              <MapPin size={10} /> Drop-off / Destination
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => openAddressEdit('dest')}
+                              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              title="Edit destination"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          </div>
+                          <AddressBlock prefix="dest" data={opp} />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                )
+              })()}
 
               {/* Tariff recommendation */}
               <TariffRecommendationPanel

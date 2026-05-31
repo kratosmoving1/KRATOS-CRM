@@ -2,8 +2,10 @@
  * Server-side travel time estimate using Google Maps Distance Matrix API.
  * The API key is never exposed to the client.
  *
- * Reads origin + destination from the opportunity record.
- * Falls back to static distance table if Google Maps is unavailable.
+ * Returns all 3 legs of the full trip:
+ *   Leg 1: Dispatch → Origin
+ *   Leg 2: Origin → Destination  (also returned as top-level fields for backward compat)
+ *   Leg 3: Destination → Dispatch (return trip)
  *
  * Env vars (in priority order):
  *   GOOGLE_MAPS_SERVER_API_KEY — server-only key (preferred)
@@ -13,6 +15,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { recommendReturnTravel } from '@/lib/tariff/packages'
+
+const DISPATCH_ADDRESS = '27 Roytec Rd, Woodbridge, ON L4L 8E3, Canada'
 
 type GoogleDistanceMatrixRow = {
   elements: Array<{
@@ -115,16 +119,22 @@ export async function GET(
     return NextResponse.json({
       ok: false,
       reason: 'missing_addresses',
-      message: 'Add origin and destination addresses to calculate travel time.',
+      message: 'Add origin and destination addresses to calculate trip distances.',
     })
   }
 
   const apiKey = getApiKey()
 
-  // ── Try Google Maps ───────────────────────────────────────────────────────
+  // ── Try Google Maps — fetch all 3 legs in parallel ────────────────────────
   if (apiKey) {
     try {
-      const { distanceKm, driveTimeMinutes } = await fetchGoogleMapsDistance(originStr, destStr, apiKey)
+      const [leg1, leg2, leg3] = await Promise.all([
+        fetchGoogleMapsDistance(DISPATCH_ADDRESS, originStr, apiKey),   // Dispatch → Origin
+        fetchGoogleMapsDistance(originStr, destStr, apiKey),            // Origin → Destination
+        fetchGoogleMapsDistance(destStr, DISPATCH_ADDRESS, apiKey),     // Destination → Dispatch (return)
+      ])
+
+      const { distanceKm, driveTimeMinutes } = leg2
       const driveTimeHours = Math.round((driveTimeMinutes / 60) * 100) / 100
       const travelRec = recommendReturnTravel(distanceKm)
 
@@ -132,38 +142,46 @@ export async function GET(
         ? null
         : minutesToBillableHours(driveTimeMinutes) + travelRec.returnHours
 
+      const totalDistanceKm = Math.round((leg1.distanceKm + leg2.distanceKm + leg3.distanceKm) * 10) / 10
+      const totalDriveTimeMinutes = leg1.driveTimeMinutes + leg2.driveTimeMinutes + leg3.driveTimeMinutes
+
       return NextResponse.json({
         ok: true,
         provider: 'google_maps',
+        // O→D fields — kept for backward compat with TariffRecommendationPanel
         distanceKm,
         driveTimeMinutes,
         driveTimeHours,
-        // Direct drive time (one-way) as billable reference
         directDriveHours: minutesToBillableHours(driveTimeMinutes),
-        // Return travel surcharge on top of direct drive
         returnTravelHours: travelRec.returnHours,
-        // Total recommended billable travel (direct + return if > 40km)
         recommendedTravelHours: recommendedBillableHours,
         manualReviewRequired: travelRec.requiresManualReview,
         note: travelRec.note,
         origin: originStr,
         destination: destStr,
+        // Full trip data — used by Trip Info section in quote page
+        dispatchAddress: DISPATCH_ADDRESS,
+        legs: [
+          { label: 'D → O',      from: 'Dispatch',    to: 'Origin',      distanceKm: leg1.distanceKm, driveTimeMinutes: leg1.driveTimeMinutes },
+          { label: 'O → D',      from: 'Origin',      to: 'Destination', distanceKm: leg2.distanceKm, driveTimeMinutes: leg2.driveTimeMinutes },
+          { label: 'D → Return', from: 'Destination', to: 'Dispatch',    distanceKm: leg3.distanceKm, driveTimeMinutes: leg3.driveTimeMinutes },
+        ],
+        totalDistanceKm,
+        totalDriveTimeMinutes,
       }, { headers: { 'Cache-Control': 'no-store' } })
     } catch (err) {
       console.warn('[TravelEstimate] Google Maps failed, using fallback:', err instanceof Error ? err.message : err)
-      // Fall through to static fallback
     }
   }
 
   // ── Static fallback — no Google Maps or API call failed ──────────────────
-  // We can't compute distance without Maps, so return a prompt for manual entry
   return NextResponse.json({
     ok: false,
     provider: apiKey ? 'google_maps_failed' : 'not_configured',
     reason: apiKey ? 'google_maps_error' : 'no_api_key',
     message: apiKey
-      ? 'Google Maps request failed. Enter travel time manually.'
-      : 'Google Maps is not configured (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY not set). Enter travel time manually.',
+      ? 'Google Maps request failed. Check that your API key has Distance Matrix API enabled.'
+      : 'Google Maps is not configured. Check NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.',
     origin: originStr,
     destination: destStr,
   })
