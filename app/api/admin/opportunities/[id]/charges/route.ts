@@ -121,6 +121,69 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     updated_by:      user.id,
   }
 
+  if (charge_type === 'moving_labor') {
+    const { data: existingLabor } = await supabase
+      .from('opportunity_charges')
+      .select('*')
+      .eq('opportunity_id', params.id)
+      .eq('charge_type', 'moving_labor')
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingLabor) {
+      const updatePayload = {
+        charge_type,
+        name:            insertPayload.name,
+        description:     insertPayload.description,
+        config,
+        subtotal,
+        discount_type,
+        discount_value,
+        discount_amount,
+        total,
+        is_overridden:   insertPayload.is_overridden,
+        override_reason: insertPayload.override_reason,
+        sort_order:      existingLabor.sort_order,
+        updated_by:      user.id,
+      }
+
+      const { data: updated, error } = await supabase
+        .from('opportunity_charges')
+        .update(updatePayload)
+        .eq('id', existingLabor.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('charges POST update existing labor error:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      await supabase.from('audit_log').insert({
+        user_id:     user.id,
+        entity_type: 'opportunity',
+        entity_id:   params.id,
+        action:      'update',
+        diff:        { event: 'main_package_updated', chargeId: existingLabor.id, charge_type, total },
+      })
+
+      await logAuditEvent({
+        actorUserId: user.id,
+        action: 'update',
+        entityType: 'opportunity_charge',
+        entityId: existingLabor.id,
+        oldData: existingLabor as unknown as Json,
+        newData: updated as unknown as Json,
+        ipAddress: req.headers.get('x-forwarded-for'),
+        userAgent: req.headers.get('user-agent'),
+      })
+
+      return NextResponse.json(updated)
+    }
+  }
+
   const { data: charge, error } = await supabase
     .from('opportunity_charges')
     .insert(insertPayload)

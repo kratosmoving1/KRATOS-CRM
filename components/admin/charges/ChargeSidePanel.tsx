@@ -708,11 +708,13 @@ export default function ChargeSidePanel({ open, oppId, editingCharge, charges, o
 
   if (!open) return null
 
+  // When a tariff prefill is provided alongside an existing charge, use the tariff
+  // values for the config (rates/hours) while keeping the charge's discount.
   const editInitial = editingCharge
     ? {
         name: editingCharge.name,
         description: editingCharge.description,
-        config: editingCharge.config,
+        config: (defaultLaborConfig && selectedType === 'moving_labor') ? defaultLaborConfig : editingCharge.config,
         discount_type: editingCharge.discount_type,
         discount_value: editingCharge.discount_value,
         subtotal: editingCharge.subtotal,

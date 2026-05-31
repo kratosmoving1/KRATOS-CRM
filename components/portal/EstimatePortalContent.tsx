@@ -7,6 +7,7 @@ import { CheckCircle2, ChevronDown, ChevronUp, Loader2, Minus, Plus, Shield, X }
 import { formatCurrency } from '@/lib/format'
 import { PORTAL_MATERIALS, type PortalMaterial } from '@/lib/portal/materials'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
+import { TARIFF_PACKAGES } from '@/lib/tariff/packages'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,12 @@ function addr(parts: Array<string | null | undefined>) {
   return parts.filter(Boolean).join(', ') || 'To be confirmed'
 }
 
+function packageDisplayName(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return 'Moving Package'
+  return /package$/i.test(trimmed) ? trimmed : `${trimmed} Package`
+}
+
 const PROTECTION_OPTIONS = [
   {
     id: 'basic',
@@ -93,12 +100,18 @@ export default function EstimatePortalContent({ data, token, isPreview, alreadyS
   // Labor charge breakdown
   const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
   const lc = laborCharge?.config ?? {}
+  const packageName = packageDisplayName(String(lc.package_name ?? 'Moving Package'))
   const hourlyRate = Number(lc.hourly_rate ?? 0)
+  const laborHours = Number(lc.labor_hours ?? 0)
   const billableHours = Number(lc.billable_hours ?? lc.labor_hours ?? 0)
   const travelHours = Number(lc.travel_hours ?? 0)
-  const totalHours = billableHours + travelHours
   const numTrucks = Number(lc.num_trucks ?? 1)
   const numCrew = Number(lc.num_crew ?? 2)
+  const isGold = packageName.toLowerCase().includes('gold')
+  const packageRateLabel = isGold
+    ? `${formatCurrency(hourlyRate)}/hr${hourlyRate >= TARIFF_PACKAGES.gold.weekendRate ? ' peak' : ' weekday'}`
+    : `${formatCurrency(hourlyRate)}/hr`
+  const supplementaryCharges = charges.filter(c => c.charge_type !== 'moving_labor')
 
   // Materials state (client-side only for MVP)
   const [materialQty, setMaterialQty] = useState<Record<string, number>>({})
@@ -207,16 +220,21 @@ export default function EstimatePortalContent({ data, token, isPreview, alreadyS
 
         {/* ── Estimate summary card ─────────────────────────────────────────── */}
         <div className="rounded-2xl bg-slate-950 p-5 text-white">
-          {hourlyRate > 0 ? (
+          {laborCharge && hourlyRate > 0 ? (
             <>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Hourly Rate</p>
-              <p className="mt-1 text-4xl font-bold text-kratos">{formatCurrency(hourlyRate)}<span className="text-lg font-semibold text-slate-400">/hr</span></p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Recommended package</p>
+              <p className="mt-1 text-3xl font-bold text-kratos">{packageName}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-200">{numTrucks} truck · {numCrew} movers</p>
+              <p className="mt-3 text-xl font-bold text-white">{packageRateLabel}</p>
+              {isGold && hourlyRate < TARIFF_PACKAGES.gold.weekendRate && (
+                <p className="mt-1 text-xs text-slate-400">Peak/weekend Gold rate is {formatCurrency(TARIFF_PACKAGES.gold.weekendRate)}/hr when applicable.</p>
+              )}
               <div className="mt-4 space-y-1.5 text-sm">
-                {billableHours > 0 && <SummaryRow label={`Labour time (${numTrucks} truck, ${numCrew} movers)`} value={`${billableHours}h × ${formatCurrency(hourlyRate)}`} />}
-                {travelHours > 0 && <SummaryRow label="Travel time" value={`${travelHours}h`} />}
-                {totalHours > 0 && <SummaryRow label="Total billed hours" value={`${totalHours}h`} bold />}
+                {laborHours > 0 && <SummaryRow label="Estimated labour" value={`${laborHours}h`} />}
+                {travelHours > 0 && <SummaryRow label="Estimated travel" value={`${travelHours}h`} />}
+                {billableHours > 0 && <SummaryRow label="Total billable hours" value={`${billableHours}h`} bold />}
                 <div className="my-2 border-t border-white/10" />
-                {charges.filter(c => c.charge_type !== 'moving_labor').map((c, i) => (
+                {supplementaryCharges.map((c, i) => (
                   <SummaryRow key={i} label={c.name} value={formatCurrency(c.total)} />
                 ))}
                 {discounts > 0 && <SummaryRow label="Discounts" value={`− ${formatCurrency(discounts)}`} />}
@@ -232,7 +250,7 @@ export default function EstimatePortalContent({ data, token, isPreview, alreadyS
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Estimated Total</p>
               <p className="mt-2 text-4xl font-bold text-kratos">{formatCurrency(grandTotal)}</p>
               <div className="mt-4 space-y-1.5 text-sm">
-                {charges.map((c, i) => <SummaryRow key={i} label={c.name} value={formatCurrency(c.total)} />)}
+                {supplementaryCharges.map((c, i) => <SummaryRow key={i} label={c.name} value={formatCurrency(c.total)} />)}
                 {discounts > 0 && <SummaryRow label="Discounts" value={`− ${formatCurrency(discounts)}`} />}
                 {materialsSubtotal > 0 && <SummaryRow label="Moving materials" value={formatCurrency(materialsSubtotal)} />}
                 <SummaryRow label="HST (13%)" value={formatCurrency(grandHst)} />
@@ -259,23 +277,16 @@ export default function EstimatePortalContent({ data, token, isPreview, alreadyS
         </div>
 
         {/* ── Charge breakdown ─────────────────────────────────────────────── */}
-        {charges.length > 0 && (
+        {supplementaryCharges.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="text-sm font-bold text-slate-900">Estimate Breakdown</h2>
             <div className="mt-4 divide-y divide-slate-100 text-sm">
-              {charges.map((c, i) => (
+              {supplementaryCharges.map((c, i) => (
                 <div key={i} className="py-3">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold text-slate-900">{c.name}</span>
                     <span className="shrink-0 font-semibold text-slate-900">{formatCurrency(c.total)}</span>
                   </div>
-                  {c.charge_type === 'moving_labor' && hourlyRate > 0 && billableHours > 0 && (
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {billableHours}h billable × {formatCurrency(hourlyRate)}/hr
-                      {travelHours > 0 ? ` · ${travelHours}h travel` : ''}
-                      {` · ${numTrucks} truck, ${numCrew} movers`}
-                    </p>
-                  )}
                   {c.discount_amount > 0 && (
                     <p className="mt-0.5 text-xs text-green-700">Discount applied: − {formatCurrency(c.discount_amount)}</p>
                   )}

@@ -41,7 +41,7 @@ export const TARIFF_PACKAGES: Record<PackageName, TariffPackage> = {
     numTrucks: 1,
     numCrew: 3,
     weekdayRate: 229.99,
-    weekendRate: 299.99,
+    weekendRate: 239.99,
     description: 'Best for 2-bedroom+ moves, heavy inventory, or stairs/access challenges.',
     badge: '1 truck · 3 movers',
   },

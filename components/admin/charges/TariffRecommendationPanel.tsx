@@ -182,7 +182,6 @@ export default function TariffRecommendationPanel({
             isSelected={activePkg === recommendation.primary}
             onSelect={() => setSelectedPackage(recommendation.primary)}
             onApply={() => onApplyPackage(buildApplyConfig(recommendation.primary))}
-            hasExistingCharge={hasExistingLaborCharge}
           />
           {recommendation.alternative && (
             <PackageCard
@@ -193,7 +192,6 @@ export default function TariffRecommendationPanel({
               isSelected={activePkg === recommendation.alternative}
               onSelect={() => setSelectedPackage(recommendation.alternative!)}
               onApply={() => onApplyPackage(buildApplyConfig(recommendation.alternative!))}
-              hasExistingCharge={hasExistingLaborCharge}
             />
           )}
         </div>
@@ -306,7 +304,7 @@ export default function TariffRecommendationPanel({
 
         {hasExistingLaborCharge && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            A Moving Labor charge already exists. Applying a package will add another — edit or remove the existing charge first if needed.
+            A Moving Labor package already exists. Applying a package will update the current main package.
           </p>
         )}
       </div>
@@ -317,10 +315,10 @@ export default function TariffRecommendationPanel({
 // ── Package card ──────────────────────────────────────────────────────────────
 
 function PackageCard({
-  pkg, moveDate, label, labelColor, isSelected, onSelect, onApply, hasExistingCharge,
+  pkg, moveDate, label, labelColor, isSelected, onSelect, onApply,
 }: {
   pkg: PackageName; moveDate: string | null; label: string; labelColor: string
-  isSelected: boolean; onSelect: () => void; onApply: () => void; hasExistingCharge: boolean
+  isSelected: boolean; onSelect: () => void; onApply: () => void
 }) {
   const p = TARIFF_PACKAGES[pkg]
   const rate = getRateForDate(pkg, moveDate)
@@ -355,7 +353,7 @@ function PackageCard({
         onClick={e => { e.stopPropagation(); onApply() }}
         className="mt-3 w-full rounded-lg bg-kratos py-2 text-xs font-bold text-slate-950 hover:opacity-90 transition-opacity"
       >
-        {hasExistingCharge ? 'Add as Additional Charge' : 'Apply Package'}
+        Apply as Main Package
       </button>
     </div>
   )

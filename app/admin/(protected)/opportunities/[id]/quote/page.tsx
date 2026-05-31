@@ -7,7 +7,7 @@ import {
   ChevronRight, Edit2, RefreshCw, Trash2, Loader2,
   MapPin, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
-  WalletCards, X, CalendarPlus, Package, Boxes, ListTodo, ArrowRight,
+  WalletCards, X, CalendarPlus, Boxes, ArrowRight,
   ClipboardCheck, ShieldCheck, Calendar, Pencil,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -59,7 +59,8 @@ interface AuditEntry {
 interface OppDetail {
   id: string; opportunity_number: string; status: OppStatus
   service_type: string; service_date: string | null; move_size: string | null
-  total_amount: number; estimated_cost: number; deposit_amount?: number | null; notes: string | null
+  total_amount: number; estimated_cost: number; deposit_amount?: number | null
+  notes: string | null; customer_notes: string | null; crew_notes: string | null; dispatcher_notes: string | null
   origin_address_line1: string | null; origin_address_line2: string | null
   origin_city: string | null; origin_province: string | null
   origin_postal_code: string | null; origin_dwelling_type: string | null
@@ -133,6 +134,12 @@ function getVolumeForMoveSize(moveSize: string | null | undefined) {
   if (!moveSize) return null
   const key = MOVE_SIZE_VOLUME_MAP[moveSize]
   return key ? (MOVE_SIZE_VOLUME[key] ?? null) : null
+}
+
+function packageDisplayName(value: string | null | undefined) {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return null
+  return /package$/i.test(trimmed) ? trimmed : `${trimmed} Package`
 }
 
 interface CommunicationTemplate {
@@ -293,7 +300,12 @@ export default function OpportunityDetailPage() {
 
   // Notes (estimate tab)
   const [notes, setNotes] = useState('')
+  const [customerNotes, setCustomerNotes] = useState('')
+  const [crewNotes, setCrewNotes] = useState('')
+  const [dispatcherNotes, setDispatcherNotes] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
+  const [savingNoteField, setSavingNoteField] = useState<string | null>(null)
+  const [savingMoveSize, setSavingMoveSize] = useState(false)
   const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -312,6 +324,9 @@ export default function OpportunityDetailPage() {
       const data: OppDetail = await res.json()
       setOpp(data)
       setNotes(data.notes ?? '')
+      setCustomerNotes(data.customer_notes ?? '')
+      setCrewNotes(data.crew_notes ?? '')
+      setDispatcherNotes(data.dispatcher_notes ?? '')
     } catch { setError('Failed to load') }
     finally { setLoading(false) }
   }, [id])
@@ -363,17 +378,57 @@ export default function OpportunityDetailPage() {
     loadNoAnswerTemplates()
   }, [commType, commCallOutcome, noAnswerTemplates.length])
 
-  async function saveNotes() {
-    if (!opp || notes === opp.notes) return
+  async function saveNoteField(
+    field: 'notes' | 'customer_notes' | 'crew_notes' | 'dispatcher_notes',
+    value: string,
+  ) {
+    if (!opp || value === (opp[field] ?? '')) return
     setNotesSaving(true)
+    setSavingNoteField(field)
     try {
-      await fetch(`/api/admin/opportunities/${id}`, {
+      const res = await fetch(`/api/admin/opportunities/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ [field]: value }),
       })
-      setOpp(p => p ? { ...p, notes } : p)
-    } finally { setNotesSaving(false) }
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        toast.error(json.error ?? 'Failed to save notes')
+        return
+      }
+      setOpp(p => p ? { ...p, [field]: value } : p)
+      toast.success('Notes saved.')
+    } finally {
+      setNotesSaving(false)
+      setSavingNoteField(null)
+    }
+  }
+
+  function saveNotes() {
+    void saveNoteField('notes', notes)
+  }
+
+  async function saveMoveSize(value: string) {
+    if (!opp || value === (opp.move_size ?? '')) return
+    setSavingMoveSize(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ move_size: value || null }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? 'Failed to update move size')
+        return
+      }
+      setOpp(p => p ? { ...p, move_size: value || null } : p)
+      toast.success('Move size updated.')
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setSavingMoveSize(false)
+    }
   }
 
   function openDateEdit() {
@@ -451,6 +506,38 @@ export default function OpportunityDetailPage() {
       toast.error('Network error — please try again')
     } finally {
       setDeletingChargeId(null)
+    }
+  }
+
+  async function duplicateCharge(charge: OpportunityCharge) {
+    if (charge.charge_type === 'moving_labor') return
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/charges`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          charge_type: charge.charge_type,
+          name: `${charge.name} Copy`,
+          description: charge.description,
+          config: charge.config,
+          subtotal: charge.subtotal,
+          discount_type: charge.discount_type,
+          discount_value: charge.discount_value,
+          discount_amount: charge.discount_amount,
+          total: charge.total,
+          is_overridden: charge.is_overridden,
+          override_reason: charge.override_reason,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? 'Failed to duplicate charge')
+        return
+      }
+      toast.success('Charge duplicated.')
+      await fetchCharges()
+    } catch {
+      toast.error('Network error — please try again')
     }
   }
 
@@ -1394,7 +1481,7 @@ export default function OpportunityDetailPage() {
                 const vol = getVolumeForMoveSize(opp.move_size)
                 const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
                 const lc = laborCharge?.config ?? {}
-                const pkgName = lc.package_name as string | null
+                const pkgName = packageDisplayName(lc.package_name as string | null)
                 const numTrucks = Number(lc.num_trucks ?? 1)
                 const numCrew = Number(lc.num_crew ?? 2)
                 const hourlyRate = Number(lc.hourly_rate ?? 0)
@@ -1408,15 +1495,38 @@ export default function OpportunityDetailPage() {
                 return (
                   <>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      {/* Move Size + Volume */}
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Size</p>
-                        <p className="mt-1 text-base font-bold text-slate-900 capitalize leading-tight">
-                          {opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'}
-                        </p>
+                        <select
+                          value={opp.move_size ?? ''}
+                          onChange={event => saveMoveSize(event.target.value)}
+                          disabled={savingMoveSize}
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20 disabled:opacity-60"
+                        >
+                          <option value="">—</option>
+                          {Object.entries(MOVE_SIZE_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
                         {vol && <p className="mt-0.5 text-[10px] text-slate-400">{vol.cuft.toLocaleString()} cu ft · {vol.lbs.toLocaleString()} lbs</p>}
                       </div>
-                      {/* Estimated Total */}
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Date</p>
+                          <button
+                            type="button"
+                            onClick={openDateEdit}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            title="Edit move date"
+                          >
+                            <Calendar size={13} />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-base font-bold text-slate-900 leading-tight">
+                          {opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}
+                        </p>
+                        {daysUntilMove && <p className="mt-0.5 text-[10px] text-slate-400">{daysUntilMove}</p>}
+                      </div>
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Total</p>
                         <p className="mt-1 text-base font-bold text-slate-900">
@@ -1424,17 +1534,6 @@ export default function OpportunityDetailPage() {
                         </p>
                         {balanceDue > 0 && <p className="mt-0.5 text-[10px] text-slate-400">Balance: {formatCurrency(balanceDue)}</p>}
                       </div>
-                      {/* Profit */}
-                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Profit</p>
-                        <p className={`mt-1 text-base font-bold ${profit < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                          {opp.can_view_profitability && estimateTotal > 0 ? formatCurrency(profit) : '—'}
-                        </p>
-                        {opp.can_view_profitability && estimateTotal > 0 && (
-                          <p className="mt-0.5 text-[10px] text-slate-400">{Math.round((profit / estimateTotal) * 100)}% margin</p>
-                        )}
-                      </div>
-                      {/* Package / Rate */}
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Package</p>
                         <p className="mt-1 text-base font-bold text-slate-900">{pkgName ?? '—'}</p>
@@ -1539,8 +1638,9 @@ export default function OpportunityDetailPage() {
                 moveDate={opp.service_date}
                 hasExistingLaborCharge={charges.some(c => c.charge_type === 'moving_labor')}
                 onApplyPackage={config => {
+                  const existingLabor = charges.find(c => c.charge_type === 'moving_labor') ?? null
                   setTariffPreFill(config as unknown as Record<string, unknown>)
-                  setEditingCharge(null)
+                  setEditingCharge(existingLabor)
                   setChargePanelOpen(true)
                 }}
               />
@@ -1550,6 +1650,7 @@ export default function OpportunityDetailPage() {
                 charges={charges}
                 onAddCharge={() => { setTariffPreFill(null); setEditingCharge(null); setChargePanelOpen(true) }}
                 onEditCharge={c => { setTariffPreFill(null); setEditingCharge(c); setChargePanelOpen(true) }}
+                onDuplicateCharge={duplicateCharge}
                 onDeleteCharge={deleteCharge}
                 deleting={deletingChargeId}
               />
@@ -1579,24 +1680,43 @@ export default function OpportunityDetailPage() {
                   ))}
                 </div>
                 <div className="p-4">
-                  {notesTab === 'internal' ? (
-                    <>
-                      <textarea
-                        rows={5}
-                        value={notes}
-                        onChange={e => setNotes(e.target.value)}
-                        onBlur={saveNotes}
-                        placeholder="Add internal notes visible only to agents…"
-                        className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
-                      />
-                      {notesSaving && <p className="mt-1 text-xs text-slate-400">Saving…</p>}
-                    </>
-                  ) : (
-                    <div className="py-6 text-center text-sm text-slate-400">
-                      <p className="font-medium capitalize">{notesTab.replace('_', ' ')} coming soon.</p>
-                      <p className="mt-1 text-xs">This note type will be available after the next schema update.</p>
-                    </div>
+                  {notesTab === 'internal' && (
+                    <NoteEditor
+                      value={notes}
+                      onChange={setNotes}
+                      onBlur={saveNotes}
+                      placeholder="Add internal notes visible only to agents..."
+                      saving={savingNoteField === 'notes'}
+                    />
                   )}
+                  {notesTab === 'customer' && (
+                    <NoteEditor
+                      value={customerNotes}
+                      onChange={setCustomerNotes}
+                      onBlur={() => saveNoteField('customer_notes', customerNotes)}
+                      placeholder="Add customer-facing quote notes..."
+                      saving={savingNoteField === 'customer_notes'}
+                    />
+                  )}
+                  {notesTab === 'crew' && (
+                    <NoteEditor
+                      value={crewNotes}
+                      onChange={setCrewNotes}
+                      onBlur={() => saveNoteField('crew_notes', crewNotes)}
+                      placeholder="Add crew notes for move day..."
+                      saving={savingNoteField === 'crew_notes'}
+                    />
+                  )}
+                  {notesTab === 'dispatcher' && (
+                    <NoteEditor
+                      value={dispatcherNotes}
+                      onChange={setDispatcherNotes}
+                      onBlur={() => saveNoteField('dispatcher_notes', dispatcherNotes)}
+                      placeholder="Add dispatcher notes..."
+                      saving={savingNoteField === 'dispatcher_notes'}
+                    />
+                  )}
+                  {notesSaving && !savingNoteField && <p className="mt-1 text-xs text-slate-400">Saving...</p>}
                 </div>
               </div>
             </div>
@@ -1625,16 +1745,15 @@ export default function OpportunityDetailPage() {
               <PanelSection title="Quote Total" icon={ShieldCheck}>
                 <MoneyRow label="Subtotal" value={subtotal > 0 ? formatCurrency(subtotal) : '—'} />
                 <MoneyRow label="Discounts" value={discounts > 0 ? `-${formatCurrency(discounts)}` : '—'} />
-                <MoneyRow label="Sales Tax / HST" value={salesTax > 0 ? formatCurrency(salesTax) : '—'} />
+                <MoneyRow label="HST" value={salesTax > 0 ? formatCurrency(salesTax) : '—'} />
                 <div className="mt-3 border-t border-slate-100 pt-3">
                   <MoneyRow label="Estimate Total" value={estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'} strong />
                 </div>
-              </PanelSection>
-
-              <PanelSection title="Payments" icon={CreditCard}>
-                <MoneyRow label="Deposit required" value={opp.deposit_amount ? formatCurrency(opp.deposit_amount) : formatCurrency(150)} />
-                <MoneyRow label="Total paid" value={formatCurrency(totalPaid)} />
-                <MoneyRow label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <MoneyRow label="Deposit Required" value={formatCurrency(Number(opp.deposit_amount ?? 150) || 150)} />
+                  <MoneyRow label="Total Paid" value={formatCurrency(totalPaid)} />
+                  <MoneyRow label="Balance Due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
+                </div>
                 <button
                   onClick={() => setPaymentDrawerOpen(true)}
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:-translate-y-px hover:shadow-md"
@@ -1644,34 +1763,13 @@ export default function OpportunityDetailPage() {
               </PanelSection>
 
               <PanelActionSection
-                title="Survey"
-                icon={CalendarPlus}
-                body="Schedule survey"
-                detail="Survey scheduling will connect to dispatch/calendar later."
-              />
-
-              <PanelActionSection
-                title="Box Delivery"
-                icon={Package}
-                body="Schedule delivery"
-                detail="Box delivery workflow is planned for the operations module."
-              />
-
-              <PanelActionSection
                 title="Inventory"
                 icon={Boxes}
                 body={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g, ' ')) : 'No inventory yet'}
                 detail={(() => {
                   const v = getVolumeForMoveSize(opp.move_size)
-                  return v ? `~${v.cuft.toLocaleString()} cu ft · ~${v.lbs.toLocaleString()} lbs estimated` : 'Inventory itemization will be added to the quote builder.'
+                  return v ? `~${v.cuft.toLocaleString()} cu ft · ~${v.lbs.toLocaleString()} lbs estimated` : '—'
                 })()}
-              />
-
-              <PanelActionSection
-                title="Tasks"
-                icon={ListTodo}
-                body="No quote tasks yet"
-                detail="Task summaries will appear here once linked task reads are added."
               />
             </div>
           </div>
@@ -2063,5 +2161,33 @@ function MoneyRow({ label, value, strong = false }: { label: string; value: stri
       <span className={strong ? 'font-semibold text-slate-700' : 'text-slate-500'}>{label}</span>
       <span className={strong ? 'font-bold text-slate-950' : 'font-semibold text-slate-800'}>{value}</span>
     </div>
+  )
+}
+
+function NoteEditor({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  saving,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onBlur: () => void
+  placeholder: string
+  saving: boolean
+}) {
+  return (
+    <>
+      <textarea
+        rows={5}
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+      />
+      {saving && <p className="mt-1 text-xs text-slate-400">Saving...</p>}
+    </>
   )
 }
