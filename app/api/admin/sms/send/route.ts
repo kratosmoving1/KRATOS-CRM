@@ -3,14 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { hasPermission } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
-import { getSmsProvider, getSmsDeliveryStatus } from '@/lib/sms/provider'
+import { getSmsDeliveryStatus } from '@/lib/sms/provider'
 import { sendSmsTwilio } from '@/lib/sms/twilio'
-import {
-  sendSmsViaRingCentral,
-  renderTemplate,
-  RingCentralCallError,
-} from '@/lib/ringcentral/client'
-import { getRingCentralUserConnection } from '@/lib/ringcentral/oauth'
 import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 import type { Json } from '@/types/database'
 
@@ -18,6 +12,10 @@ const SMS_MAX_LENGTH = 1600
 
 function maskPhone(phone: string) {
   return phone.length > 4 ? `****${phone.slice(-4)}` : '****'
+}
+
+function renderTemplate(text: string, vars: Record<string, string | undefined>) {
+  return text.replace(/{{\s*([^}]+?)\s*}}/g, (_match, key: string) => vars[key.trim()] ?? '')
 }
 
 export async function POST(req: NextRequest) {
@@ -50,9 +48,9 @@ export async function POST(req: NextRequest) {
   const status = getSmsDeliveryStatus()
   if (!status.canSend) {
     return NextResponse.json({
-      error: `SMS delivery is not active: ${status.reason}`,
+      error: 'Twilio SMS is not configured.',
       recommendation: status.recommendation ?? null,
-      provider: status.provider,
+      provider: 'twilio',
     }, { status: 503 })
   }
 
@@ -126,13 +124,13 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!tpl) return NextResponse.json({ error: 'SMS template not found or inactive' }, { status: 404 })
-    text = (await renderTemplate(tpl.body, vars)).trim()
+    text = renderTemplate(tpl.body, vars).trim()
   }
 
   if (!text) return NextResponse.json({ error: 'Message body required' }, { status: 400 })
   if (text.length > SMS_MAX_LENGTH) return NextResponse.json({ error: 'Message too long (max 1600 chars)' }, { status: 400 })
 
-  const provider = getSmsProvider()
+  const provider = 'twilio'
 
   await logAuditEvent({
     actorUserId: user.id,
@@ -158,22 +156,8 @@ export async function POST(req: NextRequest) {
   try {
     let messageId: string | undefined
 
-    if (provider === 'twilio') {
-      const result = await sendSmsTwilio(normalized.normalized, text)
-      messageId = result.sid
-    } else if (provider === 'ringcentral') {
-      const conn = await getRingCentralUserConnection(user.id)
-      if (!conn) {
-        throw new Error('Connect your RingCentral account in Settings > Integrations before sending SMS.')
-      }
-      const result = await sendSmsViaRingCentral({
-        to: normalized.normalized,
-        from: conn.smsFromNumber,
-        accessToken: conn.accessToken,
-        text,
-      })
-      messageId = result.id
-    }
+    const result = await sendSmsTwilio(normalized.normalized, text)
+    messageId = result.sid
 
     const { data: comm, error: commErr } = await supabase
       .from('communications')
@@ -206,9 +190,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, delivered: true, provider, messageId: messageId ?? null }, { status: 200 })
 
   } catch (err) {
-    const errMsg = err instanceof RingCentralCallError
-      ? err.message
-      : err instanceof Error ? err.message : 'SMS send failed'
+    const errMsg = err instanceof Error ? err.message : 'SMS send failed'
 
     try {
       await supabase.from('communications').insert({ ...baseComm, status: 'failed' })

@@ -7,8 +7,7 @@
  * 1. SMS_PROVIDER=disabled  → disabled
  * 2. Twilio vars all present → twilio  (wins even over SMS_PROVIDER=ringcentral)
  * 3. SMS_PROVIDER=twilio    → twilio   (env vars may be missing; status will say why)
- * 4. SMS_PROVIDER=ringcentral with NO Twilio → ringcentral (legacy fallback)
- * 5. Anything else          → disabled
+ * 4. Anything else          → twilio status with missing-var guidance
  *
  * Rationale: RingCentral SMS is not active on this account (1-800 IVR number,
  * ringcentral_user_connections table not created). Twilio is the intended provider.
@@ -47,10 +46,7 @@ export function getSmsProvider(): SmsProvider {
   // getSmsDeliveryStatus() can show the specific missing vars.
   if (explicit === 'twilio') return 'twilio'
 
-  // RC SMS only as last resort if explicitly set and Twilio is not configured.
-  if (explicit === 'ringcentral') return 'ringcentral'
-
-  return 'disabled'
+  return 'twilio'
 }
 
 /** Synchronous capability check — no network calls. */
@@ -60,8 +56,8 @@ export function getSmsDeliveryStatus(): SmsDeliveryStatus {
   if (provider === 'disabled') {
     return {
       canSend: false,
-      provider,
-      reason: 'SMS is not configured.',
+      provider: 'twilio',
+      reason: 'Twilio SMS is not configured.',
       recommendation:
         'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in Vercel. ' +
         'SMS_PROVIDER=twilio is optional — Twilio is auto-detected when all three vars are present.',
@@ -76,35 +72,9 @@ export function getSmsDeliveryStatus(): SmsDeliveryStatus {
       return {
         canSend: false,
         provider,
-        reason: `Twilio SMS is not configured. Missing: ${missing.join(', ')}.`,
+        reason: 'Twilio SMS is not configured.',
         recommendation:
-          'Add the missing Twilio environment variables in Vercel → Settings → Environment Variables, then redeploy.',
-      }
-    }
-    return { canSend: true, provider }
-  }
-
-  if (provider === 'ringcentral') {
-    const missing = ['RINGCENTRAL_CLIENT_ID', 'RINGCENTRAL_CLIENT_SECRET', 'RINGCENTRAL_JWT'].filter(
-      k => !process.env[k],
-    )
-    if (missing.length) {
-      return {
-        canSend: false,
-        provider,
-        reason: `RingCentral is selected but missing: ${missing.join(', ')}.`,
-        recommendation:
-          'Switch to Twilio by adding TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER.',
-      }
-    }
-    const smsFrom = process.env.RINGCENTRAL_SMS_FROM_NUMBER || process.env.RINGCENTRAL_FROM_NUMBER
-    if (!smsFrom) {
-      return {
-        canSend: false,
-        provider,
-        reason: 'RINGCENTRAL_SMS_FROM_NUMBER is not set.',
-        recommendation:
-          'Switch to Twilio instead — set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.',
+          `Add the missing Twilio environment variables in Vercel: ${missing.join(', ')}.`,
       }
     }
     return { canSend: true, provider }

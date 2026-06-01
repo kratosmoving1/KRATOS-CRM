@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronRight, Edit2, RefreshCw, Trash2, Loader2,
-  MapPin, Map, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
+  MapPin, Map as MapIcon, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
   ClipboardCheck, ShieldCheck, Calendar, Pencil,
@@ -36,7 +36,7 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
 }
 
 const CALL_OUTCOMES: Record<string, string> = {
-  connected: 'Connected', voicemail: 'Voicemail', no_answer: 'No Answer',
+  connected: 'Connected', voicemail: 'Left Voicemail', no_answer: 'No Answer',
   wrong_number: 'Wrong Number', busy: 'Busy', left_live_message: 'Left Live Message',
   number_disconnected: 'Number Disconnected',
 }
@@ -1154,6 +1154,9 @@ export default function OpportunityDetailPage() {
                       if (tpl) {
                         setCommBody(applyMerge(tpl.body, opp))
                         if (fillSubject && tpl.subject) setCommSubject(applyMerge(tpl.subject, opp))
+                      } else {
+                        setCommBody('')
+                        if (fillSubject) setCommSubject('')
                       }
                       onChange(e.target.value)
                     }}
@@ -1518,8 +1521,8 @@ export default function OpportunityDetailPage() {
                   opportunityId={opp.id}
                   customerId={opp.customer?.id}
                   defaultNotes={
-                    commType === 'call' && commCallOutcome === 'no_answer'
-                      ? `Call back ${opp.customer?.full_name ?? 'customer'} — no answer`
+                    commType === 'call' && (commCallOutcome === 'no_answer' || commCallOutcome === 'busy')
+                      ? `Call back ${opp.customer?.full_name ?? 'customer'} — ${CALL_OUTCOMES[commCallOutcome].toLowerCase()}`
                       : commType === 'email'
                       ? `Follow up on estimate email with ${opp.customer?.full_name ?? 'customer'}`
                       : `Follow up with ${opp.customer?.full_name ?? 'customer'}`
@@ -1981,7 +1984,7 @@ export default function OpportunityDetailPage() {
                             rel="noopener noreferrer"
                             className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
                           >
-                            <Map size={12} /> Map
+                            <MapIcon size={12} /> Map
                           </a>
                         )}
                         <button

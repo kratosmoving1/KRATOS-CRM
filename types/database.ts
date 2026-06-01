@@ -186,7 +186,7 @@ export type Database = {
           direction: 'inbound' | 'outbound' | 'internal' | null
           subject: string | null
           body: string
-          call_outcome: 'connected' | 'voicemail' | 'no_answer' | 'wrong_number' | 'busy' | 'pending' | null
+          call_outcome: 'connected' | 'voicemail' | 'no_answer' | 'wrong_number' | 'busy' | 'pending' | 'left_live_message' | 'number_disconnected' | null
           call_duration_seconds: number | null
           phone_number: string | null
           status: string | null
