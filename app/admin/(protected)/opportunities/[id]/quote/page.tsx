@@ -75,6 +75,10 @@ function formatMinutes(m: number): string {
   return mins > 0 ? `${h}h ${mins}m` : `${h}h`
 }
 
+function getMonthLabel(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-CA', { month: 'long', year: 'numeric' })
+}
+
 function buildMapsUrl(opp: OppDetail): string | null {
   const origin = [opp.origin_address_line1, opp.origin_city, opp.origin_province].filter(Boolean).join(', ')
   const dest = [opp.dest_address_line1, opp.dest_city, opp.dest_province].filter(Boolean).join(', ')
@@ -230,9 +234,9 @@ function AddressBlock({ prefix, data }: { prefix: 'origin' | 'dest'; data: OppDe
 
 const COMM_TYPES = [
   { value: 'note',  label: 'Note',  icon: FileText },
+  { value: 'email', label: 'Email', icon: AtSign },
   { value: 'call',  label: 'Call',  icon: PhoneCall },
   { value: 'sms',   label: 'Text',  icon: MessageSquare },
-  { value: 'email', label: 'Email', icon: AtSign },
 ] as const
 
 type CommType = typeof COMM_TYPES[number]['value']
@@ -969,30 +973,24 @@ export default function OpportunityDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Left: composer + timeline */}
             <div className="space-y-4 lg:col-span-2">
-              {/* Stats strip — 6 cards */}
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {/* Stats strip — 4 items */}
+              <div className="grid grid-cols-4 gap-2">
                 {[
-                  { label: 'Calls',      value: String(callCount) },
-                  { label: 'Texts',      value: String(smsCount) },
-                  { label: 'Emails',     value: String(emailCount) },
-                  { label: 'Notes',      value: String(noteCount) },
-                  { label: 'Follow-ups', value: String(followUpCount) },
+                  { label: 'Calls',  value: String(callCount) },
+                  { label: 'Texts',  value: String(smsCount) },
+                  { label: 'Emails', value: String(emailCount) },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center">
                     <p className="text-xl font-bold text-slate-900">{value}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
                   </div>
                 ))}
-                {/* Days Until Move as 6th card */}
                 <div className={cn(
                   'rounded-xl border px-3 py-3 text-center',
-                  !daysUntilMove
-                    ? 'border-slate-200 bg-white'
-                    : daysUntilMove === 'Move passed'
-                    ? 'border-slate-200 bg-slate-50'
-                    : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow'
-                    ? 'border-amber-200 bg-amber-50'
-                    : 'border-slate-200 bg-white',
+                  !daysUntilMove ? 'border-slate-200 bg-white'
+                  : daysUntilMove === 'Move passed' ? 'border-slate-200 bg-slate-50'
+                  : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow' ? 'border-amber-200 bg-amber-50'
+                  : 'border-slate-200 bg-white',
                 )}>
                   <p className={cn(
                     'text-base font-bold leading-tight',
@@ -1261,109 +1259,129 @@ export default function OpportunityDetailPage() {
                         ? 'No activity yet — log a note, call, text, or email above.'
                         : `No ${activityFilter.replace('_', '-')} yet.`}
                     </p>
-                  ) : (
-                    <div className="space-y-4">
-                      {filteredTimeline.map(item => (
-                        <div key={item.id} className="flex gap-3">
-                          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
-                            {item._kind === 'communication' ? (
-                              <CommTypeIcon type={item.type ?? 'note'} />
-                            ) : item._kind === 'follow_up' ? (
-                              <CalendarPlus size={12} className="text-kratos" />
-                            ) : (
-                              <CheckCircle2 size={12} className="text-kratos" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            {item._kind === 'communication' ? (
-                              <>
-                                <div className="flex items-baseline gap-2 flex-wrap">
-                                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 capitalize">{item.type}</span>
-                                  {item.direction && item.direction !== 'internal' && (
-                                    <span className="text-[10px] rounded-full bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-500 capitalize">{item.direction}</span>
-                                  )}
-                                  {item.call_outcome && (
-                                    <span className="text-xs text-slate-400">— {CALL_OUTCOMES[item.call_outcome] ?? item.call_outcome}</span>
-                                  )}
-                                  {item.subject && (
-                                    <span className="text-xs font-medium text-slate-600 truncate">&ldquo;{item.subject}&rdquo;</span>
-                                  )}
-                                </div>
-                                {item.body && <p className="mt-0.5 text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>}
-                                <p className="mt-1 text-xs text-slate-400">
-                                  {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
-                                </p>
-                              </>
-                            ) : item._kind === 'follow_up' ? (
-                              <>
-                                <div className="flex items-baseline gap-2 flex-wrap">
-                                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Follow-up</span>
-                                  <span className="text-xs text-slate-500 capitalize">{item.type?.replace(/_/g,' ')}</span>
-                                  {item.status === 'completed' ? (
-                                    <span className="text-[10px] rounded-full bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">Completed</span>
-                                  ) : (
-                                    <span className="text-[10px] rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">Pending</span>
-                                  )}
-                                </div>
-                                <p className="mt-0.5 text-sm text-slate-700">
-                                  Due {item.follow_up_date}{item.follow_up_time ? ` at ${item.follow_up_time.slice(0,5)}` : ''}
-                                  {item.assignee_name ? ` · ${item.assignee_name}` : ''}
-                                </p>
-                                {item.notes && <p className="mt-0.5 text-sm text-slate-500 italic">{item.notes}</p>}
-                                <p className="mt-1 text-xs text-slate-400">
-                                  Created by {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
-                                </p>
-                              </>
-                            ) : (
-                              <>
-                                <p className="text-sm text-slate-700">
-                                  {item.action === 'create'
-                                    ? 'Quote created'
-                                    : item.action === 'status_change'
-                                    ? `Status → ${OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? item.diff?.to}`
-                                    : item.action === 'update'
-                                    ? 'Details updated'
-                                    : item.action}
-                                  {!!item.diff?.reason && (
-                                    <span className="text-slate-500"> — {String(item.diff.reason)}</span>
-                                  )}
-                                </p>
-                                <p className="mt-0.5 text-xs text-slate-400">
-                                  {item.actor ?? 'Unknown'} · {formatDatetime(item.created_at)}
-                                </p>
-                              </>
-                            )}
-                          </div>
+                  ) : (() => {
+                    const showUpcoming = activityFilter === 'all' || activityFilter === 'follow_ups'
+                    const upcomingItems = showUpcoming
+                      ? filteredTimeline.filter(item => item._kind === 'follow_up' && !item.completed_at)
+                      : []
+                    const pastItems = showUpcoming
+                      ? filteredTimeline.filter(item => !(item._kind === 'follow_up' && !item.completed_at))
+                      : filteredTimeline
+
+                    const monthGroups: { month: string; items: TimelineItem[] }[] = []
+                    for (const item of pastItems) {
+                      const month = getMonthLabel(item.created_at)
+                      const last = monthGroups[monthGroups.length - 1]
+                      if (last?.month === month) last.items.push(item)
+                      else monthGroups.push({ month, items: [item] })
+                    }
+
+                    const renderItem = (item: TimelineItem) => (
+                      <div key={item.id} className="flex gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
+                          {item._kind === 'communication' ? (
+                            <CommTypeIcon type={item.type ?? 'note'} />
+                          ) : item._kind === 'follow_up' ? (
+                            <CalendarPlus size={12} className="text-kratos" />
+                          ) : (
+                            <CheckCircle2 size={12} className="text-kratos" />
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <div className="flex-1 min-w-0 pb-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900">{item.actor ?? 'System'}</span>
+                            <span className="shrink-0 text-xs text-slate-400">{formatDatetime(item.created_at)}</span>
+                          </div>
+                          {item._kind === 'communication' ? (
+                            <>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-xs font-medium text-slate-500 capitalize">{item.type}</span>
+                                {item.direction && item.direction !== 'internal' && (
+                                  <span className="text-[10px] rounded-full bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-500 capitalize">{item.direction}</span>
+                                )}
+                                {item.call_outcome && (
+                                  <span className="text-xs text-slate-500">— {CALL_OUTCOMES[item.call_outcome] ?? item.call_outcome}</span>
+                                )}
+                                {item.subject && (
+                                  <span className="text-xs text-slate-600 truncate">&ldquo;{item.subject}&rdquo;</span>
+                                )}
+                              </div>
+                              {item.body && <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>}
+                            </>
+                          ) : item._kind === 'follow_up' ? (
+                            <>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-xs text-slate-500 capitalize">{item.type?.replace(/_/g,' ')} follow-up</span>
+                                {item.status === 'completed' ? (
+                                  <span className="text-[10px] rounded-full bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">Completed</span>
+                                ) : (
+                                  <span className="text-[10px] rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">Pending</span>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-sm text-slate-700">
+                                Due {item.follow_up_date}{item.follow_up_time ? ` at ${item.follow_up_time.slice(0,5)}` : ''}
+                                {item.assignee_name ? <span className="text-slate-500"> · {item.assignee_name}</span> : null}
+                              </p>
+                              {item.notes && <p className="mt-0.5 text-xs text-slate-500 italic">{item.notes}</p>}
+                            </>
+                          ) : (
+                            <p className="mt-0.5 text-sm text-slate-700">
+                              {item.action === 'create' ? 'Quote created'
+                                : item.action === 'status_change'
+                                ? `Status changed to ${OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? item.diff?.to}`
+                                : item.action === 'update' ? 'Details updated'
+                                : item.action}
+                              {!!item.diff?.reason && <span className="text-slate-500"> — {String(item.diff.reason)}</span>}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )
+
+                    return (
+                      <div className="space-y-6">
+                        {upcomingItems.length > 0 && (
+                          <div>
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Upcoming</p>
+                            <div className="space-y-4">{upcomingItems.map(renderItem)}</div>
+                          </div>
+                        )}
+                        {monthGroups.map(({ month, items }) => (
+                          <div key={month}>
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">{month}</p>
+                            <div className="space-y-4">{items.map(renderItem)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
 
             {/* Right sidebar */}
             <div className="space-y-4">
-              {/* Customer card */}
+
+              {/* Information card — expanded to match SmartMoving */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Customer</h2>
-                {opp.customer ? (
-                  <div className="space-y-2">
+                {/* Customer quick-access */}
+                {opp.customer && (
+                  <div className="mb-4 pb-4 border-b border-slate-100 space-y-1.5">
                     <Link
                       href={`/admin/customers/${opp.customer.id}`}
-                      className="block font-semibold text-slate-900 hover:text-kratos"
+                      className="block font-semibold text-slate-900 hover:text-kratos text-sm"
                     >
                       {opp.customer.full_name}
                     </Link>
                     {opp.customer.phone && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Phone size={13} className="text-slate-400 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                        <Phone size={12} className="text-slate-400 shrink-0" />
                         <RingCentralCallButton
                           phoneNumber={opp.customer.phone}
                           label={opp.customer.phone}
                           opportunityId={opp.id}
                           customerId={opp.customer.id}
-                          className="text-slate-600 hover:text-kratos"
+                          className="text-slate-600 hover:text-kratos text-sm"
                         />
                         {opp.customer.phone_type && (
                           <span className="capitalize text-xs text-slate-400">({opp.customer.phone_type})</span>
@@ -1371,163 +1389,147 @@ export default function OpportunityDetailPage() {
                       </div>
                     )}
                     {opp.customer.secondary_phone && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Phone size={13} className="text-slate-400 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                        <Phone size={12} className="text-slate-400 shrink-0" />
                         <RingCentralCallButton
                           phoneNumber={opp.customer.secondary_phone}
                           label={opp.customer.secondary_phone}
                           opportunityId={opp.id}
                           customerId={opp.customer.id}
-                          className="text-slate-600 hover:text-kratos"
+                          className="text-slate-600 hover:text-kratos text-sm"
                         />
                       </div>
                     )}
                     {opp.customer.email && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Mail size={13} className="text-slate-400 shrink-0" />
-                        <a href={`mailto:${opp.customer.email}`} className="hover:text-kratos break-all">
+                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                        <Mail size={12} className="text-slate-400 shrink-0" />
+                        <a href={`mailto:${opp.customer.email}`} className="hover:text-kratos break-all text-sm truncate">
                           {opp.customer.email}
                         </a>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-400">No customer linked</p>
                 )}
-              </div>
 
-              {/* Information card */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Information</h2>
-                <div className="space-y-2.5 text-sm">
-                  <InfoRow label="Agent"   value={opp.agent?.full_name ?? 'Unassigned'} />
-                  <InfoRow label="Source"  value={opp.lead_source?.name ?? '—'} />
-                  <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
-
-                  {/* Move date row with inline edit */}
+                <div className="space-y-2 text-sm">
+                  <InfoRow label="Quote #"  value={formatQuoteNumber(opp.opportunity_number)} />
+                  <InfoRow label="Service"  value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
+                  <InfoRow label="Type"     value="Local" />
+                  {/* Move date inline edit */}
                   {showDateEdit ? (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Move Date</span>
-                        <button
-                          type="button"
-                          onClick={() => setShowDateEdit(false)}
-                          className="text-slate-400 hover:text-slate-600"
-                        >
+                        <button type="button" onClick={() => setShowDateEdit(false)} className="text-slate-400 hover:text-slate-600">
                           <X size={14} />
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="tbd-check"
-                          checked={editingTbd}
-                          onChange={e => setEditingTbd(e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 accent-kratos"
-                        />
-                        <label htmlFor="tbd-check" className="text-sm text-slate-600 cursor-pointer select-none">TBD (date not confirmed)</label>
+                        <input type="checkbox" id="tbd-check" checked={editingTbd} onChange={e => setEditingTbd(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 accent-kratos" />
+                        <label htmlFor="tbd-check" className="text-sm text-slate-600 cursor-pointer select-none">TBD</label>
                       </div>
                       {!editingTbd && (
-                        <input
-                          type="date"
-                          value={editingDate}
-                          onChange={e => setEditingDate(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
-                        />
+                        <input type="date" value={editingDate} onChange={e => setEditingDate(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20" />
                       )}
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowDateEdit(false)}
-                          className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={saveDateEdit}
-                          disabled={savingDate}
-                          className="flex items-center gap-1.5 rounded-lg bg-kratos px-3 py-1.5 text-xs font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
-                        >
+                        <button type="button" onClick={() => setShowDateEdit(false)} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100">Cancel</button>
+                        <button type="button" onClick={saveDateEdit} disabled={savingDate}
+                          className="flex items-center gap-1.5 rounded-lg bg-kratos px-3 py-1.5 text-xs font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50">
                           {savingDate && <Loader2 size={12} className="animate-spin" />}
-                          Save Date
+                          Save
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">Date</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-slate-900">
-                          {opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={openDateEdit}
-                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="Edit move date"
-                        >
-                          <Calendar size={13} />
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Service Date</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium text-slate-900">{opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}</span>
+                        <button type="button" onClick={openDateEdit} className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit date">
+                          <Calendar size={12} />
                         </button>
                       </div>
                     </div>
                   )}
-
-                  <InfoRow label="Size"    value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
+                  <InfoRow label="Move Size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
+                  <InfoRow label="Assigned To" value={opp.agent?.full_name ?? 'Unassigned'} />
+                  <InfoRow label="Source"     value={opp.lead_source?.name ?? '—'} />
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span className="text-slate-500">Outstanding Balance</span>
+                    <span className={cn('font-semibold', balanceDue > 0 ? 'text-red-600' : 'text-emerald-600')}>
+                      {estimateTotal > 0 ? (balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid') : '—'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Quote Total card */}
+              {/* Stops card */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Total</h2>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Estimate total</span>
-                    <span className="font-semibold text-slate-900">
-                      {estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'}
-                    </span>
+                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Stops</h2>
+                <div className="space-y-4">
+                  {/* Origin */}
+                  <div>
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Origin Address</p>
+                    {opp.origin_address_line1 ? (
+                      <div className="text-sm text-slate-700">
+                        <p>{opp.origin_address_line1}</p>
+                        {opp.origin_address_line2 && <p>{opp.origin_address_line2}</p>}
+                        <p>{[opp.origin_city, opp.origin_province, opp.origin_postal_code].filter(Boolean).join(', ')}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {opp.origin_dwelling_type && <span className="capitalize">{opp.origin_dwelling_type.replace(/_/g,' ')}</span>}
+                          {(opp.origin_stairs_count ?? 0) > 0 && (
+                            <span> • {opp.origin_stairs_count} flight{opp.origin_stairs_count !== 1 ? 's' : ''} of stairs</span>
+                          )}
+                          {opp.origin_has_elevator && <span> • Elevator</span>}
+                        </p>
+                      </div>
+                    ) : <p className="text-sm text-slate-400">Not set</p>}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Deposit required</span>
-                    <span className="font-semibold text-slate-900">
-                      {formatCurrency(opp.deposit_amount ?? 150)}
-                    </span>
+                  {/* Destination */}
+                  <div>
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Destination Address</p>
+                    {opp.dest_address_line1 ? (
+                      <div className="text-sm text-slate-700">
+                        <p>{opp.dest_address_line1}</p>
+                        {opp.dest_address_line2 && <p>{opp.dest_address_line2}</p>}
+                        <p>{[opp.dest_city, opp.dest_province, opp.dest_postal_code].filter(Boolean).join(', ')}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {opp.dest_dwelling_type && <span className="capitalize">{opp.dest_dwelling_type.replace(/_/g,' ')}</span>}
+                          {(opp.dest_stairs_count ?? 0) > 0 && (
+                            <span> • {opp.dest_stairs_count} flight{opp.dest_stairs_count !== 1 ? 's' : ''} of stairs</span>
+                          )}
+                          {opp.dest_has_elevator && <span> • Elevator</span>}
+                        </p>
+                      </div>
+                    ) : <p className="text-sm text-slate-400">Not set</p>}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Total paid</span>
-                    <span className="font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-100 pt-2">
-                    <span className="font-medium text-slate-700">Balance due</span>
-                    <span className={`font-bold ${balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid'}
-                    </span>
-                  </div>
-                  {opp.can_view_profitability && estimateTotal > 0 && (
-                    <div className="flex justify-between border-t border-slate-100 pt-2">
-                      <span className="text-slate-500">Est. profit</span>
-                      <span className={`font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {formatCurrency(profit)}
-                      </span>
+                </div>
+              </div>
+
+              {/* Opportunity Details card */}
+              {(() => {
+                const vol = getVolumeForMoveSize(opp.move_size)
+                if (!vol) return null
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Opportunity Details</h2>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Volume</p>
+                        <p className="mt-0.5 font-semibold text-slate-900">{vol.cuft.toLocaleString()} cuft</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Weight</p>
+                        <p className="mt-0.5 font-semibold text-slate-900">{vol.lbs.toLocaleString()} lbs</p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                )
+              })()}
 
-              {/* Timeline card */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Timeline</h2>
-                <div className="space-y-1.5 text-sm text-slate-600">
-                  <p className="flex items-center gap-2">
-                    <Clock size={13} className="text-slate-400 shrink-0" />
-                    Created {formatDate(opp.created_at)}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Clock size={13} className="text-slate-400 shrink-0" />
-                    Updated {formatDate(opp.updated_at)}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         )}
