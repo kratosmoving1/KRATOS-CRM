@@ -37,7 +37,8 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
 
 const CALL_OUTCOMES: Record<string, string> = {
   connected: 'Connected', voicemail: 'Voicemail', no_answer: 'No Answer',
-  wrong_number: 'Wrong Number', busy: 'Busy',
+  wrong_number: 'Wrong Number', busy: 'Busy', left_live_message: 'Left Live Message',
+  number_disconnected: 'Number Disconnected',
 }
 
 const DISPATCH_ADDRESS = '27 Roytec Rd, Woodbridge, ON L4L 8E3, Canada'
@@ -88,15 +89,18 @@ function buildMapsUrl(opp: OppDetail): string | null {
 }
 
 function applyMerge(text: string, opp: OppDetail): string {
-  const custFirst = (opp.customer?.full_name ?? '').split(' ')[0] || 'there'
-  const agentFirst = (opp.agent?.full_name ?? '').split(' ')[0] || 'Alex'
+  const custFirst = (opp.customer?.full_name ?? '').split(' ')[0] || ''
+  const agentFirst = (opp.agent?.full_name ?? '').split(' ')[0] || ''
+  const moveDate = opp.service_date
+    ? new Date(opp.service_date).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+    : '—'
   return text
-    .replace(/@FirstName/g,      custFirst)
+    .replace(/@FirstName/g,      custFirst || 'there')
     .replace(/@YourFirstName/g,  agentFirst)
     .replace(/@AssignedSalesPersonFirstName/g, agentFirst)
     .replace(/@OriginCity/g,     opp.origin_city ?? '')
     .replace(/@DestinationCity/g, opp.dest_city ?? '')
-    .replace(/@MoveDate/g,       opp.service_date ? new Date(opp.service_date).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD')
+    .replace(/@MoveDate/g,       moveDate)
     .replace(/@CompanyPhone/g,   '(800) 321-3222')
     .replace(/@SubmitLink/g,     '')
     .replace(/{{customer_name}}/g,      opp.customer?.full_name ?? '')
@@ -104,11 +108,12 @@ function applyMerge(text: string, opp: OppDetail): string {
     .replace(/{{agent_first_name}}/g,   agentFirst)
     .replace(/{{agent_full_name}}/g,    opp.agent?.full_name ?? '')
     .replace(/{{company_name}}/g,       'Kratos Moving Inc.')
-    .replace(/{{move_date}}/g,          opp.service_date ?? 'TBD')
+    .replace(/{{move_date}}/g,          moveDate)
     .replace(/{{phone_number}}/g,       opp.customer?.phone ?? '')
-    .replace(/{{quote_number}}/g,       opp.opportunity_number ?? '')
+    .replace(/{{quote_number}}/g,       formatQuoteNumber(opp.opportunity_number ?? ''))
     .replace(/{{portal_link}}/g,        '')
     .replace(/{{deposit_amount}}/g,     String(opp.deposit_amount ?? 150))
+    .replace(/{{[^}]+}}/g,              '')
 }
 
 function formatDate(d: string | null | undefined) {
@@ -223,6 +228,65 @@ interface CommunicationTemplate {
   is_active: boolean
 }
 
+const BUILTIN_EMAIL_TEMPLATES: CommunicationTemplate[] = [
+  ['New Lead', 'Your Kratos Moving quote request', 'Hi {{customer_name}},\n\nThanks for reaching out to Kratos Moving. I can help with your quote for {{move_date}}. Reply here or call us at {{phone_number}} and we can confirm the details.\n\n{{agent_first_name}}\n{{company_name}}'],
+  ['Follow-Up 1', 'Following up on your Kratos Moving quote', 'Hi {{customer_name}},\n\nJust following up on Quote {{quote_number}}. I am happy to answer questions or adjust the estimate if anything changed.\n\n{{agent_first_name}}'],
+  ['Follow-Up 2', 'Still planning your move?', 'Hi {{customer_name}},\n\nChecking in on your move plans for {{move_date}}. We can hold availability once the deposit is completed.\n\n{{agent_first_name}}'],
+  ['Follow-Up 3', 'Final follow-up on your moving quote', 'Hi {{customer_name}},\n\nI wanted to make one more quick follow-up on Quote {{quote_number}}. If you still need help, reply here and I will get it updated.\n\n{{agent_first_name}}'],
+  ['Deposit', 'Deposit for Quote {{quote_number}}', 'Hi {{customer_name}},\n\nYour deposit to secure the move is {{deposit_amount}}. You can review and complete the quote here: {{portal_link}}\n\n{{company_name}}'],
+  ['Inventory Request', 'Inventory details for your move', 'Hi {{customer_name}},\n\nCould you send us your inventory details for Quote {{quote_number}}? This helps us keep the estimate accurate.\n\n{{agent_first_name}}'],
+  ['5% Discount', '5% discount for your move', 'Hi {{customer_name}},\n\nWe can apply a 5% discount to help you secure your move. Reply here and I will update Quote {{quote_number}}.\n\n{{agent_first_name}}'],
+  ['Lead Lost', 'Closing your moving request', 'Hi {{customer_name}},\n\nWe will close this request for now. If you still need moving help, reply anytime and we can reopen Quote {{quote_number}}.\n\n{{company_name}}'],
+  ['Post-Move', 'Thank you for moving with Kratos', 'Hi {{customer_name}},\n\nThank you for choosing Kratos Moving. We hope everything went smoothly.\n\n{{company_name}}'],
+  ['Review Request', 'How did we do?', 'Hi {{customer_name}},\n\nThank you for moving with Kratos. If you had a great experience, we would really appreciate a review.\n\n{{company_name}}'],
+  ['In-Person Consultation Confirmation', 'In-person consultation confirmed', 'Hi {{customer_name}},\n\nYour in-person consultation with Kratos Moving is confirmed. We will review your move details and answer questions.\n\n{{agent_first_name}}'],
+  ['Virtual Consultation Confirmation', 'Virtual consultation confirmed', 'Hi {{customer_name}},\n\nYour virtual consultation with Kratos Moving is confirmed. We will review your inventory and moving details together.\n\n{{agent_first_name}}'],
+  ['$35 Gift Card', '$35 gift card offer', 'Hi {{customer_name}},\n\nAs a thank-you, we can include our $35 gift card offer once your move is booked.\n\n{{company_name}}'],
+  ['Post-Move 5-Star Review Incentive', 'A thank-you for your review', 'Hi {{customer_name}},\n\nIf your move was a 5-star experience, we would appreciate your review. Reply here once posted and we will follow up on the incentive.\n\n{{company_name}}'],
+  ['Dispatcher - Inventory Check Request', 'Inventory check request', 'Hi {{customer_name}},\n\nOur dispatch team is reviewing your move. Please confirm your inventory so we can prepare the right crew and equipment.\n\n{{company_name}}'],
+  ['Unavailable - Move Request Decline', 'Move date availability', 'Hi {{customer_name}},\n\nUnfortunately, we are unavailable for your requested move date. If your date is flexible, reply here and we can check alternatives.\n\n{{company_name}}'],
+].map(([name, subject, body], index) => ({
+  id: `builtin-email-${index}`,
+  name,
+  channel: 'email',
+  trigger: 'sales',
+  subject,
+  body,
+  is_active: true,
+}))
+
+const BUILTIN_SMS_TEMPLATES: CommunicationTemplate[] = [
+  ['No Pick Up - First Contact Attempt', 'Hi {{customer_name}}, this is {{agent_first_name}} from {{company_name}}. I tried calling about your move request. Reply here or call us back when you can.'],
+  ['Second Text - Set Up a Time To Discuss Potential Quote', 'Hi {{customer_name}}, when is a good time to discuss your quote? I can help finalize the details for {{move_date}}.'],
+  ['Follow-Up 1: Reminder and Assistance', 'Hi {{customer_name}}, just following up on Quote {{quote_number}}. Let me know if you have questions or want to secure your move.'],
+  ['Follow-Up 2: Emphasize Value', 'Hi {{customer_name}}, Kratos Moving can help make your move smooth and organized. Reply here if you want to review Quote {{quote_number}}.'],
+  ['Follow-Up 3: Encouraging Action', 'Hi {{customer_name}}, final follow-up on Quote {{quote_number}}. Reply here if you would like us to keep helping with your move.'],
+  ['Inventory Request: Smart Moving Inventory Section', 'Hi {{customer_name}}, can you send your inventory details for Quote {{quote_number}}? This helps us keep the estimate accurate.'],
+  ['Deposit Fee', 'Hi {{customer_name}}, your deposit to secure the move is {{deposit_amount}}. You can review the quote here: {{portal_link}}'],
+  ['Lead Lost', 'Hi {{customer_name}}, we will close your request for now. Reply anytime if you still need help from {{company_name}}.'],
+  ['Review Request', 'Hi {{customer_name}}, thank you for choosing {{company_name}}. If you had a great experience, we would really appreciate a review.'],
+  ['Unavailable - Move Request Decline', 'Hi {{customer_name}}, unfortunately we are unavailable for your requested move date. Reply if your date is flexible and we can check alternatives.'],
+  ['Virtual Consultation Confirmation', 'Hi {{customer_name}}, your virtual consultation with {{company_name}} is confirmed. We will review your inventory and move details together.'],
+  ['In Person Consultation Confirmation', 'Hi {{customer_name}}, your in-person consultation with {{company_name}} is confirmed. We will review your move details and answer questions.'],
+  ['Dispatcher - Truck Issue Notice', 'Hi {{customer_name}}, dispatch is reviewing a truck issue for your move. We will update you shortly with next steps.'],
+  ['Dispatcher - Post Move Noting', 'Hi {{customer_name}}, dispatch is completing post-move notes. Reply here if there is anything we should add.'],
+].map(([name, body], index) => ({
+  id: `builtin-sms-${index}`,
+  name,
+  channel: 'sms',
+  trigger: 'sales',
+  subject: null,
+  body,
+  is_active: true,
+}))
+
+function mergeTemplateLists(builtin: CommunicationTemplate[], loaded: CommunicationTemplate[]) {
+  const byName = new Map<string, CommunicationTemplate>()
+  for (const template of builtin) byName.set(template.name.toLowerCase(), template)
+  for (const template of loaded) byName.set(template.name.toLowerCase(), template)
+  return Array.from(byName.values())
+}
+
 function AddressBlock({ prefix, data }: { prefix: 'origin' | 'dest'; data: OppDetail }) {
   const isOrigin = prefix === 'origin'
   const addr1    = isOrigin ? data.origin_address_line1 : data.dest_address_line1
@@ -280,11 +344,11 @@ const CALL_OUTCOME_OPTIONS = [
   { value: 'no_answer',    label: 'No Answer' },
   { value: 'busy',         label: 'Busy' },
   { value: 'wrong_number', label: 'Wrong Number' },
-  { value: 'voicemail',    label: 'Left Voicemail' },
-  { value: 'connected',    label: 'Left Live Message' },
+  { value: 'left_live_message', label: 'Left Live Message' },
+  { value: 'voicemail', label: 'Left Voicemail' },
+  { value: 'connected', label: 'Connected' },
+  { value: 'number_disconnected', label: 'Number Disconnected' },
 ]
-// Note: DB call_outcome enum supports: connected, voicemail, no_answer, wrong_number, busy
-// "Connected" and "Number Disconnected" map to connected/wrong_number — add more options via DB migration when needed.
 
 const PAYMENT_METHODS = [
   { label: 'Cash', value: 'cash', icon: Banknote, note: 'Record only' },
@@ -365,6 +429,8 @@ export default function OpportunityDetailPage() {
   const [commDirection, setCommDirection] = useState<'outbound' | 'inbound'>('outbound')
   const [commSubject, setCommSubject] = useState('')
   const [commEmailTo, setCommEmailTo] = useState('')
+  const [commEmailTplId, setCommEmailTplId] = useState('')
+  const [commSmsTplId, setCommSmsTplId] = useState('')
   const [commSubmitting, setCommSubmitting] = useState(false)
   const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
   // Unified templates — email + SMS loaded once when Sales tab opens
@@ -372,7 +438,11 @@ export default function OpportunityDetailPage() {
   // Call tab template selection (for follow-up sends)
   const [callEmailTplId, setCallEmailTplId] = useState('')
   const [callSmsTplId, setCallSmsTplId] = useState('')
+  const [callEmailSubject, setCallEmailSubject] = useState('')
+  const [callEmailBody, setCallEmailBody] = useState('')
+  const [callSmsBody, setCallSmsBody] = useState('')
   const [noAnswerSmsSending, setNoAnswerSmsSending] = useState(false)
+  const [callEmailSending, setCallEmailSending] = useState(false)
 
   // Timeline + filters
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -677,13 +747,13 @@ export default function OpportunityDetailPage() {
     if (!opp || !commBody.trim()) { toast.error('Enter message content'); return }
     setCommSubmitting(true)
     try {
-      const res = await fetch('/api/admin/sms/send', {
+      const res = await fetch('/api/communications/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           opportunityId: id,
           customerId: opp.customer?.id ?? null,
-          body: commBody.trim(),
+          messageBody: commBody.trim(),
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -693,6 +763,37 @@ export default function OpportunityDetailPage() {
       } else {
         toast.success('SMS sent.')
         setCommBody('')
+        setCommSmsTplId('')
+        loadTimeline()
+      }
+    } catch { toast.error('Network error') }
+    finally { setCommSubmitting(false) }
+  }
+
+  async function sendEmailDirectly() {
+    if (!opp || !commBody.trim()) { toast.error('Enter email content'); return }
+    setCommSubmitting(true)
+    try {
+      const res = await fetch('/api/communications/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: id,
+          customerId: opp.customer?.id ?? null,
+          toEmail: commEmailTo || opp.customer?.email || null,
+          subject: commSubject || 'Kratos Moving follow-up',
+          messageBody: commBody.trim(),
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? 'Email send failed')
+      } else {
+        toast.success('Email sent.')
+        setCommBody('')
+        setCommSubject('')
+        setCommEmailTo('')
+        setCommEmailTplId('')
         loadTimeline()
       }
     } catch { toast.error('Network error') }
@@ -720,9 +821,26 @@ export default function OpportunityDetailPage() {
     finally { setCommSubmitting(false) }
   }
 
-  async function sendNoAnswerSms() {
+  const showCallFollowUpActions = commType === 'call' && (commCallOutcome === 'no_answer' || commCallOutcome === 'busy')
+
+  function selectCallSmsTemplate(templateId: string) {
+    setCallSmsTplId(templateId)
+    const template = mergeTemplateLists(BUILTIN_SMS_TEMPLATES, allTemplates.filter(t => t.channel === 'sms' && t.is_active))
+      .find(t => t.id === templateId)
+    setCallSmsBody(template ? applyMerge(template.body, opp as OppDetail) : '')
+  }
+
+  function selectCallEmailTemplate(templateId: string) {
+    setCallEmailTplId(templateId)
+    const template = mergeTemplateLists(BUILTIN_EMAIL_TEMPLATES, allTemplates.filter(t => t.channel === 'email' && t.is_active))
+      .find(t => t.id === templateId)
+    setCallEmailSubject(template?.subject ? applyMerge(template.subject, opp as OppDetail) : '')
+    setCallEmailBody(template ? applyMerge(template.body, opp as OppDetail) : '')
+  }
+
+  async function sendCallFollowUpSms() {
     if (!opp?.customer) { toast.error('No customer linked'); return }
-    if (!callSmsTplId) { toast.error('Select an SMS template first'); return }
+    if (!callSmsTplId || !callSmsBody.trim()) { toast.error('Select an SMS template first'); return }
 
     setNoAnswerSmsSending(true)
     toast.message('Sending SMS...')
@@ -733,7 +851,7 @@ export default function OpportunityDetailPage() {
         body: JSON.stringify({
           opportunityId: opp.id,
           customerId: opp.customer.id,
-          templateId: callSmsTplId,
+          messageBody: callSmsBody,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -741,13 +859,44 @@ export default function OpportunityDetailPage() {
         toast.error(typeof data.error === 'string' ? data.error : 'Unable to send SMS')
       } else {
         toast.success('SMS sent.')
+        loadTimeline()
       }
-      loadTimeline()
     } catch {
       toast.error('Unable to send SMS')
-      loadTimeline()
     } finally {
       setNoAnswerSmsSending(false)
+    }
+  }
+
+  async function sendCallFollowUpEmail() {
+    if (!opp?.customer) { toast.error('No customer linked'); return }
+    if (!callEmailTplId || !callEmailBody.trim()) { toast.error('Select an email template first'); return }
+
+    setCallEmailSending(true)
+    toast.message('Sending email...')
+    try {
+      const res = await fetch('/api/communications/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunityId: opp.id,
+          customerId: opp.customer.id,
+          toEmail: opp.customer.email,
+          subject: callEmailSubject || 'Kratos Moving follow-up',
+          messageBody: callEmailBody,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof data.error === 'string' ? data.error : 'Unable to send email')
+      } else {
+        toast.success('Email sent.')
+        loadTimeline()
+      }
+    } catch {
+      toast.error('Unable to send email')
+    } finally {
+      setCallEmailSending(false)
     }
   }
 
@@ -981,8 +1130,8 @@ export default function OpportunityDetailPage() {
 
               {/* Communication composer */}
               {(() => {
-                const emailTpls = allTemplates.filter(t => t.channel === 'email' && t.is_active)
-                const smsTpls   = allTemplates.filter(t => t.channel === 'sms'   && t.is_active)
+                const emailTpls = mergeTemplateLists(BUILTIN_EMAIL_TEMPLATES, allTemplates.filter(t => t.channel === 'email' && t.is_active))
+                const smsTpls   = mergeTemplateLists(BUILTIN_SMS_TEMPLATES, allTemplates.filter(t => t.channel === 'sms' && t.is_active))
 
                 // Template select component — renders a <select> that applies merge fields on change
                 const TplSelect = ({
@@ -1017,30 +1166,6 @@ export default function OpportunityDetailPage() {
                   </select>
                 )
 
-                // Standalone select that doesn't fill textarea (for call tab header row)
-                const CallTplSelect = ({
-                  templates,
-                  value,
-                  onChange,
-                  placeholder,
-                }: {
-                  templates: CommunicationTemplate[]
-                  value: string
-                  onChange: (id: string) => void
-                  placeholder: string
-                }) => (
-                  <select
-                    value={value}
-                    onChange={e => onChange(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
-                  >
-                    <option value="">{placeholder}</option>
-                    {templates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                )
-
                 return (
                   <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                     {/* Header */}
@@ -1066,7 +1191,13 @@ export default function OpportunityDetailPage() {
                         <button
                           key={value}
                           type="button"
-                          onClick={() => { setCommType(value); setCommBody(''); setCommSubject('') }}
+                          onClick={() => {
+                            setCommType(value)
+                            setCommBody('')
+                            setCommSubject('')
+                            setCommEmailTplId('')
+                            setCommSmsTplId('')
+                          }}
                           className={cn(
                             'flex flex-1 items-center justify-center gap-1.5 px-2 py-3 text-sm font-medium border-b-2 transition-all',
                             commType === value
@@ -1105,8 +1236,8 @@ export default function OpportunityDetailPage() {
                             />
                             <TplSelect
                               templates={emailTpls}
-                              value={''}
-                              onChange={() => {}}
+                              value={commEmailTplId}
+                              onChange={setCommEmailTplId}
                               placeholder="— Email Template —"
                               fillSubject
                             />
@@ -1125,8 +1256,7 @@ export default function OpportunityDetailPage() {
                             className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                           />
                           <p className="text-xs text-slate-400">
-                            Logging an email records it in your activity history.
-                            To send an estimate to the customer, use <span className="font-medium">Send Estimate</span> above.
+                            Email sends through Resend and is added to the activity history only after the server accepts it.
                           </p>
                         </>
                       )}
@@ -1134,8 +1264,7 @@ export default function OpportunityDetailPage() {
                       {/* ── CALL TAB ── */}
                       {commType === 'call' && (
                         <>
-                          {/* Row 1: Direction | Outcome | Email Template | SMS Template */}
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="grid grid-cols-2 gap-2">
                             <select
                               value={commDirection}
                               onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
@@ -1146,34 +1275,22 @@ export default function OpportunityDetailPage() {
                             </select>
                             <select
                               value={commCallOutcome}
-                              onChange={e => setCommCallOutcome(e.target.value)}
+                              onChange={e => {
+                                const next = e.target.value
+                                setCommCallOutcome(next)
+                                if (next !== 'no_answer' && next !== 'busy') {
+                                  setCallEmailTplId('')
+                                  setCallSmsTplId('')
+                                  setCallEmailSubject('')
+                                  setCallEmailBody('')
+                                  setCallSmsBody('')
+                                }
+                              }}
                               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
                             >
                               <option value="">— Outcome —</option>
                               {CALL_OUTCOME_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                            {/* Email template — pre-selects for follow-up sends */}
-                            <select
-                              value={callEmailTplId}
-                              onChange={e => setCallEmailTplId(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
-                            >
-                              <option value="">— Email Template —</option>
-                              {emailTpls.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                              ))}
-                            </select>
-                            {/* SMS template — pre-selects for follow-up sends */}
-                            <select
-                              value={callSmsTplId}
-                              onChange={e => setCallSmsTplId(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
-                            >
-                              <option value="">— SMS Template —</option>
-                              {smsTpls.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
                               ))}
                             </select>
                           </div>
@@ -1187,51 +1304,80 @@ export default function OpportunityDetailPage() {
                             className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                           />
 
-                          {/* No Answer follow-up actions — uses templates selected above, no duplicate dropdowns */}
-                          {commCallOutcome === 'no_answer' && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                                No Answer — follow-up actions
-                              </p>
-                              {!callSmsTplId && !callEmailTplId && (
-                                <p className="text-xs text-amber-700">
-                                  Select an SMS or Email template in the row above to enable sending.
+                          {showCallFollowUpActions && (
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  {commCallOutcome === 'busy' ? 'Busy' : 'No Answer'} follow-up actions
                                 </p>
-                              )}
-                              {(callSmsTplId || callEmailTplId) && (
-                                <div className="space-y-1 text-xs text-slate-600">
-                                  {callSmsTplId && (
-                                    <p>SMS: <span className="font-medium text-slate-900">{smsTpls.find(t => t.id === callSmsTplId)?.name ?? '—'}</span></p>
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <select
+                                  value={callEmailTplId}
+                                  onChange={e => selectCallEmailTemplate(e.target.value)}
+                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                                >
+                                  <option value="">— Email Template —</option>
+                                  {emailTpls.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={callSmsTplId}
+                                  onChange={e => selectCallSmsTemplate(e.target.value)}
+                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                                >
+                                  <option value="">— SMS Template —</option>
+                                  {smsTpls.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              {(callSmsBody || callEmailBody) && (
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {callEmailBody && (
+                                    <textarea
+                                      rows={3}
+                                      value={callEmailBody}
+                                      onChange={e => setCallEmailBody(e.target.value)}
+                                      className="resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                                    />
                                   )}
-                                  {callEmailTplId && (
-                                    <p>Email: <span className="font-medium text-slate-900">{emailTpls.find(t => t.id === callEmailTplId)?.name ?? '—'}</span></p>
+                                  {callSmsBody && (
+                                    <textarea
+                                      rows={3}
+                                      value={callSmsBody}
+                                      onChange={e => setCallSmsBody(e.target.value)}
+                                      className="resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                                    />
                                   )}
                                 </div>
                               )}
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  onClick={sendNoAnswerSms}
-                                  disabled={noAnswerSmsSending || !callSmsTplId || !smsStatus?.canSend}
-                                  title={!callSmsTplId ? 'Select an SMS template above' : !smsStatus?.canSend ? 'SMS not configured' : undefined}
-                                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                  onClick={sendCallFollowUpEmail}
+                                  disabled={callEmailSending || !callEmailTplId || !callEmailBody.trim()}
+                                  title={!callEmailTplId ? 'Select an Email template' : undefined}
+                                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  {callEmailSending && <Loader2 size={12} className="animate-spin" />}
+                                  Send Email
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={sendCallFollowUpSms}
+                                  disabled={noAnswerSmsSending || !callSmsTplId || !callSmsBody.trim() || !smsStatus?.canSend}
+                                  title={!callSmsTplId ? 'Select an SMS template' : !smsStatus?.canSend ? (smsStatus?.reason ?? 'Twilio SMS is not configured.') : undefined}
+                                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                   {noAnswerSmsSending && <Loader2 size={12} className="animate-spin" />}
                                   Send SMS
                                 </button>
                                 <button
                                   type="button"
-                                  disabled={!callEmailTplId}
-                                  title={!callEmailTplId ? 'Select an Email template above' : undefined}
-                                  onClick={() => toast.info('Outbound email sending will be added in a future session.')}
-                                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                >
-                                  Send Email
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => setShowCreateFollowUp(true)}
-                                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 transition-colors"
+                                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
                                 >
                                   <CalendarPlus size={12} /> Create Follow-up
                                 </button>
@@ -1246,8 +1392,8 @@ export default function OpportunityDetailPage() {
                         <>
                           <TplSelect
                             templates={smsTpls}
-                            value={''}
-                            onChange={() => {}}
+                            value={commSmsTplId}
+                            onChange={setCommSmsTplId}
                             placeholder="— SMS Template —"
                           />
                           <textarea
@@ -1309,6 +1455,15 @@ export default function OpportunityDetailPage() {
                               Send SMS
                             </button>
                           </div>
+                        ) : commType === 'email' ? (
+                          <button
+                            onClick={sendEmailDirectly}
+                            disabled={commSubmitting || !commBody.trim()}
+                            className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                            Send Email
+                          </button>
                         ) : (
                           <button
                             onClick={submitComm}
@@ -1316,7 +1471,7 @@ export default function OpportunityDetailPage() {
                             className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
                           >
                             {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                            {commType === 'note' ? 'Add Note' : commType === 'email' ? 'Log Email' : 'Log Call'}
+                            {commType === 'note' ? 'Add Note' : 'Log Call'}
                           </button>
                         )}
                       </div>
