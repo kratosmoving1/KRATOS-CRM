@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertCircle, ChevronDown, ChevronUp, Sparkles, Truck, Users } from 'lucide-react'
+import { AlertCircle, Sparkles, Truck, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   TARIFF_PACKAGES,
@@ -67,9 +67,7 @@ export default function TariffRecommendationPanel({
 }: Props) {
   const [selectedPackage, setSelectedPackage] = useState<PackageName | null>(null)
   const [travelResult, setTravelResult] = useState<TravelEstimateResult | null>(null)
-  const [travelLoading, setTravelLoading] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
-  const [showDetail, setShowDetail] = useState(false)
 
   const eligibility = checkTariffEligibility(serviceType)
   const recommendation = eligibility.eligible ? recommendPackage(moveSize) : null
@@ -78,23 +76,20 @@ export default function TariffRecommendationPanel({
   const activePkg = selectedPackage ?? recommendation?.primary ?? null
   const isOverride = recommendation && activePkg && activePkg !== recommendation.primary
 
-  // Fetch travel estimate when panel renders (for local moves with addresses)
+  // Silently fetch travel estimate so it's ready when agent applies a package
   const fetchTravel = useCallback(async () => {
     if (!eligibility.eligible || !opportunityId) return
-    setTravelLoading(true)
     try {
       const res = await fetch(`/api/admin/opportunities/${opportunityId}/travel-estimate`, { cache: 'no-store' })
       if (res.ok) setTravelResult(await res.json())
     } catch {
-      // Non-critical — user can enter manually
-    } finally {
-      setTravelLoading(false)
+      // Non-critical — travel hours default to 0 if Maps is unavailable
     }
   }, [opportunityId, eligibility.eligible])
 
   useEffect(() => { fetchTravel() }, [fetchTravel])
 
-  // Travel hours from Maps result — used when building the charge config
+  // Travel hours from Maps result — prefilled into the Moving Labor charge editor
   const resolvedTravelHours: number = travelResult?.ok
     ? (travelResult.recommendedTravelHours ?? travelResult.directDriveHours)
     : 0
@@ -148,11 +143,6 @@ export default function TariffRecommendationPanel({
   }
 
   if (!recommendation) return null
-
-  const totalBillable = (labourEst?.totalLabourHours ?? 0) + resolvedTravelHours
-  const activePkgData = activePkg ? TARIFF_PACKAGES[activePkg] : null
-  const activeRate = activePkg ? getRateForDate(activePkg, moveDate) : 0
-  const estimatedSubtotal = Math.max(totalBillable, 3) * activeRate
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white">
@@ -208,7 +198,7 @@ export default function TariffRecommendationPanel({
           </div>
         )}
 
-        {/* Note */}
+        {/* Recommendation note */}
         {recommendation.note && (
           <div className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2">
             <AlertCircle size={13} className="mt-0.5 shrink-0 text-slate-400" />
@@ -216,55 +206,9 @@ export default function TariffRecommendationPanel({
           </div>
         )}
 
-        {/* Estimate detail toggle */}
-        <button
-          type="button"
-          onClick={() => setShowDetail(o => !o)}
-          className="flex w-full items-center justify-between text-xs font-semibold text-slate-500 hover:text-slate-700"
-        >
-          <span>Time &amp; travel estimate</span>
-          {showDetail ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
-
-        {showDetail && (
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-4">
-            {/* Labour breakdown */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Labour Time</p>
-              {labourEst?.requiresManualReview ? (
-                <div className="flex items-start gap-2 text-xs text-amber-700">
-                  <AlertCircle size={13} className="mt-0.5 shrink-0" />
-                  <span>{labourEst.note}</span>
-                </div>
-              ) : labourEst ? (
-                <div className="space-y-1.5 text-xs text-slate-600">
-                  <EstRow label="Loading" value={`${labourEst.loadHours}h`} />
-                  <EstRow label="Unloading" value={`${labourEst.unloadHours}h`} />
-                  <EstRow label="Handling / buffer" value={`${labourEst.handlingBufferHours}h`} />
-                  <EstRow label="Total labour" value={`${labourEst.totalLabourHours}h`} bold />
-                  {labourEst.note && <p className="text-slate-400 italic">{labourEst.note}</p>}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400">No estimate for this move size — enter manually.</p>
-              )}
-            </div>
-
-            {/* Summary */}
-            {!labourEst?.requiresManualReview && activePkgData && (
-              <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5 text-xs">
-                <p className="font-semibold text-slate-700 mb-2">{activePkgData.name} — Quick estimate</p>
-                <EstRow label="Labour" value={`${labourEst?.totalLabourHours ?? 0}h`} />
-                <EstRow label="Travel" value={`${resolvedTravelHours}h`} />
-                <EstRow label="Total billable" value={`${totalBillable}h`} bold />
-                <EstRow label={`${fmt(activeRate)}/hr × ${Math.max(totalBillable, 3)}h`} value={fmt(estimatedSubtotal)} bold />
-              </div>
-            )}
-          </div>
-        )}
-
         {hasExistingLaborCharge && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            A Moving Labor charge already exists. Adding a charge will update the existing one.
+            A Moving Labor charge already exists. Applying a package will update the existing one.
           </p>
         )}
       </div>
@@ -313,17 +257,8 @@ function PackageCard({
         onClick={e => { e.stopPropagation(); onApply() }}
         className="mt-3 w-full rounded-lg bg-kratos py-2 text-xs font-bold text-slate-950 hover:opacity-90 transition-opacity"
       >
-        Add as Charge
+        Apply as Main Package
       </button>
-    </div>
-  )
-}
-
-function EstRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className={bold ? 'font-semibold text-slate-800' : ''}>{label}</span>
-      <span className={bold ? 'font-bold text-slate-900' : 'tabular-nums'}>{value}</span>
     </div>
   )
 }

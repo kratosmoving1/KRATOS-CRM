@@ -41,8 +41,8 @@ function buildAddressString(parts: Array<string | null | undefined>): string {
 }
 
 function minutesToBillableHours(minutes: number): number {
-  // Round up to the nearest 0.5h for billing purposes
-  return Math.ceil((minutes / 60) * 2) / 2
+  // Round to nearest 0.25h for billing cleanliness
+  return Math.round((minutes / 60) * 4) / 4
 }
 
 async function fetchGoogleMapsDistance(origin: string, destination: string, apiKey: string) {

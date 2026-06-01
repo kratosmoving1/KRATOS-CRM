@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   X, ChevronLeft, Loader2,
   Users, Truck, Package, Box, Plus,
@@ -147,9 +147,10 @@ export interface ChargeFormResult {
   is_overridden: boolean
 }
 
-// Moving Labor form — grouped sections with package, time breakdown, and calculation
+// Moving Labor form — Package / Labour / Travel / Totals
 function MovingLaborForm({ initial, onResult }: FormProps) {
-  const cfg = (initial?.config as Record<string, unknown>) ?? {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const cfg = useMemo(() => (initial?.config as Record<string, unknown>) ?? {}, [initial?.config])
 
   // Package
   const [pkgName, setPkgName] = useState(String(cfg.package_name ?? ''))
@@ -157,26 +158,27 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
   const [crew, setCrew] = useState(String(cfg.num_crew ?? 2))
   const [rate, setRate] = useState(String(cfg.hourly_rate ?? ''))
 
-  // Labour time breakdown
+  // Labour breakdown
   const [loadH, setLoadH] = useState(String(cfg.load_hours ?? ''))
   const [unloadH, setUnloadH] = useState(String(cfg.unload_hours ?? ''))
   const [bufferH, setBufferH] = useState(String(cfg.handling_buffer_hours ?? ''))
+
+  // Travel (prefilled from Google Maps via TariffApplyConfig)
   const [travelH, setTravelH] = useState(String(cfg.travel_hours ?? 0))
+  const travelFromMaps = cfg.travel_provider === 'google_maps'
+
+  // Access challenge handicaps
   const [hOrigin, setHOrigin] = useState(String(cfg.handicap_origin ?? 0))
   const [hStops, setHStops] = useState(String(cfg.handicap_stops ?? 0))
   const [hDest, setHDest] = useState(String(cfg.handicap_dest ?? 0))
+
   const [minH, setMinH] = useState(String(cfg.minimum_hours ?? 3))
-
-  // Override
   const [overrideReason, setOverrideReason] = useState(String(initial?.override_reason ?? cfg.override_reason ?? ''))
-
-  // Discount
   const [discountType, setDiscountType] = useState<'percent' | 'amount' | null>(
     (initial?.discount_type as 'percent' | 'amount' | null) ?? null
   )
   const [discountValue, setDiscountValue] = useState(String(initial?.discount_value ?? ''))
 
-  // Derived labor_hours = load + unload + buffer (the "gross labour" before handicaps)
   const laborHours = numVal(loadH) + numVal(unloadH) + numVal(bufferH)
 
   const calcResult = useCallback(() => {
@@ -199,21 +201,16 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       ...c,
       total_hours,
       billable_hours,
-      // Labour breakdown
       load_hours: numVal(loadH),
       unload_hours: numVal(unloadH),
       handling_buffer_hours: numVal(bufferH),
-      // Package meta
       package_name: pkgName.trim() || null,
-      // Travel metadata
       distance_km: cfg.distance_km ?? null,
       drive_time_minutes: cfg.drive_time_minutes ?? null,
       travel_provider: cfg.travel_provider ?? null,
-      // Override
       override_reason: overrideReason.trim() || null,
     }
 
-    const hasOverride = Boolean(overrideReason.trim())
     onResult({
       name: pkgName ? `Moving Labor — ${pkgName}` : 'Moving Labor',
       description: `${billable_hours}h @ ${fmt(numVal(rate))}/hr · ${numVal(trucks)} truck, ${numVal(crew)} crew`,
@@ -223,7 +220,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       discount_value: dv > 0 ? dv : null,
       discount_amount,
       total,
-      is_overridden: hasOverride,
+      is_overridden: Boolean(overrideReason.trim()),
     })
     return { total_hours, billable_hours, subtotal }
   }, [trucks, crew, rate, laborHours, loadH, unloadH, bufferH, travelH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
@@ -232,14 +229,9 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
 
   const { total_hours, billable_hours, subtotal } = (() => {
     const c = {
-      num_trucks: numVal(trucks),
-      num_crew: numVal(crew),
-      hourly_rate: numVal(rate),
-      labor_hours: laborHours,
-      travel_hours: numVal(travelH),
-      handicap_origin: numVal(hOrigin),
-      handicap_stops: numVal(hStops),
-      handicap_dest: numVal(hDest),
+      num_trucks: numVal(trucks), num_crew: numVal(crew), hourly_rate: numVal(rate),
+      labor_hours: laborHours, travel_hours: numVal(travelH),
+      handicap_origin: numVal(hOrigin), handicap_stops: numVal(hStops), handicap_dest: numVal(hDest),
       minimum_hours: numVal(minH),
     }
     return calculateMovingLabor(c)
@@ -247,7 +239,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
 
   return (
     <div className="space-y-5">
-      {/* ── Package section ─────────────────────────────────────── */}
+      {/* ── Package ───────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Package</p>
         <FInput label="Package name (optional)" value={pkgName} onChange={e => setPkgName(e.target.value)} placeholder="Silver, Gold, Custom…" />
@@ -258,29 +250,78 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
         </div>
       </div>
 
-      {/* ── Time section ────────────────────────────────────────── */}
+      {/* ── Estimated Time: Labour ────────────────────────────────── */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estimated Time</p>
 
-        <p className="text-[10px] font-semibold text-slate-400">Labour breakdown</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Labour</p>
         <div className="grid grid-cols-3 gap-3">
-          <FInput label="Loading (h)" type="number" min={0} step="0.5" value={loadH} onChange={e => setLoadH(e.target.value)} placeholder="0" />
-          <FInput label="Unloading (h)" type="number" min={0} step="0.5" value={unloadH} onChange={e => setUnloadH(e.target.value)} placeholder="0" />
-          <FInput label="Buffer (h)" type="number" min={0} step="0.5" value={bufferH} onChange={e => setBufferH(e.target.value)} placeholder="0" />
+          <FInput label="Loading (h)" type="number" min={0} step="0.25" value={loadH} onChange={e => setLoadH(e.target.value)} placeholder="0" />
+          <FInput label="Unloading (h)" type="number" min={0} step="0.25" value={unloadH} onChange={e => setUnloadH(e.target.value)} placeholder="0" />
+          <FInput label="Buffer (h)" type="number" min={0} step="0.25" value={bufferH} onChange={e => setBufferH(e.target.value)} placeholder="0" />
         </div>
-        <div className="flex items-center justify-between px-1 text-sm">
+        <div className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
           <span className="text-xs text-slate-500">Labour subtotal</span>
-          <span className="font-semibold text-slate-800">{laborHours}h</span>
+          <span className="text-sm font-semibold text-slate-800">{laborHours}h</span>
         </div>
 
-        <p className="text-[10px] font-semibold text-slate-400 mt-1">Travel &amp; handicaps</p>
-        <div className="grid grid-cols-4 gap-3">
-          <FInput label="Travel (h)" type="number" min={0} step="0.5" value={travelH} onChange={e => setTravelH(e.target.value)} />
-          <FInput label="Origin (h)" type="number" min={0} step="0.5" value={hOrigin} onChange={e => setHOrigin(e.target.value)} />
-          <FInput label="Stops (h)" type="number" min={0} step="0.5" value={hStops} onChange={e => setHStops(e.target.value)} />
-          <FInput label="Dest (h)" type="number" min={0} step="0.5" value={hDest} onChange={e => setHDest(e.target.value)} />
+        {/* Travel */}
+        <div className="pt-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Travel</p>
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <FLabel>Travel hours</FLabel>
+                {travelFromMaps && (
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                    Google Maps
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-kratos focus-within:bg-white focus-within:ring-2 focus-within:ring-kratos/20">
+                <input
+                  type="number" min={0} step="0.25"
+                  value={travelH}
+                  onChange={e => setTravelH(e.target.value)}
+                  className="w-full flex-1 rounded-lg bg-transparent px-3 py-2.5 text-sm text-slate-900 outline-none"
+                />
+                <span className="pr-3 text-sm text-slate-500">h</span>
+              </div>
+            </div>
+            {travelFromMaps && cfg.drive_time_minutes != null && (
+              <div className="mt-6 rounded-lg bg-blue-50 px-3 py-2.5 text-xs text-blue-700 shrink-0">
+                <p className="font-semibold">{String(cfg.drive_time_minutes)} min drive</p>
+                {cfg.distance_km != null && <p className="text-blue-500">{String(cfg.distance_km)} km</p>}
+              </div>
+            )}
+          </div>
+          {travelFromMaps && (
+            <p className="mt-1 text-[10px] text-slate-400">Prefilled from Google Maps. You can override this value.</p>
+          )}
         </div>
 
+        {/* Access challenges (secondary) */}
+        {(numVal(hOrigin) > 0 || numVal(hStops) > 0 || numVal(hDest) > 0) ? (
+          <div className="pt-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Access Challenges</p>
+            <div className="grid grid-cols-3 gap-3">
+              <FInput label="Origin (h)" type="number" min={0} step="0.25" value={hOrigin} onChange={e => setHOrigin(e.target.value)} />
+              <FInput label="Stops (h)" type="number" min={0} step="0.25" value={hStops} onChange={e => setHStops(e.target.value)} />
+              <FInput label="Dest (h)" type="number" min={0} step="0.25" value={hDest} onChange={e => setHDest(e.target.value)} />
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {}}
+            className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
+            title="Add handicap hours for stairs, elevator waits, long carries"
+          >
+            + Add access challenge hours (stairs, elevator, long carry)
+          </button>
+        )}
+
+        {/* Totals */}
         <div className="grid grid-cols-4 gap-3 border-t border-slate-200 pt-3">
           <div>
             <FLabel>Total time</FLabel>
@@ -302,9 +343,17 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
             </div>
           </div>
         </div>
+
+        {/* Subtotal preview */}
+        {numVal(rate) > 0 && (
+          <div className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
+            <span className="text-xs text-slate-500">{fmt(numVal(rate))}/hr × {billable_hours}h</span>
+            <span className="text-sm font-bold text-slate-900">{fmt(subtotal)}</span>
+          </div>
+        )}
       </div>
 
-      {/* ── Override reason ─────────────────────────────────────── */}
+      {/* ── Override reason ───────────────────────────────────────── */}
       <div>
         <FLabel>Agent override reason (optional)</FLabel>
         <input

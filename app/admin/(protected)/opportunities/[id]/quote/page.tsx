@@ -1644,18 +1644,54 @@ export default function OpportunityDetailPage() {
                 return (
                   <div className="rounded-xl border border-slate-200 bg-white">
                     {/* Header */}
-                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
                       <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Stops</h2>
-                      {mapsUrl && (
-                        <a
-                          href={mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toast.info('Multi-stop support coming soon.')}
+                          className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
                         >
-                          <Map size={12} /> Map
-                        </a>
-                      )}
+                          + Add Stop
+                        </button>
+                        {mapsUrl && (
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <Map size={12} /> Map
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const origin = [opp.origin_address_line1, opp.origin_city, opp.origin_province].filter(Boolean).join(', ')
+                            const dest = [opp.dest_address_line1, opp.dest_city, opp.dest_province].filter(Boolean).join(', ')
+                            const text = [
+                              `DISPATCH: ${DISPATCH_ADDRESS}`,
+                              origin ? `ORIGIN: ${origin}` : 'ORIGIN: Not set',
+                              dest ? `DESTINATION: ${dest}` : 'DESTINATION: Not set',
+                              `RETURN: ${DISPATCH_ADDRESS}`,
+                            ].join('\n')
+                            navigator.clipboard.writeText(text).then(
+                              () => toast.success('Stops copied to clipboard.'),
+                              () => toast.error('Could not copy — check browser permissions.'),
+                            )
+                          }}
+                          className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          Copy Stops
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toast.info('Clear Stops removes any extra intermediate stops.')}
+                          className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      </div>
                     </div>
 
                     {/* Leg badge strip */}
