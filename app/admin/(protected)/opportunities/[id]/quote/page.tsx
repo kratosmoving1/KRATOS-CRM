@@ -196,6 +196,7 @@ interface CommunicationTemplate {
   trigger: string
   subject: string | null
   body: string
+  is_active: boolean
 }
 
 function AddressBlock({ prefix, data }: { prefix: 'origin' | 'dest'; data: OppDetail }) {
@@ -349,6 +350,10 @@ export default function OpportunityDetailPage() {
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all')
 
+  // Email templates (for Apply Template in email composer)
+  const [emailTemplates, setEmailTemplates] = useState<CommunicationTemplate[]>([])
+  const [showEmailTemplateMenu, setShowEmailTemplateMenu] = useState(false)
+
   // Notes (estimate tab)
   const [notes, setNotes] = useState('')
   const [customerNotes, setCustomerNotes] = useState('')
@@ -428,6 +433,21 @@ export default function OpportunityDetailPage() {
 
     loadNoAnswerTemplates()
   }, [commType, commCallOutcome, noAnswerTemplates.length])
+
+  // Load all email templates when agent switches to Email tab (for Apply Template)
+  useEffect(() => {
+    if (commType !== 'email' || emailTemplates.length > 0) return
+    fetch('/api/admin/communication-templates')
+      .then(r => r.json())
+      .then(d => {
+        setEmailTemplates(
+          (d.templates ?? []).filter(
+            (t: CommunicationTemplate) => t.channel === 'email' && t.is_active,
+          ),
+        )
+      })
+      .catch(() => {})
+  }, [commType, emailTemplates.length])
 
   async function saveNoteField(
     field: 'notes' | 'customer_notes' | 'crew_notes' | 'dispatcher_notes',
@@ -973,79 +993,96 @@ export default function OpportunityDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Left: composer + timeline */}
             <div className="space-y-4 lg:col-span-2">
-              {/* Stats strip — 4 items */}
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: 'Calls',  value: String(callCount) },
-                  { label: 'Texts',  value: String(smsCount) },
-                  { label: 'Emails', value: String(emailCount) },
-                ].map(({ label, value }) => (
-                  <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center">
-                    <p className="text-xl font-bold text-slate-900">{value}</p>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
-                  </div>
-                ))}
-                <div className={cn(
-                  'rounded-xl border px-3 py-3 text-center',
-                  !daysUntilMove ? 'border-slate-200 bg-white'
-                  : daysUntilMove === 'Move passed' ? 'border-slate-200 bg-slate-50'
-                  : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow' ? 'border-amber-200 bg-amber-50'
-                  : 'border-slate-200 bg-white',
-                )}>
-                  <p className={cn(
-                    'text-base font-bold leading-tight',
-                    !daysUntilMove ? 'text-slate-400'
-                    : daysUntilMove === 'Move passed' ? 'text-slate-400'
-                    : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow' ? 'text-amber-700'
-                    : 'text-slate-900',
-                  )}>
-                    {!daysUntilMove ? '—'
-                      : daysUntilMove === 'Move passed' ? 'Passed'
-                      : daysUntilMove === 'Today' ? 'Today'
-                      : daysUntilMove === 'Tomorrow' ? 'Tmrw'
-                      : daysUntilMove}
-                  </p>
-                  <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">Days to Move</p>
-                </div>
-              </div>
 
               {/* Communication composer */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                {/* Type tabs */}
-                <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-                  {COMM_TYPES.map(({ value, label, icon: Icon }) => (
+              <div className="rounded-xl border border-slate-200 bg-white">
+                {/* "Sales - #XXXX" heading */}
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      Sales &mdash; {formatQuoteNumber(opp.opportunity_number)}
+                    </h2>
                     <button
-                      key={value}
-                      onClick={() => setCommType(value)}
-                      className={cn(
-                        'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors',
-                        commType === value
-                          ? 'bg-white text-slate-900 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700',
-                      )}
+                      type="button"
+                      onClick={() => setShowCreateFollowUp(true)}
+                      className="flex items-center gap-1 text-xs font-medium text-kratos hover:underline"
                     >
-                      <Icon size={13} /> {label}
+                      <CalendarPlus size={11} /> Create Follow-up
                     </button>
-                  ))}
+                  </div>
                 </div>
 
-                {/* Email fields */}
-                {commType === 'email' && (
-                  <div className="mb-3 space-y-2">
-                    <input
-                      value={commEmailTo}
-                      onChange={e => setCommEmailTo(e.target.value)}
-                      placeholder="To: customer@example.com"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
-                    />
-                    <input
-                      value={commSubject}
-                      onChange={e => setCommSubject(e.target.value)}
-                      placeholder="Subject"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
-                    />
+                <div className="p-5">
+                  {/* Type tabs */}
+                  <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
+                    {COMM_TYPES.map(({ value, label, icon: Icon }) => (
+                      <button
+                        key={value}
+                        onClick={() => setCommType(value)}
+                        className={cn(
+                          'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors',
+                          commType === value
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700',
+                        )}
+                      >
+                        <Icon size={13} /> {label}
+                      </button>
+                    ))}
                   </div>
-                )}
+
+                  {/* Email fields */}
+                  {commType === 'email' && (
+                    <div className="mb-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={commEmailTo}
+                          onChange={e => setCommEmailTo(e.target.value)}
+                          placeholder="To: customer@example.com"
+                          className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                        />
+                        {/* Apply Template dropdown */}
+                        <div className="relative shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowEmailTemplateMenu(v => !v)}
+                            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+                          >
+                            Apply Template
+                          </button>
+                          {showEmailTemplateMenu && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setShowEmailTemplateMenu(false)} />
+                              <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-xl max-h-64 overflow-y-auto">
+                                {emailTemplates.length === 0 ? (
+                                  <p className="px-3 py-2 text-xs text-slate-400">No email templates yet. Add them in Settings.</p>
+                                ) : emailTemplates.map(t => (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setCommSubject(t.subject ?? '')
+                                      setCommBody(t.body)
+                                      setShowEmailTemplateMenu(false)
+                                    }}
+                                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                                  >
+                                    {t.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <input
+                        value={commSubject}
+                        onChange={e => setCommSubject(e.target.value)}
+                        placeholder="Subject"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                      />
+                    </div>
+                  )}
 
                 {/* Call outcome */}
                 {commType === 'call' && (
@@ -1153,46 +1190,81 @@ export default function OpportunityDetailPage() {
                   </div>
                 )}
 
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateFollowUp(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    <CalendarPlus size={13} /> Create follow-up
-                  </button>
+                  {/* Footer: Create follow-up checkbox + submit */}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={showCreateFollowUp}
+                        onChange={e => { if (e.target.checked) setShowCreateFollowUp(true) }}
+                        className="h-4 w-4 rounded border-slate-300 accent-kratos"
+                      />
+                      Create a follow-up
+                    </label>
 
-                  {commType === 'sms' ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={logSmsOnly}
-                        disabled={commSubmitting || !commBody.trim()}
-                        className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {commSubmitting && <Loader2 size={13} className="animate-spin" />}
-                        Log Only
-                      </button>
-                      <button
-                        onClick={sendSmsDirectly}
-                        disabled={commSubmitting || !commBody.trim() || !smsStatus?.canSend}
-                        title={!smsStatus?.canSend ? (smsStatus?.reason ?? 'SMS delivery not configured') : undefined}
-                        className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
+                    {commType === 'sms' ? (
+                      <div className="flex items-center gap-2">
+                        <button onClick={logSmsOnly} disabled={commSubmitting || !commBody.trim()}
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                          {commSubmitting && <Loader2 size={13} className="animate-spin" />}
+                          Log Only
+                        </button>
+                        <button onClick={sendSmsDirectly} disabled={commSubmitting || !commBody.trim() || !smsStatus?.canSend}
+                          title={!smsStatus?.canSend ? (smsStatus?.reason ?? 'SMS delivery not configured') : undefined}
+                          className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
+                          {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                          Send SMS
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={submitComm}
+                        disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
+                        className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50">
                         {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                        Send SMS
+                        {commType === 'note' ? 'Add Note' : commType === 'email' ? 'Send Email' : commType === 'call' ? 'Log Call' : 'Log Text'}
                       </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={submitComm}
-                      disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
-                      className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
-                    >
-                      {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                      {commType === 'note' ? 'Save Note' : `Log ${commType.charAt(0).toUpperCase() + commType.slice(1)}`}
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              {/* Stats row — compact single line below composer (SmartMoving style) */}
+              <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                <span className="flex items-center gap-1.5 text-slate-600">
+                  <PhoneCall size={13} className="text-slate-400" />
+                  <span className="font-semibold text-slate-900">{callCount}</span>
+                  <span className="text-slate-400 text-xs">Calls</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-600">
+                  <MessageSquare size={13} className="text-slate-400" />
+                  <span className="font-semibold text-slate-900">{smsCount}</span>
+                  <span className="text-slate-400 text-xs">Texts</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-600">
+                  <AtSign size={13} className="text-slate-400" />
+                  <span className="font-semibold text-slate-900">{emailCount}</span>
+                  <span className="text-slate-400 text-xs">Emails</span>
+                </span>
+                <span className={cn(
+                  'flex items-center gap-1.5',
+                  !daysUntilMove || daysUntilMove === 'Move passed' ? 'text-slate-400'
+                  : daysUntilMove === 'Today' || daysUntilMove === 'Tomorrow' ? 'text-amber-700'
+                  : 'text-slate-600',
+                )}>
+                  <Calendar size={13} className="text-slate-400" />
+                  <span className="font-semibold">
+                    {!daysUntilMove ? '—'
+                      : daysUntilMove === 'Move passed' ? 'Passed'
+                      : daysUntilMove === 'Today' ? 'Today'
+                      : daysUntilMove === 'Tomorrow' ? 'Tomorrow'
+                      : daysUntilMove}
+                  </span>
+                  <span className="text-slate-400 text-xs">Until Move</span>
+                </span>
+                <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-slate-500 select-none">
+                  <input type="checkbox" className="h-3.5 w-3.5 rounded border-slate-300 accent-kratos" />
+                  Turn off conversation replies in-app
+                </label>
               </div>
 
               {showCreateFollowUp && (

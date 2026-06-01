@@ -55,3 +55,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   return NextResponse.json(data)
 }
+
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const supabase = createClient()
+  const auth = await requireActiveProfile(supabase)
+  if (auth.response) return auth.response
+
+  const normalizedRole = normalizeRole(auth.context.role)
+  if (normalizedRole !== 'owner' && normalizedRole !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { error } = await supabase
+    .from('communication_templates')
+    .delete()
+    .eq('id', params.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return new NextResponse(null, { status: 204 })
+}
