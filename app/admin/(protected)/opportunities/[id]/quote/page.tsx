@@ -281,8 +281,10 @@ const CALL_OUTCOME_OPTIONS = [
   { value: 'busy',         label: 'Busy' },
   { value: 'wrong_number', label: 'Wrong Number' },
   { value: 'voicemail',    label: 'Left Voicemail' },
-  { value: 'connected',    label: 'Connected — Left Live Message' },
+  { value: 'connected',    label: 'Left Live Message' },
 ]
+// Note: DB call_outcome enum supports: connected, voicemail, no_answer, wrong_number, busy
+// "Connected" and "Number Disconnected" map to connected/wrong_number — add more options via DB migration when needed.
 
 const PAYMENT_METHODS = [
   { label: 'Cash', value: 'cash', icon: Banknote, note: 'Record only' },
@@ -1042,33 +1044,37 @@ export default function OpportunityDetailPage() {
                 return (
                   <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                     {/* Header */}
-                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <h2 className="text-sm font-semibold text-slate-900">
+                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-base font-bold tracking-tight text-slate-900">
                           Sales &mdash; {formatQuoteNumber(opp.opportunity_number)}
                         </h2>
-                        <button type="button" onClick={() => setShowCreateFollowUp(true)}
-                          className="flex items-center gap-1 text-xs font-medium text-kratos hover:underline">
-                          <CalendarPlus size={11} /> Create Follow-up
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateFollowUp(true)}
+                          className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-kratos hover:bg-kratos/5 hover:text-slate-900 transition-colors"
+                        >
+                          <CalendarPlus size={11} className="text-kratos" />
+                          Create Follow-up
                         </button>
                       </div>
                     </div>
 
-                    {/* Tab row — underline style matching SmartMoving */}
-                    <div className="flex border-b border-slate-100">
+                    {/* Tab row — clean underline style */}
+                    <div className="flex border-b border-slate-200">
                       {COMM_TYPES.map(({ value, label, icon: Icon }) => (
                         <button
                           key={value}
                           type="button"
                           onClick={() => { setCommType(value); setCommBody(''); setCommSubject('') }}
                           className={cn(
-                            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-semibold border-b-2 transition-colors',
+                            'flex flex-1 items-center justify-center gap-1.5 px-2 py-3 text-sm font-medium border-b-2 transition-all',
                             commType === value
-                              ? 'border-kratos text-slate-900 bg-kratos/5'
-                              : 'border-transparent text-slate-400 hover:text-slate-700 hover:bg-slate-50',
+                              ? 'border-kratos text-slate-900'
+                              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300',
                           )}
                         >
-                          <Icon size={13} /> {label}
+                          <Icon size={14} /> {label}
                         </button>
                       ))}
                     </div>
@@ -1133,7 +1139,7 @@ export default function OpportunityDetailPage() {
                             <select
                               value={commDirection}
                               onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
                             >
                               <option value="outbound">Outbound</option>
                               <option value="inbound">Inbound</option>
@@ -1141,25 +1147,35 @@ export default function OpportunityDetailPage() {
                             <select
                               value={commCallOutcome}
                               onChange={e => setCommCallOutcome(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
                             >
                               <option value="">— Outcome —</option>
                               {CALL_OUTCOME_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
                               ))}
                             </select>
-                            <CallTplSelect
-                              templates={emailTpls}
+                            {/* Email template — pre-selects for follow-up sends */}
+                            <select
                               value={callEmailTplId}
-                              onChange={setCallEmailTplId}
-                              placeholder="— Email Template —"
-                            />
-                            <CallTplSelect
-                              templates={smsTpls}
+                              onChange={e => setCallEmailTplId(e.target.value)}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                            >
+                              <option value="">— Email Template —</option>
+                              {emailTpls.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </select>
+                            {/* SMS template — pre-selects for follow-up sends */}
+                            <select
                               value={callSmsTplId}
-                              onChange={setCallSmsTplId}
-                              placeholder="— SMS Template —"
-                            />
+                              onChange={e => setCallSmsTplId(e.target.value)}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                            >
+                              <option value="">— SMS Template —</option>
+                              {smsTpls.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </select>
                           </div>
 
                           {/* Call notes textarea */}
@@ -1171,54 +1187,51 @@ export default function OpportunityDetailPage() {
                             className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                           />
 
-                          {/* No Answer follow-up actions */}
+                          {/* No Answer follow-up actions — uses templates selected above, no duplicate dropdowns */}
                           {commCallOutcome === 'no_answer' && (
-                            <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 space-y-2.5">
-                              <p className="text-xs font-semibold text-amber-800">No Answer — follow-up actions</p>
-                              <div className="grid grid-cols-2 gap-2">
-                                <select
-                                  value={callSmsTplId}
-                                  onChange={e => setCallSmsTplId(e.target.value)}
-                                  className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-kratos"
-                                >
-                                  <option value="">— SMS Template —</option>
-                                  {smsTpls.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                  ))}
-                                </select>
-                                <select
-                                  value={callEmailTplId}
-                                  onChange={e => setCallEmailTplId(e.target.value)}
-                                  className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-kratos"
-                                >
-                                  <option value="">— Email Template —</option>
-                                  {emailTpls.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                  ))}
-                                </select>
-                              </div>
+                            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                                No Answer — follow-up actions
+                              </p>
+                              {!callSmsTplId && !callEmailTplId && (
+                                <p className="text-xs text-amber-700">
+                                  Select an SMS or Email template in the row above to enable sending.
+                                </p>
+                              )}
+                              {(callSmsTplId || callEmailTplId) && (
+                                <div className="space-y-1 text-xs text-slate-600">
+                                  {callSmsTplId && (
+                                    <p>SMS: <span className="font-medium text-slate-900">{smsTpls.find(t => t.id === callSmsTplId)?.name ?? '—'}</span></p>
+                                  )}
+                                  {callEmailTplId && (
+                                    <p>Email: <span className="font-medium text-slate-900">{emailTpls.find(t => t.id === callEmailTplId)?.name ?? '—'}</span></p>
+                                  )}
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   onClick={sendNoAnswerSms}
                                   disabled={noAnswerSmsSending || !callSmsTplId || !smsStatus?.canSend}
-                                  title={!smsStatus?.canSend ? 'SMS not configured' : undefined}
-                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 disabled:opacity-50"
+                                  title={!callSmsTplId ? 'Select an SMS template above' : !smsStatus?.canSend ? 'SMS not configured' : undefined}
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                                 >
                                   {noAnswerSmsSending && <Loader2 size={12} className="animate-spin" />}
                                   Send SMS
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => toast.info('Email sending coming soon — log the call and send via Send Estimate.')}
-                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100"
+                                  disabled={!callEmailTplId}
+                                  title={!callEmailTplId ? 'Select an Email template above' : undefined}
+                                  onClick={() => toast.info('Outbound email sending will be added in a future session.')}
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                                 >
                                   Send Email
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setShowCreateFollowUp(true)}
-                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100"
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 transition-colors"
                                 >
                                   <CalendarPlus size={12} /> Create Follow-up
                                 </button>
