@@ -87,6 +87,30 @@ function buildMapsUrl(opp: OppDetail): string | null {
   return `https://www.google.com/maps/dir/${stops.map(encodeURIComponent).join('/')}`
 }
 
+function applyMerge(text: string, opp: OppDetail): string {
+  const custFirst = (opp.customer?.full_name ?? '').split(' ')[0] || 'there'
+  const agentFirst = (opp.agent?.full_name ?? '').split(' ')[0] || 'Alex'
+  return text
+    .replace(/@FirstName/g,      custFirst)
+    .replace(/@YourFirstName/g,  agentFirst)
+    .replace(/@AssignedSalesPersonFirstName/g, agentFirst)
+    .replace(/@OriginCity/g,     opp.origin_city ?? '')
+    .replace(/@DestinationCity/g, opp.dest_city ?? '')
+    .replace(/@MoveDate/g,       opp.service_date ? new Date(opp.service_date).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' }) : 'TBD')
+    .replace(/@CompanyPhone/g,   '(800) 321-3222')
+    .replace(/@SubmitLink/g,     '')
+    .replace(/{{customer_name}}/g,      opp.customer?.full_name ?? '')
+    .replace(/{{customer_first_name}}/g, custFirst)
+    .replace(/{{agent_first_name}}/g,   agentFirst)
+    .replace(/{{agent_full_name}}/g,    opp.agent?.full_name ?? '')
+    .replace(/{{company_name}}/g,       'Kratos Moving Inc.')
+    .replace(/{{move_date}}/g,          opp.service_date ?? 'TBD')
+    .replace(/{{phone_number}}/g,       opp.customer?.phone ?? '')
+    .replace(/{{quote_number}}/g,       opp.opportunity_number ?? '')
+    .replace(/{{portal_link}}/g,        '')
+    .replace(/{{deposit_amount}}/g,     String(opp.deposit_amount ?? 150))
+}
+
 function formatDate(d: string | null | undefined) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -253,11 +277,11 @@ const QUOTE_TABS: Array<{ value: QuoteTab; label: string }> = [
 ]
 
 const CALL_OUTCOME_OPTIONS = [
-  { value: 'connected',    label: 'Connected' },
-  { value: 'voicemail',    label: 'Voicemail' },
   { value: 'no_answer',    label: 'No Answer' },
-  { value: 'wrong_number', label: 'Wrong Number' },
   { value: 'busy',         label: 'Busy' },
+  { value: 'wrong_number', label: 'Wrong Number' },
+  { value: 'voicemail',    label: 'Left Voicemail' },
+  { value: 'connected',    label: 'Connected — Left Live Message' },
 ]
 
 const PAYMENT_METHODS = [
@@ -336,23 +360,22 @@ export default function OpportunityDetailPage() {
   const [commType, setCommType] = useState<CommType>('note')
   const [commBody, setCommBody] = useState('')
   const [commCallOutcome, setCommCallOutcome] = useState('')
+  const [commDirection, setCommDirection] = useState<'outbound' | 'inbound'>('outbound')
   const [commSubject, setCommSubject] = useState('')
   const [commEmailTo, setCommEmailTo] = useState('')
   const [commSubmitting, setCommSubmitting] = useState(false)
   const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
-  const [noAnswerTemplates, setNoAnswerTemplates] = useState<CommunicationTemplate[]>([])
-  const [noAnswerSmsTemplateId, setNoAnswerSmsTemplateId] = useState('')
-  const [noAnswerEmailTemplateId, setNoAnswerEmailTemplateId] = useState('')
+  // Unified templates — email + SMS loaded once when Sales tab opens
+  const [allTemplates, setAllTemplates] = useState<CommunicationTemplate[]>([])
+  // Call tab template selection (for follow-up sends)
+  const [callEmailTplId, setCallEmailTplId] = useState('')
+  const [callSmsTplId, setCallSmsTplId] = useState('')
   const [noAnswerSmsSending, setNoAnswerSmsSending] = useState(false)
 
   // Timeline + filters
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all')
-
-  // Email templates (for Apply Template in email composer)
-  const [emailTemplates, setEmailTemplates] = useState<CommunicationTemplate[]>([])
-  const [showEmailTemplateMenu, setShowEmailTemplateMenu] = useState(false)
 
   // Notes (estimate tab)
   const [notes, setNotes] = useState('')
@@ -411,43 +434,14 @@ export default function OpportunityDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, loadTimeline])
 
+  // Load all templates (email + SMS) once when Sales tab opens
   useEffect(() => {
-    async function loadNoAnswerTemplates() {
-      if (commType !== 'call' || commCallOutcome !== 'no_answer' || noAnswerTemplates.length > 0) return
-
-      try {
-        const res = await fetch('/api/admin/communication-templates')
-        const data = await res.json()
-        if (!res.ok) return
-
-        const templates = (data.templates ?? []).filter((template: CommunicationTemplate) => (
-          template.trigger === 'no_answer' && (template.channel === 'sms' || template.channel === 'email')
-        ))
-        setNoAnswerTemplates(templates)
-        setNoAnswerSmsTemplateId(templates.find((template: CommunicationTemplate) => template.channel === 'sms')?.id ?? '')
-        setNoAnswerEmailTemplateId(templates.find((template: CommunicationTemplate) => template.channel === 'email')?.id ?? '')
-      } catch {
-        toast.error('Unable to load follow-up templates')
-      }
-    }
-
-    loadNoAnswerTemplates()
-  }, [commType, commCallOutcome, noAnswerTemplates.length])
-
-  // Load all email templates when agent switches to Email tab (for Apply Template)
-  useEffect(() => {
-    if (commType !== 'email' || emailTemplates.length > 0) return
+    if (tab !== 'sales' || allTemplates.length > 0) return
     fetch('/api/admin/communication-templates')
       .then(r => r.json())
-      .then(d => {
-        setEmailTemplates(
-          (d.templates ?? []).filter(
-            (t: CommunicationTemplate) => t.channel === 'email' && t.is_active,
-          ),
-        )
-      })
+      .then(d => setAllTemplates(d.templates ?? []))
       .catch(() => {})
-  }, [commType, emailTemplates.length])
+  }, [tab, allTemplates.length])
 
   async function saveNoteField(
     field: 'notes' | 'customer_notes' | 'crew_notes' | 'dispatcher_notes',
@@ -649,7 +643,7 @@ export default function OpportunityDetailPage() {
       }
       if (commType === 'call') {
         payload.call_outcome = commCallOutcome || null
-        payload.direction = 'outbound'
+        payload.direction = commDirection
       }
       if (commType === 'email') {
         payload.subject  = commSubject || null
@@ -725,19 +719,11 @@ export default function OpportunityDetailPage() {
   }
 
   async function sendNoAnswerSms() {
-    if (!opp?.customer) {
-      toast.error('No customer linked')
-      return
-    }
-
-    if (!noAnswerSmsTemplateId) {
-      toast.error('Select an SMS template')
-      return
-    }
+    if (!opp?.customer) { toast.error('No customer linked'); return }
+    if (!callSmsTplId) { toast.error('Select an SMS template first'); return }
 
     setNoAnswerSmsSending(true)
     toast.message('Sending SMS...')
-
     try {
       const res = await fetch('/api/communications/sms/send', {
         method: 'POST',
@@ -745,18 +731,15 @@ export default function OpportunityDetailPage() {
         body: JSON.stringify({
           opportunityId: opp.id,
           customerId: opp.customer.id,
-          templateId: noAnswerSmsTemplateId,
+          templateId: callSmsTplId,
         }),
       })
       const data = await res.json().catch(() => ({}))
-
       if (!res.ok) {
         toast.error(typeof data.error === 'string' ? data.error : 'Unable to send SMS')
-        loadTimeline()
-        return
+      } else {
+        toast.success('SMS sent.')
       }
-
-      toast.success('SMS sent.')
       loadTimeline()
     } catch {
       toast.error('Unable to send SMS')
@@ -995,256 +978,355 @@ export default function OpportunityDetailPage() {
             <div className="space-y-4 lg:col-span-2">
 
               {/* Communication composer */}
-              <div className="rounded-xl border border-slate-200 bg-white">
-                {/* "Sales - #XXXX" heading */}
-                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-semibold text-slate-900">
-                      Sales &mdash; {formatQuoteNumber(opp.opportunity_number)}
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateFollowUp(true)}
-                      className="flex items-center gap-1 text-xs font-medium text-kratos hover:underline"
-                    >
-                      <CalendarPlus size={11} /> Create Follow-up
-                    </button>
-                  </div>
-                </div>
+              {(() => {
+                const emailTpls = allTemplates.filter(t => t.channel === 'email' && t.is_active)
+                const smsTpls   = allTemplates.filter(t => t.channel === 'sms'   && t.is_active)
 
-                <div className="p-5">
-                  {/* Type tabs */}
-                  <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-                    {COMM_TYPES.map(({ value, label, icon: Icon }) => (
-                      <button
-                        key={value}
-                        onClick={() => setCommType(value)}
-                        className={cn(
-                          'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors',
-                          commType === value
-                            ? 'bg-white text-slate-900 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700',
-                        )}
-                      >
-                        <Icon size={13} /> {label}
-                      </button>
+                // Template select component — renders a <select> that applies merge fields on change
+                const TplSelect = ({
+                  templates,
+                  value,
+                  onChange,
+                  placeholder,
+                  fillSubject,
+                }: {
+                  templates: CommunicationTemplate[]
+                  value: string
+                  onChange: (id: string) => void
+                  placeholder: string
+                  fillSubject?: boolean
+                }) => (
+                  <select
+                    value={value}
+                    onChange={e => {
+                      const tpl = templates.find(t => t.id === e.target.value)
+                      if (tpl) {
+                        setCommBody(applyMerge(tpl.body, opp))
+                        if (fillSubject && tpl.subject) setCommSubject(applyMerge(tpl.subject, opp))
+                      }
+                      onChange(e.target.value)
+                    }}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                  >
+                    <option value="">{placeholder}</option>
+                    {templates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
-                  </div>
+                  </select>
+                )
 
-                  {/* Email fields */}
-                  {commType === 'email' && (
-                    <div className="mb-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={commEmailTo}
-                          onChange={e => setCommEmailTo(e.target.value)}
-                          placeholder="To: customer@example.com"
-                          className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
-                        />
-                        {/* Apply Template dropdown */}
-                        <div className="relative shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setShowEmailTemplateMenu(v => !v)}
-                            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 whitespace-nowrap"
-                          >
-                            Apply Template
-                          </button>
-                          {showEmailTemplateMenu && (
-                            <>
-                              <div className="fixed inset-0 z-10" onClick={() => setShowEmailTemplateMenu(false)} />
-                              <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-xl max-h-64 overflow-y-auto">
-                                {emailTemplates.length === 0 ? (
-                                  <p className="px-3 py-2 text-xs text-slate-400">No email templates yet. Add them in Settings.</p>
-                                ) : emailTemplates.map(t => (
-                                  <button
-                                    key={t.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setCommSubject(t.subject ?? '')
-                                      setCommBody(t.body)
-                                      setShowEmailTemplateMenu(false)
-                                    }}
-                                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                                  >
-                                    {t.name}
-                                  </button>
-                                ))}
-                              </div>
-                            </>
+                // Standalone select that doesn't fill textarea (for call tab header row)
+                const CallTplSelect = ({
+                  templates,
+                  value,
+                  onChange,
+                  placeholder,
+                }: {
+                  templates: CommunicationTemplate[]
+                  value: string
+                  onChange: (id: string) => void
+                  placeholder: string
+                }) => (
+                  <select
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                  >
+                    <option value="">{placeholder}</option>
+                    {templates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )
+
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <h2 className="text-sm font-semibold text-slate-900">
+                          Sales &mdash; {formatQuoteNumber(opp.opportunity_number)}
+                        </h2>
+                        <button type="button" onClick={() => setShowCreateFollowUp(true)}
+                          className="flex items-center gap-1 text-xs font-medium text-kratos hover:underline">
+                          <CalendarPlus size={11} /> Create Follow-up
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Tab row — underline style matching SmartMoving */}
+                    <div className="flex border-b border-slate-100">
+                      {COMM_TYPES.map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => { setCommType(value); setCommBody(''); setCommSubject('') }}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-semibold border-b-2 transition-colors',
+                            commType === value
+                              ? 'border-kratos text-slate-900 bg-kratos/5'
+                              : 'border-transparent text-slate-400 hover:text-slate-700 hover:bg-slate-50',
                           )}
-                        </div>
-                      </div>
-                      <input
-                        value={commSubject}
-                        onChange={e => setCommSubject(e.target.value)}
-                        placeholder="Subject"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
-                      />
-                    </div>
-                  )}
-
-                {/* Call outcome */}
-                {commType === 'call' && (
-                  <div className="mb-3">
-                    <select
-                      value={commCallOutcome}
-                      onChange={e => setCommCallOutcome(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
-                    >
-                      <option value="">Select call outcome…</option>
-                      {CALL_OUTCOME_OPTIONS.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
+                        >
+                          <Icon size={13} /> {label}
+                        </button>
                       ))}
-                    </select>
-                  </div>
-                )}
-
-                <textarea
-                  rows={commType === 'note' ? 4 : 3}
-                  value={commBody}
-                  onChange={e => setCommBody(e.target.value)}
-                  placeholder={
-                    commType === 'note'  ? 'Write a note…' :
-                    commType === 'call'  ? 'Call summary…' :
-                    commType === 'sms'   ? 'Message content…' :
-                    'Email body…'
-                  }
-                  className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
-                />
-                {/* SMS delivery status */}
-                {commType === 'sms' && (
-                  smsStatusLoading ? (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-                      <Loader2 size={12} className="animate-spin" /> Checking SMS status…
                     </div>
-                  ) : smsStatus && !smsStatus.canSend ? (
-                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-5 text-amber-800">
-                      <p className="font-semibold">SMS delivery is not active — you can log the message, but it will not be sent.</p>
-                      <p className="mt-0.5">{smsStatus.reason}</p>
-                      {smsStatus.recommendation && <p className="mt-1 italic">{smsStatus.recommendation}</p>}
-                    </div>
-                  ) : smsStatus?.canSend ? (
-                    <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-3.5 py-2 text-xs text-green-800">
-                      SMS delivery active via <span className="font-semibold">{
-                        smsStatus.provider === 'twilio' ? 'Twilio'
-                        : smsStatus.provider === 'ringcentral' ? 'RingCentral'
-                        : smsStatus.provider
-                      }</span>. Message will be sent to the customer&apos;s phone.
-                    </div>
-                  ) : null
-                )}
 
-                {/* Email context note */}
-                {commType === 'email' && (
-                  <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-xs leading-5 text-blue-800">
-                    <p className="font-semibold">Logging an email records it in your activity history.</p>
-                    <p className="mt-0.5">To send an actual estimate email to the customer, use the <span className="font-semibold">Send Estimate</span> button at the top of the page.</p>
-                  </div>
-                )}
+                    {/* Body */}
+                    <div className="p-5 space-y-3">
 
-                {commType === 'call' && commCallOutcome === 'no_answer' && (
-                  <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                    <p className="mb-2 text-sm font-medium text-slate-700">No Answer — follow-up actions</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <select
-                        value={noAnswerSmsTemplateId}
-                        onChange={event => setNoAnswerSmsTemplateId(event.target.value)}
-                        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
-                      >
-                        <option value="">Select SMS template</option>
-                        {noAnswerTemplates.filter(template => template.channel === 'sms').map(template => (
-                          <option key={template.id} value={template.id}>{template.name}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={noAnswerEmailTemplateId}
-                        onChange={event => setNoAnswerEmailTemplateId(event.target.value)}
-                        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
-                      >
-                        <option value="">Select email template</option>
-                        {noAnswerTemplates.filter(template => template.channel === 'email').map(template => (
-                          <option key={template.id} value={template.id}>{template.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={sendNoAnswerSms}
-                        disabled={noAnswerSmsSending || !noAnswerSmsTemplateId}
-                        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600 disabled:opacity-50"
-                      >
-                        {noAnswerSmsSending && <Loader2 size={13} className="animate-spin" />}
-                        Send SMS using template
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toast.message('Email sending is not configured yet.')}
-                        className="rounded-md border border-slate-200 px-3 py-1 text-sm text-slate-600"
-                      >
-                        Send Email using template
-                      </button>
-                      <button type="button" onClick={() => setShowCreateFollowUp(true)} className="rounded-md border border-slate-200 px-3 py-1 text-sm">Create follow-up</button>
-                    </div>
-                  </div>
-                )}
+                      {/* ── NOTE TAB ── */}
+                      {commType === 'note' && (
+                        <textarea
+                          rows={5}
+                          value={commBody}
+                          onChange={e => setCommBody(e.target.value)}
+                          placeholder="Write a note…"
+                          className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                        />
+                      )}
 
-                  {/* Footer: Create follow-up checkbox + submit */}
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={showCreateFollowUp}
-                        onChange={e => { if (e.target.checked) setShowCreateFollowUp(true) }}
-                        className="h-4 w-4 rounded border-slate-300 accent-kratos"
-                      />
-                      Create a follow-up
-                    </label>
+                      {/* ── EMAIL TAB ── */}
+                      {commType === 'email' && (
+                        <>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              value={commEmailTo}
+                              onChange={e => setCommEmailTo(e.target.value)}
+                              placeholder={opp.customer?.email ?? 'To: customer@example.com'}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                            />
+                            <TplSelect
+                              templates={emailTpls}
+                              value={''}
+                              onChange={() => {}}
+                              placeholder="— Email Template —"
+                              fillSubject
+                            />
+                          </div>
+                          <input
+                            value={commSubject}
+                            onChange={e => setCommSubject(e.target.value)}
+                            placeholder="Subject"
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
+                          />
+                          <textarea
+                            rows={6}
+                            value={commBody}
+                            onChange={e => setCommBody(e.target.value)}
+                            placeholder="Email body…"
+                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                          />
+                          <p className="text-xs text-slate-400">
+                            Logging an email records it in your activity history.
+                            To send an estimate to the customer, use <span className="font-medium">Send Estimate</span> above.
+                          </p>
+                        </>
+                      )}
 
-                    {commType === 'sms' ? (
-                      <div className="flex items-center gap-2">
-                        <button onClick={logSmsOnly} disabled={commSubmitting || !commBody.trim()}
-                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                          {commSubmitting && <Loader2 size={13} className="animate-spin" />}
-                          Log Only
-                        </button>
-                        <button onClick={sendSmsDirectly} disabled={commSubmitting || !commBody.trim() || !smsStatus?.canSend}
-                          title={!smsStatus?.canSend ? (smsStatus?.reason ?? 'SMS delivery not configured') : undefined}
-                          className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
-                          {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                          Send SMS
-                        </button>
+                      {/* ── CALL TAB ── */}
+                      {commType === 'call' && (
+                        <>
+                          {/* Row 1: Direction | Outcome | Email Template | SMS Template */}
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <select
+                              value={commDirection}
+                              onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                            >
+                              <option value="outbound">Outbound</option>
+                              <option value="inbound">Inbound</option>
+                            </select>
+                            <select
+                              value={commCallOutcome}
+                              onChange={e => setCommCallOutcome(e.target.value)}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
+                            >
+                              <option value="">— Outcome —</option>
+                              {CALL_OUTCOME_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                            <CallTplSelect
+                              templates={emailTpls}
+                              value={callEmailTplId}
+                              onChange={setCallEmailTplId}
+                              placeholder="— Email Template —"
+                            />
+                            <CallTplSelect
+                              templates={smsTpls}
+                              value={callSmsTplId}
+                              onChange={setCallSmsTplId}
+                              placeholder="— SMS Template —"
+                            />
+                          </div>
+
+                          {/* Call notes textarea */}
+                          <textarea
+                            rows={4}
+                            value={commBody}
+                            onChange={e => setCommBody(e.target.value)}
+                            placeholder="Describe the call…"
+                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                          />
+
+                          {/* No Answer follow-up actions */}
+                          {commCallOutcome === 'no_answer' && (
+                            <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 space-y-2.5">
+                              <p className="text-xs font-semibold text-amber-800">No Answer — follow-up actions</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <select
+                                  value={callSmsTplId}
+                                  onChange={e => setCallSmsTplId(e.target.value)}
+                                  className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-kratos"
+                                >
+                                  <option value="">— SMS Template —</option>
+                                  {smsTpls.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={callEmailTplId}
+                                  onChange={e => setCallEmailTplId(e.target.value)}
+                                  className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-kratos"
+                                >
+                                  <option value="">— Email Template —</option>
+                                  {emailTpls.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={sendNoAnswerSms}
+                                  disabled={noAnswerSmsSending || !callSmsTplId || !smsStatus?.canSend}
+                                  title={!smsStatus?.canSend ? 'SMS not configured' : undefined}
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100 disabled:opacity-50"
+                                >
+                                  {noAnswerSmsSending && <Loader2 size={12} className="animate-spin" />}
+                                  Send SMS
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toast.info('Email sending coming soon — log the call and send via Send Estimate.')}
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100"
+                                >
+                                  Send Email
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCreateFollowUp(true)}
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-amber-100"
+                                >
+                                  <CalendarPlus size={12} /> Create Follow-up
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* ── TEXT TAB ── */}
+                      {commType === 'sms' && (
+                        <>
+                          <TplSelect
+                            templates={smsTpls}
+                            value={''}
+                            onChange={() => {}}
+                            placeholder="— SMS Template —"
+                          />
+                          <textarea
+                            rows={5}
+                            value={commBody}
+                            onChange={e => setCommBody(e.target.value)}
+                            placeholder="Message content…"
+                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                          />
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-400">{commBody.length} characters</span>
+                            {commBody.length > 160 && (
+                              <span className="text-amber-600">Long message — may send as {Math.ceil(commBody.length / 153)} SMS segments</span>
+                            )}
+                          </div>
+                          {!smsStatus?.canSend && !smsStatusLoading && (
+                            <p className="text-xs text-amber-700 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                              SMS sending is not connected. You can still log the message.
+                            </p>
+                          )}
+                        </>
+                      )}
+
+                      {/* ── Footer ── */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100">
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={showCreateFollowUp}
+                              onChange={e => { if (e.target.checked) setShowCreateFollowUp(true) }}
+                              className="h-4 w-4 rounded border-slate-300 accent-kratos"
+                            />
+                            Create a follow-up
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                            <input type="checkbox" className="h-3.5 w-3.5 rounded border-slate-300 accent-kratos" />
+                            Turn off conversation replies in-app
+                          </label>
+                        </div>
+
+                        {commType === 'sms' ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={logSmsOnly}
+                              disabled={commSubmitting || !commBody.trim()}
+                              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {commSubmitting && <Loader2 size={13} className="animate-spin" />}
+                              Log Only
+                            </button>
+                            <button
+                              onClick={sendSmsDirectly}
+                              disabled={commSubmitting || !commBody.trim() || !smsStatus?.canSend}
+                              title={!smsStatus?.canSend ? (smsStatus?.reason ?? 'SMS delivery not configured') : undefined}
+                              className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                              Send SMS
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={submitComm}
+                            disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
+                            className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
+                          >
+                            {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                            {commType === 'note' ? 'Add Note' : commType === 'email' ? 'Log Email' : 'Log Call'}
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <button onClick={submitComm}
-                        disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
-                        className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50">
-                        {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                        {commType === 'note' ? 'Add Note' : commType === 'email' ? 'Send Email' : commType === 'call' ? 'Log Call' : 'Log Text'}
-                      </button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              </div>
+                )
+              })()}
 
-              {/* Stats row — compact single line below composer (SmartMoving style) */}
+              {/* Stats row — compact single line below composer */}
               <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-                <span className="flex items-center gap-1.5 text-slate-600">
-                  <PhoneCall size={13} className="text-slate-400" />
-                  <span className="font-semibold text-slate-900">{callCount}</span>
-                  <span className="text-slate-400 text-xs">Calls</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-600">
-                  <MessageSquare size={13} className="text-slate-400" />
-                  <span className="font-semibold text-slate-900">{smsCount}</span>
-                  <span className="text-slate-400 text-xs">Texts</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-600">
-                  <AtSign size={13} className="text-slate-400" />
-                  <span className="font-semibold text-slate-900">{emailCount}</span>
-                  <span className="text-slate-400 text-xs">Emails</span>
-                </span>
+                {[
+                  { icon: PhoneCall,    count: callCount,     label: 'Calls' },
+                  { icon: MessageSquare, count: smsCount,      label: 'Texts' },
+                  { icon: AtSign,       count: emailCount,    label: 'Emails' },
+                  { icon: FileText,     count: noteCount,     label: 'Notes' },
+                  { icon: CalendarPlus, count: followUpCount, label: 'Follow-ups' },
+                ].map(({ icon: Icon, count, label }) => (
+                  <span key={label} className="flex items-center gap-1.5 text-slate-600">
+                    <Icon size={13} className="text-slate-400" />
+                    <span className="font-semibold text-slate-900">{count}</span>
+                    <span className="text-slate-400 text-xs">{label}</span>
+                  </span>
+                ))}
                 <span className={cn(
                   'flex items-center gap-1.5',
                   !daysUntilMove || daysUntilMove === 'Move passed' ? 'text-slate-400'
@@ -1252,7 +1334,7 @@ export default function OpportunityDetailPage() {
                   : 'text-slate-600',
                 )}>
                   <Calendar size={13} className="text-slate-400" />
-                  <span className="font-semibold">
+                  <span className="font-semibold text-xs">
                     {!daysUntilMove ? '—'
                       : daysUntilMove === 'Move passed' ? 'Passed'
                       : daysUntilMove === 'Today' ? 'Today'
@@ -1261,10 +1343,6 @@ export default function OpportunityDetailPage() {
                   </span>
                   <span className="text-slate-400 text-xs">Until Move</span>
                 </span>
-                <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-slate-500 select-none">
-                  <input type="checkbox" className="h-3.5 w-3.5 rounded border-slate-300 accent-kratos" />
-                  Turn off conversation replies in-app
-                </label>
               </div>
 
               {showCreateFollowUp && (
