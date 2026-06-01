@@ -17,7 +17,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { user, role } = auth.context
   const normalizedRole = normalizeRole(role)
 
-  if (normalizedRole !== 'owner' && normalizedRole !== 'admin') {
+  const EDIT_ROLES = ['owner', 'admin', 'manager', 'sales_manager', 'ops_manager']
+  if (!EDIT_ROLES.includes(normalizedRole)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -62,7 +63,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (auth.response) return auth.response
 
   const normalizedRole = normalizeRole(auth.context.role)
-  if (normalizedRole !== 'owner' && normalizedRole !== 'admin') {
+  const EDIT_ROLES = ['owner', 'admin', 'manager', 'sales_manager', 'ops_manager']
+  if (!EDIT_ROLES.includes(normalizedRole)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -3,7 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizeRole } from '@/lib/auth/permissions'
 
-const VIEW_ROLES = ['owner', 'admin', 'manager'] as const
+// Any authenticated staff member can view; owner/admin/manager can edit
+const EDIT_ROLES = ['owner', 'admin', 'manager', 'sales_manager', 'ops_manager'] as const
+type EditRole = typeof EDIT_ROLES[number]
+
+function canEditTemplates(role: string): role is EditRole {
+  return EDIT_ROLES.includes(role as EditRole)
+}
 
 export async function GET() {
   const supabase = createClient()
@@ -11,9 +17,6 @@ export async function GET() {
   if (auth.response) return auth.response
 
   const role = normalizeRole(auth.context.role)
-  if (!VIEW_ROLES.includes(role as typeof VIEW_ROLES[number])) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
 
   const { data, error } = await supabase
     .from('communication_templates')
@@ -26,7 +29,7 @@ export async function GET() {
 
   return NextResponse.json({
     templates: data ?? [],
-    canEdit: role === 'owner' || role === 'admin',
+    canEdit: canEditTemplates(role),
   })
 }
 
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (auth.response) return auth.response
 
   const role = normalizeRole(auth.context.role)
-  if (role !== 'owner' && role !== 'admin') {
+  if (!canEditTemplates(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
