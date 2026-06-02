@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
-import { hasPermission, isActiveUser, isAdminRole, normalizeRole } from '@/lib/auth/permissions'
+import { hasPermission, isActiveUser, normalizeRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import type { Json } from '@/types/database'
 
@@ -148,7 +148,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     .eq('id', user.id)
     .single()
 
-  if (!isActiveUser(profile) || !isAdminRole(profile?.role)) {
+  const normalizedRole = normalizeRole(profile?.role)
+  if (!isActiveUser(profile) || !['owner', 'admin', 'manager'].includes(normalizedRole)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -158,12 +159,15 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     .eq('id', params.id)
     .single()
 
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from('opportunities')
     .update({ is_deleted: true })
     .eq('id', params.id)
+    .select('id')
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!deleted) return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
 
   await supabase.from('audit_log').insert({
     user_id:     user.id,

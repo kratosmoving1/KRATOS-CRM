@@ -696,9 +696,14 @@ export default function OpportunityDetailPage() {
     setDeleting(true)
     try {
       const res = await fetch(`/api/admin/opportunities/${id}`, { method: 'DELETE' })
-      if (!res.ok) { toast.error('Delete failed'); return }
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof json.error === 'string' ? json.error : 'Delete failed')
+        return
+      }
       toast.success('Quote deleted')
-      router.push('/admin/opportunities')
+      router.replace('/admin/opportunities')
+      router.refresh()
     } finally { setDeleting(false) }
   }
 
@@ -753,6 +758,7 @@ export default function OpportunityDetailPage() {
         body: JSON.stringify({
           opportunityId: id,
           customerId: opp.customer?.id ?? null,
+          toPhoneNumber: opp.customer?.phone ?? null,
           messageBody: commBody.trim(),
         }),
       })
@@ -853,6 +859,7 @@ export default function OpportunityDetailPage() {
         body: JSON.stringify({
           opportunityId: opp.id,
           customerId: opp.customer.id,
+          toPhoneNumber: opp.customer.phone,
           messageBody: callSmsBody,
         }),
       })
