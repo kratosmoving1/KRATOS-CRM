@@ -79,10 +79,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  if (process.env.EMAIL_PROVIDER !== 'resend' || missingResendEnv().length > 0) {
-    return NextResponse.json({ error: 'Resend email is not configured.' }, { status: 503 })
-  }
-
   let body: EmailSendBody
   try {
     body = await req.json()
@@ -128,7 +124,6 @@ export async function POST(req: NextRequest) {
   }
 
   const to = explicitTo ?? customer?.email ?? null
-  if (!to) return NextResponse.json({ error: 'Recipient email required' }, { status: 400 })
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -200,10 +195,46 @@ export async function POST(req: NextRequest) {
       error_message: errorMessage,
     }
     const result = await supabase.from('communications').insert(full).select().single()
-    if (result.error?.code === '42703') {
-      return supabase.from('communications').insert(base).select().single()
+    if (!result.error) return result
+
+    console.error('[Email/Resend] Full communication insert failed; falling back to base insert:', result.error)
+    const fallback = {
+      ...base,
+      subject: errorMessage ? `[Failed] ${subject}` : subject,
+      body: errorMessage ? `${text}\n\nSend error: ${errorMessage}` : text,
     }
-    return result
+    return supabase.from('communications').insert(fallback).select().single()
+  }
+
+  if (!to) {
+    const msg = 'Recipient email required.'
+    const { data, error } = await saveComm('failed', null, msg)
+    if (error) console.error('[Email/Resend] Failed to save missing-recipient communication record:', error)
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'email_failed',
+      entityType: 'communication',
+      entityId: data?.id ?? opportunityId ?? customerId,
+      newData: { provider: 'resend', error: msg, to: null } as unknown as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
+    return NextResponse.json({ error: msg }, { status: 400 })
+  }
+
+  if (process.env.EMAIL_PROVIDER !== 'resend' || missingResendEnv().length > 0) {
+    const msg = 'Resend email is not configured.'
+    const { data } = await saveComm('failed', null, msg)
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'email_failed',
+      entityType: 'communication',
+      entityId: data?.id ?? opportunityId ?? customerId,
+      newData: { provider: 'resend', error: msg, to } as unknown as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
+    return NextResponse.json({ error: msg }, { status: 503 })
   }
 
   try {
@@ -228,7 +259,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, provider: 'resend', id: result.id ?? null }, { status: 200 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Email send failed.'
-    await saveComm('failed', null, msg)
+    const { error } = await saveComm('failed', null, msg)
+    if (error) console.error('[Email/Resend] Failed to save failed communication record:', error)
     await logAuditEvent({
       actorUserId: user.id,
       action: 'email_failed',

@@ -760,6 +760,7 @@ export default function OpportunityDetailPage() {
       if (!res.ok) {
         const msg = json.error ?? 'SMS send failed'
         toast.error(msg)
+        loadTimeline()
       } else {
         toast.success('SMS sent.')
         setCommBody('')
@@ -788,6 +789,7 @@ export default function OpportunityDetailPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(json.error ?? 'Email send failed')
+        loadTimeline()
       } else {
         toast.success('Email sent.')
         setCommBody('')
@@ -857,6 +859,7 @@ export default function OpportunityDetailPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(typeof data.error === 'string' ? data.error : 'Unable to send SMS')
+        loadTimeline()
       } else {
         toast.success('SMS sent.')
         loadTimeline()
@@ -889,6 +892,7 @@ export default function OpportunityDetailPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(typeof data.error === 'string' ? data.error : 'Unable to send email')
+        loadTimeline()
       } else {
         toast.success('Email sent.')
         loadTimeline()
@@ -1370,7 +1374,7 @@ export default function OpportunityDetailPage() {
                                 <button
                                   type="button"
                                   onClick={sendCallFollowUpSms}
-                                  disabled={noAnswerSmsSending || !callSmsTplId || !callSmsBody.trim() || !smsStatus?.canSend}
+                                  disabled={noAnswerSmsSending || !callSmsTplId || !callSmsBody.trim()}
                                   title={!callSmsTplId ? 'Select an SMS template' : !smsStatus?.canSend ? (smsStatus?.reason ?? 'Twilio SMS is not configured.') : undefined}
                                   className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 >
@@ -1450,7 +1454,7 @@ export default function OpportunityDetailPage() {
                             </button>
                             <button
                               onClick={sendSmsDirectly}
-                              disabled={commSubmitting || !commBody.trim() || !smsStatus?.canSend}
+                              disabled={commSubmitting || !commBody.trim()}
                               title={!smsStatus?.canSend ? (smsStatus?.reason ?? 'SMS delivery not configured') : undefined}
                               className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                             >

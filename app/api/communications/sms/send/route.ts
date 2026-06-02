@@ -91,10 +91,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'opportunityId or customerId required' }, { status: 400 })
   }
 
-  if (missingTwilioEnv().length > 0) {
-    return NextResponse.json({ error: 'Twilio SMS is not configured.' }, { status: 503 })
-  }
-
   let opportunity: OpportunityRecord | null = null
   let customer: CustomerRecord | null = null
 
@@ -125,12 +121,7 @@ export async function POST(req: NextRequest) {
   }
 
   const recipientRaw = explicitTo ?? customer?.phone ?? null
-  if (!recipientRaw) return NextResponse.json({ error: 'SMS recipient phone number required' }, { status: 400 })
-
-  const normalizedTo = normalizePhoneToE164(recipientRaw)
-  if (!normalizedTo.isE164) {
-    return NextResponse.json({ error: `Invalid recipient phone number: ${recipientRaw}` }, { status: 400 })
-  }
+  const normalizedTo = recipientRaw ? normalizePhoneToE164(recipientRaw) : null
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -180,7 +171,13 @@ export async function POST(req: NextRequest) {
     entityType: 'communication',
     entityId: opportunityId ?? customerId,
     oldData: null,
-    newData: { provider: 'twilio', opportunityId, customerId, to: maskPhone(normalizedTo.normalized), templateId } as unknown as Json,
+    newData: {
+      provider: 'twilio',
+      opportunityId,
+      customerId,
+      to: normalizedTo?.isE164 ? maskPhone(normalizedTo.normalized) : recipientRaw ? maskPhone(recipientRaw) : null,
+      templateId,
+    } as unknown as Json,
     ipAddress: req.headers.get('x-forwarded-for'),
     userAgent: req.headers.get('user-agent'),
   })
@@ -196,18 +193,68 @@ export async function POST(req: NextRequest) {
     }
     const full = {
       ...base,
-      phone_number: normalizedTo.normalized,
+      phone_number: normalizedTo?.isE164 ? normalizedTo.normalized : recipientRaw,
       status,
       provider: 'twilio',
       provider_message_id: providerMessageId,
       error_message: errorMessage,
     }
     const result = await supabase.from('communications').insert(full).select().single()
-    // Graceful fallback if extended columns are missing
-    if (result.error?.code === '42703') {
-      return supabase.from('communications').insert(base).select().single()
+    if (!result.error) return result
+
+    console.error('[SMS/Twilio] Full communication insert failed; falling back to base insert:', result.error)
+    const fallback = {
+      ...base,
+      body: errorMessage ? `${text}\n\nSend error: ${errorMessage}` : text,
     }
-    return result
+    return supabase.from('communications').insert(fallback).select().single()
+  }
+
+  if (!recipientRaw || !normalizedTo) {
+    const msg = 'SMS recipient phone number required.'
+    const { data, error } = await saveComm('failed', null, msg)
+    if (error) console.error('[SMS/Twilio] Failed to save missing-recipient communication record:', error)
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'sms_failed',
+      entityType: 'communication',
+      entityId: data?.id ?? opportunityId ?? customerId,
+      newData: { provider: 'twilio', error: msg, to: null } as unknown as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
+    return NextResponse.json({ error: msg }, { status: 400 })
+  }
+
+  if (!normalizedTo.isE164) {
+    const msg = `Invalid recipient phone number: ${recipientRaw}`
+    const { data, error } = await saveComm('failed', null, msg)
+    if (error) console.error('[SMS/Twilio] Failed to save invalid-recipient communication record:', error)
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'sms_failed',
+      entityType: 'communication',
+      entityId: data?.id ?? opportunityId ?? customerId,
+      newData: { provider: 'twilio', error: msg, to: maskPhone(recipientRaw) } as unknown as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
+    return NextResponse.json({ error: msg }, { status: 400 })
+  }
+
+  if (missingTwilioEnv().length > 0) {
+    const msg = 'Twilio SMS is not configured.'
+    const { data } = await saveComm('failed', null, msg)
+    await logAuditEvent({
+      actorUserId: user.id,
+      action: 'sms_failed',
+      entityType: 'communication',
+      entityId: data?.id ?? opportunityId ?? customerId,
+      newData: { provider: 'twilio', error: msg, to: maskPhone(normalizedTo.normalized) } as unknown as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    })
+    return NextResponse.json({ error: msg }, { status: 503 })
   }
 
   try {
@@ -230,7 +277,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Twilio SMS failed.'
     console.error('[SMS/Twilio] Send error:', msg)
-    await saveComm('failed', null, msg)
+    const { error } = await saveComm('failed', null, msg)
+    if (error) console.error('[SMS/Twilio] Failed to save failed communication record:', error)
     await logAuditEvent({
       actorUserId: user.id,
       action: 'sms_failed',
