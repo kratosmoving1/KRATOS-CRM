@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { normalizeRole, type CrmRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
@@ -64,11 +65,13 @@ function renderTemplate(text: string, vars: Record<string, string | undefined>) 
 }
 
 export async function POST(req: NextRequest) {
+  // Auth check with session client, then switch to admin client for DB ops to bypass RLS.
   const supabase = createClient()
   const auth = await requireActiveProfile(supabase)
   if (auth.response) return auth.response
   const { user, role } = auth.context
   const normalizedRole = normalizeRole(role)
+  const db = createAdminClient()
 
   if (!SMS_ALLOWED_ROLES.includes(normalizedRole)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -95,21 +98,24 @@ export async function POST(req: NextRequest) {
   let customer: CustomerRecord | null = null
 
   if (opportunityId) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('opportunities')
       .select('id, opportunity_number, customer_id, sales_agent_id, service_date, deposit_amount, origin_city, dest_city, customer:customers!customer_id(id, full_name, phone, email), agent:profiles!sales_agent_id(full_name)')
       .eq('id', opportunityId)
       .neq('is_deleted', true)
       .single()
 
-    if (error || !data) return NextResponse.json({ error: `Opportunity ${opportunityId} not found in database` }, { status: 404 })
+    if (error || !data) {
+      console.error('[SMS] Opportunity lookup failed:', { opportunityId, error: error?.message, code: error?.code })
+      return NextResponse.json({ error: `Opportunity ${opportunityId} not found in database` }, { status: 404 })
+    }
     opportunity = data as unknown as OpportunityRecord
     customer = one(opportunity.customer)
     customerId = customerId ?? opportunity.customer_id
   }
 
   if (!customer && customerId) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('customers')
       .select('id, full_name, phone, email')
       .eq('id', customerId)
@@ -123,7 +129,7 @@ export async function POST(req: NextRequest) {
   const recipientRaw = explicitTo ?? customer?.phone ?? null
   const normalizedTo = recipientRaw ? normalizePhoneToE164(recipientRaw) : null
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('full_name')
     .eq('id', user.id)
@@ -150,7 +156,7 @@ export async function POST(req: NextRequest) {
 
   let text = directMessage?.trim() ?? null
   if (templateId) {
-    const { data: tpl } = await supabase
+    const { data: tpl } = await db
       .from('communication_templates')
       .select('*')
       .eq('id', templateId)
@@ -199,7 +205,7 @@ export async function POST(req: NextRequest) {
       provider_message_id: providerMessageId,
       error_message: errorMessage,
     }
-    const result = await supabase.from('communications').insert(full).select().single()
+    const result = await db.from('communications').insert(full).select().single()
     if (!result.error) return result
 
     console.error('[SMS/Twilio] Full communication insert failed; falling back to base insert:', result.error)
@@ -207,7 +213,7 @@ export async function POST(req: NextRequest) {
       ...base,
       body: errorMessage ? `${text}\n\nSend error: ${errorMessage}` : text,
     }
-    return supabase.from('communications').insert(fallback).select().single()
+    return db.from('communications').insert(fallback).select().single()
   }
 
   if (!recipientRaw || !normalizedTo) {
