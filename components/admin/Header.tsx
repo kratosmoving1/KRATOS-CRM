@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Search, LogOut, Menu, Plus, FileText, ListChecks, BellRing } from 'lucide-react'
+import { Bell, Search, LogOut, Menu, Plus, FileText, ListChecks, BellRing, UserPlus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCreateModal } from '@/contexts/CreationModalsContext'
 
@@ -15,6 +15,7 @@ interface HeaderProps {
 }
 
 const CREATE_OPTIONS = [
+  { label: 'New Customer',    icon: UserPlus,   modal: 'customer'   as const },
   { label: 'New Quote',       icon: FileText,  modal: 'opportunity' as const },
   { label: 'New Task',        icon: ListChecks, modal: 'task'       as const },
   { label: 'New Follow-up',   icon: BellRing,  modal: 'followup'   as const },

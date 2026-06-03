@@ -64,7 +64,7 @@ export async function findOrCreateCustomer(
       .from('customers')
       .select('id')
       .eq('id', input.customer_id)
-      .eq('is_deleted', false)
+      .neq('is_deleted', true)
       .maybeSingle()
 
     if (error) throw error

@@ -99,10 +99,10 @@ export async function POST(req: NextRequest) {
       .from('opportunities')
       .select('id, opportunity_number, customer_id, sales_agent_id, service_date, deposit_amount, origin_city, dest_city, customer:customers!customer_id(id, full_name, phone, email), agent:profiles!sales_agent_id(full_name)')
       .eq('id', opportunityId)
-      .eq('is_deleted', false)
+      .neq('is_deleted', true)
       .single()
 
-    if (error || !data) return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
+    if (error || !data) return NextResponse.json({ error: `Opportunity ${opportunityId} not found in database` }, { status: 404 })
     opportunity = data as unknown as OpportunityRecord
     customer = one(opportunity.customer)
     customerId = customerId ?? opportunity.customer_id
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       .from('customers')
       .select('id, full_name, phone, email')
       .eq('id', customerId)
-      .eq('is_deleted', false)
+      .neq('is_deleted', true)
       .single()
 
     if (error || !data) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })

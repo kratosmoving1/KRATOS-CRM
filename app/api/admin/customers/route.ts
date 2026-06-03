@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireActiveProfile } from '@/lib/auth/server'
+import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import type { Json } from '@/types/database'
+
+const ALLOWED_CUSTOMER_CREATE_KEYS = new Set([
+  'full_name',
+  'email',
+  'phone',
+  'phone_type',
+  'secondary_phone',
+  'secondary_phone_type',
+  'notes',
+])
 
 type CustomerRow = {
   id: string
@@ -179,4 +191,69 @@ export async function GET(req: NextRequest) {
     { data, count: filtered.length, page, pageSize },
     { headers: { 'Cache-Control': 'no-store' } },
   )
+}
+
+export async function POST(req: NextRequest) {
+  const authClient = createClient()
+  const auth = await requireActiveProfile(authClient)
+  if (auth.response) return auth.response
+  const { user } = auth.context
+  const supabase = authClient
+
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  const filtered = Object.fromEntries(
+    Object.entries(body).filter(([key]) => ALLOWED_CUSTOMER_CREATE_KEYS.has(key)),
+  )
+
+  if (typeof filtered.full_name !== 'string' || !filtered.full_name.trim()) {
+    return NextResponse.json({ error: 'full_name is required' }, { status: 400 })
+  }
+  if (typeof filtered.phone !== 'string' || !filtered.phone.trim()) {
+    return NextResponse.json({ error: 'phone is required' }, { status: 400 })
+  }
+  if (typeof filtered.email === 'string' && filtered.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(filtered.email)) {
+    return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+  }
+
+  const payload = {
+    ...filtered,
+    full_name: (filtered.full_name as string).trim(),
+    is_deleted: false,
+  }
+
+  const { data, error } = await supabase
+    .from('customers')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await Promise.all([
+    supabase.from('audit_log').insert({
+      user_id: user.id,
+      entity_type: 'customer',
+      entity_id: data.id,
+      action: 'create',
+      diff: { created: data } as unknown as Json,
+    }),
+    logAuditEvent({
+      actorUserId: user.id,
+      action: 'create',
+      entityType: 'customer',
+      entityId: data.id,
+      oldData: null,
+      newData: data as unknown as Json,
+      ipAddress: req.headers.get('x-forwarded-for'),
+      userAgent: req.headers.get('user-agent'),
+    }),
+  ])
+
+  return NextResponse.json(data, { status: 201 })
 }

@@ -20,6 +20,7 @@ type SendEstimateMenuProps = {
       phone: string | null
     } | null
   }
+  onSent?: () => void
 }
 
 type SmsStatus = { canSend: boolean; provider: string; reason?: string }
@@ -31,7 +32,7 @@ const PRICING_OPTIONS = [
   { value: 'summary',         label: 'Summary' },
 ]
 
-export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps) {
+export default function SendEstimateMenu({ opportunity, onSent }: SendEstimateMenuProps) {
   const [menuOpen, setMenuOpen]   = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [pricingDisplay, setPricingDisplay] = useState('estimated_price')
@@ -104,6 +105,7 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? 'Unable to send estimate email'); return }
       toast.success('Estimate email sent.')
+      onSent?.()
       setDrawerOpen(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to send estimate email')
@@ -131,6 +133,7 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? 'Unable to send estimate SMS'); return }
       toast.success('Estimate SMS sent.')
+      onSent?.()
       setDrawerOpen(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to send estimate SMS')

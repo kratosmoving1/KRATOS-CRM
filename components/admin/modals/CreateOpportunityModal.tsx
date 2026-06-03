@@ -54,6 +54,8 @@ function formatPhone(raw: string): string {
   return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`
 }
 
+type ExistingCustomerResult = { id: string; full_name: string; phone: string | null; email: string | null }
+
 export default function CreateOpportunityModal({ onClose, initialData, editId }: Props) {
   const router = useRouter()
   const [step, setStep] = useState(0)
@@ -66,6 +68,17 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
   const phoneRef = useRef<HTMLInputElement>(null)
   const secondaryPhoneRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
+
+  // Existing-customer picker state
+  const [customerMode, setCustomerMode] = useState<'new' | 'existing'>('new')
+  const [existingCustomerId, setExistingCustomerId] = useState<string | null>(null)
+  const [existingCustomerName, setExistingCustomerName] = useState('')
+  const [existingSearch, setExistingSearch] = useState('')
+  const [existingResults, setExistingResults] = useState<ExistingCustomerResult[]>([])
+  const [existingSearching, setExistingSearching] = useState(false)
+  const [showExistingDropdown, setShowExistingDropdown] = useState(false)
+  const existingSearchRef = useRef<HTMLInputElement>(null)
+  const existingSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [s1, setS1] = useState<Step1Form>({
     customer_name: '', customer_phone: '', customer_phone_type: 'mobile',
@@ -83,6 +96,35 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
       .then(setLeadSources)
       .catch(() => {})
   }, [])
+
+  function handleExistingSearchChange(value: string) {
+    setExistingSearch(value)
+    setExistingCustomerId(null)
+    setExistingCustomerName('')
+    setShowExistingDropdown(true)
+    if (existingSearchDebounceRef.current) clearTimeout(existingSearchDebounceRef.current)
+    if (!value.trim()) { setExistingResults([]); return }
+    existingSearchDebounceRef.current = setTimeout(async () => {
+      setExistingSearching(true)
+      try {
+        const res = await fetch(`/api/admin/customers?search=${encodeURIComponent(value)}&page=1`)
+        const json = await res.json()
+        setExistingResults((json.data ?? []).slice(0, 8) as ExistingCustomerResult[])
+      } catch {
+        setExistingResults([])
+      } finally {
+        setExistingSearching(false)
+      }
+    }, 300)
+  }
+
+  function handleSelectExistingCustomer(c: ExistingCustomerResult) {
+    setExistingCustomerId(c.id)
+    setExistingCustomerName(c.full_name)
+    setExistingSearch(c.full_name)
+    setShowExistingDropdown(false)
+    setErrors(e => { const n = { ...e }; delete n.existing_customer; return n })
+  }
 
   function updateS1<K extends keyof Step1Form>(k: K, v: Step1Form[K]) {
     setS1(p => ({ ...p, [k]: v }))
@@ -109,13 +151,17 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
   }
 
   function validateStep1(): boolean {
-    const customer = getCustomerDraft()
     const errs: Errors = {}
-    if (!customer.name.trim()) errs.customer_name = 'Name is required'
-    if (!customer.phone.trim()) errs.customer_phone = 'Phone is required'
-    else if (customer.phone.replace(/\D/g,'').length !== 10) errs.customer_phone = 'Must be 10 digits'
-    if (customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
-      errs.customer_email = 'Invalid email'
+    if (customerMode === 'existing') {
+      if (!existingCustomerId) errs.existing_customer = 'Select a customer from the list'
+    } else {
+      const customer = getCustomerDraft()
+      if (!customer.name.trim()) errs.customer_name = 'Name is required'
+      if (!customer.phone.trim()) errs.customer_phone = 'Phone is required'
+      else if (customer.phone.replace(/\D/g,'').length !== 10) errs.customer_phone = 'Must be 10 digits'
+      if (customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
+        errs.customer_email = 'Invalid email'
+      }
     }
     if (!s1.service_date_tbd && !s1.service_date) errs.service_date = 'Set a date or check TBD'
     if (!s1.service_type) errs.service_type = 'Required'
@@ -129,15 +175,22 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
   function validateStep3(): boolean { return true }
 
   function buildPayload() {
-    const customer = getCustomerDraft()
+    const customerBase = customerMode === 'existing' && existingCustomerId
+      ? { customer_id: existingCustomerId }
+      : (() => {
+          const customer = getCustomerDraft()
+          return {
+            customer_name: customer.name,
+            customer_phone: customer.phone.replace(/\D/g,''),
+            customer_phone_type: s1.customer_phone_type,
+            customer_secondary_phone: customer.secondaryPhone.replace(/\D/g,'') || null,
+            customer_secondary_phone_type: s1.customer_secondary_phone_type || null,
+            customer_email: customer.email.trim() || null,
+          }
+        })()
 
     return {
-      customer_name: customer.name,
-      customer_phone: customer.phone.replace(/\D/g,''),
-      customer_phone_type: s1.customer_phone_type,
-      customer_secondary_phone: customer.secondaryPhone.replace(/\D/g,'') || null,
-      customer_secondary_phone_type: s1.customer_secondary_phone_type || null,
-      customer_email: customer.email.trim() || null,
+      ...customerBase,
       service_date: s1.service_date_tbd ? null : (s1.service_date || null),
       service_type: s1.service_type,
       move_size: s1.move_size || null,
@@ -260,6 +313,76 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
 
       {step === 0 && (
         <div className="space-y-4">
+          {/* Customer mode toggle */}
+          {!editId && (
+            <div className="flex gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => { setCustomerMode('new'); setErrors(e => { const n = { ...e }; delete n.existing_customer; return n }) }}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${customerMode === 'new' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                New customer
+              </button>
+              <button
+                type="button"
+                onClick={() => { setCustomerMode('existing'); setErrors(e => { const n = { ...e }; delete n.customer_name; delete n.customer_phone; delete n.customer_email; return n }) }}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${customerMode === 'existing' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Existing customer
+              </button>
+            </div>
+          )}
+
+          {/* Existing customer search */}
+          {customerMode === 'existing' && !editId && (
+            <div className="relative">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Search Customer <span className="text-red-500">*</span>
+              </label>
+              <input
+                ref={existingSearchRef}
+                type="text"
+                value={existingSearch}
+                onChange={e => handleExistingSearchChange(e.target.value)}
+                onFocus={() => setShowExistingDropdown(true)}
+                onBlur={() => setTimeout(() => setShowExistingDropdown(false), 150)}
+                placeholder="Type name, phone, or email…"
+                autoComplete="off"
+                className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:ring-2 ${errors.existing_customer ? 'border-red-400 focus:border-red-400 focus:ring-red-200' : 'border-slate-200 focus:border-kratos focus:ring-kratos/20'} bg-slate-50 focus:bg-white`}
+              />
+              {errors.existing_customer && (
+                <p className="mt-1 text-xs text-red-500">{errors.existing_customer}</p>
+              )}
+              {existingCustomerId && (
+                <p className="mt-1 text-xs text-green-600">Selected: {existingCustomerName}</p>
+              )}
+              {showExistingDropdown && (existingSearching || existingResults.length > 0) && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {existingSearching && (
+                    <div className="px-4 py-3 text-sm text-slate-400">Searching…</div>
+                  )}
+                  {!existingSearching && existingResults.length === 0 && existingSearch.trim() && (
+                    <div className="px-4 py-3 text-sm text-slate-400">No customers found</div>
+                  )}
+                  {existingResults.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onMouseDown={() => handleSelectExistingCustomer(c)}
+                      className="flex w-full flex-col px-4 py-2.5 text-left text-sm hover:bg-kratos/10"
+                    >
+                      <span className="font-medium text-slate-900">{c.full_name}</span>
+                      <span className="text-xs text-slate-500">{[c.phone, c.email].filter(Boolean).join(' · ')}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* New customer fields */}
+          {(customerMode === 'new' || editId) && (
+          <>
           <Input
             label="Full Name"
             required
@@ -337,6 +460,8 @@ export default function CreateOpportunityModal({ onClose, initialData, editId }:
             error={errors.customer_email}
             placeholder="jane@example.com"
           />
+          </>
+          )}
 
           <div>
             <Input

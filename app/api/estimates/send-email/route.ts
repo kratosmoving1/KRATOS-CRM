@@ -199,6 +199,32 @@ export async function POST(req: NextRequest) {
     .update({ deposit_amount: resolvedDeposit })
     .eq('id', opportunityId)
 
+  async function saveEmailCommunication(status: 'sent' | 'failed', provider: string | null, providerMessageId: string | null, errorMessage: string | null) {
+    const base = {
+      opportunity_id: opportunityId,
+      customer_id: customer?.id ?? opportunity.customer_id,
+      type: 'email',
+      direction: 'outbound',
+      subject: errorMessage ? `[Failed] ${subject}` : subject,
+      body: errorMessage ? `${text}\n\nSend error: ${errorMessage}` : text,
+      email_to: recipientEmail,
+      created_by: user.id,
+    }
+    const full = {
+      ...base,
+      provider,
+      provider_message_id: providerMessageId,
+      status,
+      error_message: errorMessage,
+    }
+
+    const result = await supabase.from('communications').insert(full).select().single()
+    if (!result.error) return result
+
+    console.error('[Estimate Email] Full communication insert failed; falling back to base insert:', result.error)
+    return supabase.from('communications').insert(base).select().single()
+  }
+
   try {
     const sender = senderForProfile(profile?.email)
     if (!sender.fromEmail) throw new Error(emailConfigError())
@@ -212,19 +238,11 @@ export async function POST(req: NextRequest) {
       replyTo: sender.replyTo,
     })
 
-    await supabase.from('communications').insert({
-      opportunity_id: opportunityId,
-      customer_id: customer?.id ?? opportunity.customer_id,
-      type: 'email',
-      direction: 'outbound',
-      subject,
-      body: text,
-      email_to: recipientEmail,
-      provider: result.provider,
-      provider_message_id: result.id ?? null,
-      status: 'sent',
-      created_by: user.id,
-    })
+    const { data: comm, error: commErr } = await saveEmailCommunication('sent', result.provider, result.id ?? null, null)
+    if (commErr) {
+      console.error('[Estimate Email] Failed to save sent email communication:', commErr)
+      return NextResponse.json({ error: `Estimate email sent, but activity logging failed: ${commErr.message}` }, { status: 500 })
+    }
 
     await supabase
       .from('opportunities')
@@ -254,23 +272,12 @@ export async function POST(req: NextRequest) {
       userAgent: req.headers.get('user-agent'),
     })
 
-    return NextResponse.json({ ok: true, portalUrl: estimateLink })
+    return NextResponse.json({ ok: true, portalUrl: estimateLink, communicationId: comm?.id ?? null })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unable to send estimate email.'
     console.error('Estimate email failed:', err)
-    await supabase.from('communications').insert({
-      opportunity_id: opportunityId,
-      customer_id: customer?.id ?? opportunity.customer_id,
-      type: 'email',
-      direction: 'outbound',
-      subject,
-      body: text,
-      email_to: recipientEmail,
-      provider: process.env.EMAIL_PROVIDER ?? null,
-      status: 'failed',
-      error_message: message,
-      created_by: user.id,
-    })
+    const { error: commErr } = await saveEmailCommunication('failed', process.env.EMAIL_PROVIDER ?? null, null, message)
+    if (commErr) console.error('[Estimate Email] Failed to save failed email communication:', commErr)
     await logAuditEvent({
       actorUserId: user.id,
       action: 'estimate_email_failed',

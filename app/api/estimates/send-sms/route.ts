@@ -134,6 +134,31 @@ export async function POST(req: NextRequest) {
   const provider = getSmsProvider()
   let messageId: string | null = null
 
+  async function saveSmsCommunication(status: 'sent' | 'failed', errorMessage: string | null) {
+    const base = {
+      opportunity_id: opportunityId,
+      customer_id: customer?.id ?? opportunity.customer_id,
+      type: 'sms',
+      direction: 'outbound',
+      body: errorMessage ? `${smsText}\n\nSend error: ${errorMessage}` : smsText,
+      created_by: user.id,
+    }
+    const full = {
+      ...base,
+      provider,
+      provider_message_id: messageId,
+      status,
+      phone_number: normalized.normalized,
+      error_message: errorMessage,
+    }
+
+    const result = await supabase.from('communications').insert(full).select().single()
+    if (!result.error) return result
+
+    console.error('[Estimate SMS] Full communication insert failed; falling back to base insert:', result.error)
+    return supabase.from('communications').insert(base).select().single()
+  }
+
   try {
     if (provider === 'twilio') {
       const result = await sendSmsTwilio(normalized.normalized, smsText)
@@ -155,17 +180,8 @@ export async function POST(req: NextRequest) {
       : err instanceof Error ? err.message : 'SMS send failed.'
     console.error('[Estimate SMS] Send failed:', { opportunityId, provider, error: msg })
 
-    await supabase.from('communications').insert({
-      opportunity_id: opportunityId,
-      customer_id: customer?.id ?? opportunity.customer_id,
-      type: 'sms',
-      direction: 'outbound',
-      body: smsText,
-      provider,
-      status: 'failed',
-      phone_number: normalized.normalized,
-      created_by: user.id,
-    })
+    const { error: commErr } = await saveSmsCommunication('failed', msg)
+    if (commErr) console.error('[Estimate SMS] Failed to save failed SMS communication:', commErr)
 
     await logAuditEvent({
       actorUserId: user.id,
@@ -180,19 +196,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 
-  // Log successful communication
-  await supabase.from('communications').insert({
-    opportunity_id: opportunityId,
-    customer_id: customer?.id ?? opportunity.customer_id,
-    type: 'sms',
-    direction: 'outbound',
-    body: smsText,
-    provider,
-    provider_message_id: messageId,
-    status: 'sent',
-    phone_number: normalized.normalized,
-    created_by: user.id,
-  })
+  // Log successful communication with the exact SMS text shown in Sales activity.
+  const { data: comm, error: commErr } = await saveSmsCommunication('sent', null)
+  if (commErr) {
+    console.error('[Estimate SMS] Failed to save sent SMS communication:', commErr)
+    return NextResponse.json({ error: `Estimate SMS sent, but activity logging failed: ${commErr.message}` }, { status: 500 })
+  }
 
   await supabase
     .from('opportunities')
@@ -209,5 +218,5 @@ export async function POST(req: NextRequest) {
     userAgent: req.headers.get('user-agent'),
   })
 
-  return NextResponse.json({ ok: true, provider, portalUrl }, { status: 200 })
+  return NextResponse.json({ ok: true, provider, portalUrl, communicationId: comm?.id ?? null }, { status: 200 })
 }

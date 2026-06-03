@@ -14,7 +14,7 @@ export async function GET(
       .from('communications')
       .select('id, type, direction, subject, body, call_outcome, call_duration_seconds, created_at, created_by, profiles!created_by(full_name)')
       .eq('opportunity_id', params.id)
-      .eq('is_deleted', false)
+      .neq('is_deleted', true)
       .order('created_at', { ascending: false }),
     supabase
       .from('audit_log')

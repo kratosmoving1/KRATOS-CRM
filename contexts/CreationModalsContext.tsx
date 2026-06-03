@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 
-type ModalType = 'opportunity' | 'lead' | 'task' | 'followup' | null
+type ModalType = 'opportunity' | 'lead' | 'task' | 'followup' | 'customer' | null
 
 interface ModalContextValue {
   activeModal: ModalType
