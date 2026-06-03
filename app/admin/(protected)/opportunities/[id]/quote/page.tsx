@@ -1093,10 +1093,6 @@ export default function OpportunityDetailPage() {
                   phone: opp.customer.phone,
                 } : null,
               }}
-              onSent={() => {
-                loadTimeline()
-                load()
-              }}
             />
             <button
               onClick={() => setShowQuickEdit(true)}
