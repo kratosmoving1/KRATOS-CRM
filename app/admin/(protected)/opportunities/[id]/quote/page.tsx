@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, type ElementType, type ReactNode } fr
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ChevronRight, Edit2, RefreshCw, Trash2, Loader2,
+  ChevronRight, RefreshCw, Trash2, Loader2,
   MapPin, Map as MapIcon, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
@@ -377,9 +377,11 @@ const STRIPE_PAYMENT_METHODS: PaymentMethod[] = ['credit_card', 'debit_card']
 function CommTypeIcon({ type }: { type: string }) {
   const icons: Record<string, React.ElementType> = {
     note: FileText, call: PhoneCall, sms: MessageSquare, email: AtSign,
+    follow_up: CalendarPlus, status: RefreshCw, status_change: RefreshCw,
+    audit: CheckCircle2, create: CheckCircle2,
   }
   const Icon = icons[type] ?? FileText
-  return <Icon size={14} className="shrink-0 text-slate-400" />
+  return <Icon size={14} className="shrink-0" />
 }
 
 export default function OpportunityDetailPage() {
@@ -1065,16 +1067,51 @@ export default function OpportunityDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                 {opp.customer?.full_name ?? 'Unknown Customer'}
               </h1>
               <StatusPill status={opp.status} />
-              <span className="font-mono text-sm text-slate-400">Quote {formatQuoteNumber(opp.opportunity_number)}</span>
+              <button
+                onClick={() => setShowQuickEdit(true)}
+                className="rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                title="Edit contact info"
+              >
+                <Pencil size={14} />
+              </button>
             </div>
+
+            {/* Contact row — phone + email directly under the name */}
+            {(opp.customer?.phone || opp.customer?.email) && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                {opp.customer?.phone && (
+                  <a
+                    href={`tel:${opp.customer.phone}`}
+                    className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
+                  >
+                    <Phone size={13} className="text-slate-400" />
+                    <span>{opp.customer.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}</span>
+                    {opp.customer.phone_type && (
+                      <span className="text-xs text-slate-400 capitalize">({opp.customer.phone_type})</span>
+                    )}
+                  </a>
+                )}
+                {opp.customer?.email && (
+                  <a
+                    href={`mailto:${opp.customer.email}`}
+                    className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
+                  >
+                    <Mail size={13} className="text-slate-400" />
+                    <span>{opp.customer.email}</span>
+                  </a>
+                )}
+              </div>
+            )}
+
             <p className="mt-1 text-sm text-slate-500">
               {SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type}
               {opp.service_date ? ` · ${formatDateShort(opp.service_date)}` : ' · TBD'}
               {opp.move_size ? ` · ${MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')}` : ''}
+              {' · '}Quote {formatQuoteNumber(opp.opportunity_number)}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1094,12 +1131,6 @@ export default function OpportunityDetailPage() {
                 } : null,
               }}
             />
-            <button
-              onClick={() => setShowQuickEdit(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              <Edit2 size={14} /> Edit
-            </button>
             <button
               onClick={() => setShowStatusModal(true)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -1596,9 +1627,10 @@ export default function OpportunityDetailPage() {
                     const upcomingItems = showUpcoming
                       ? filteredTimeline.filter(item => item._kind === 'follow_up' && !item.completed_at)
                       : []
-                    const pastItems = showUpcoming
+                    const pastItems = (showUpcoming
                       ? filteredTimeline.filter(item => !(item._kind === 'follow_up' && !item.completed_at))
                       : filteredTimeline
+                    ).filter(item => !(item._kind === 'audit' && item.action === 'update'))
 
                     const monthGroups: { month: string; items: TimelineItem[] }[] = []
                     for (const item of pastItems) {
@@ -1608,80 +1640,128 @@ export default function OpportunityDetailPage() {
                       else monthGroups.push({ month, items: [item] })
                     }
 
-                    const renderItem = (item: TimelineItem) => (
-                      <div key={item.id} className="flex gap-3">
-                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
-                          {item._kind === 'communication' ? (
-                            <CommTypeIcon type={item.type ?? 'note'} />
-                          ) : item._kind === 'follow_up' ? (
-                            <CalendarPlus size={12} className="text-kratos" />
-                          ) : (
-                            <CheckCircle2 size={12} className="text-kratos" />
+                    const ACTIVITY_ICON_CONFIG: Record<string, { label: string; colorClass: string }> = {
+                      note:           { label: 'Note',           colorClass: 'text-amber-600 bg-amber-50' },
+                      sms:            { label: 'SMS',            colorClass: 'text-purple-600 bg-purple-50' },
+                      email:          { label: 'Email',          colorClass: 'text-blue-600 bg-blue-50' },
+                      call:           { label: 'Call',           colorClass: 'text-green-600 bg-green-50' },
+                      follow_up:      { label: 'Follow-up',      colorClass: 'text-orange-600 bg-orange-50' },
+                      create:         { label: 'Quote created',  colorClass: 'text-slate-500 bg-slate-100' },
+                      status_change:  { label: 'Status changed', colorClass: 'text-slate-500 bg-slate-100' },
+                    }
+
+                    const renderItem = (item: TimelineItem) => {
+                      const isAudit = item._kind === 'audit'
+                      const isFu    = item._kind === 'follow_up'
+                      const typeKey = isFu ? 'follow_up' : isAudit ? (item.action ?? 'create') : (item.type ?? 'note')
+                      const cfg     = ACTIVITY_ICON_CONFIG[typeKey] ?? { label: typeKey, colorClass: 'text-slate-500 bg-slate-100' }
+                      const isSlim  = isAudit
+
+                      const directionLabel = item.direction && item.direction !== 'internal'
+                        ? item.direction === 'outbound' ? 'Sent' : 'Received'
+                        : null
+
+                      return (
+                        <article
+                          key={item.id}
+                          className={cn(
+                            'rounded-lg border border-slate-200 bg-white',
+                            isSlim ? 'px-4 py-3' : 'p-4',
                           )}
-                        </div>
-                        <div className="flex-1 min-w-0 pb-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-sm font-semibold text-slate-900">{item.actor ?? 'System'}</span>
+                        >
+                          {/* Card header */}
+                          <div className="flex items-center justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={cn(
+                                'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                                cfg.colorClass,
+                              )}>
+                                <CommTypeIcon type={isFu ? 'follow_up' : isAudit ? (item.action === 'status_change' ? 'status' : 'audit') : (item.type ?? 'note')} />
+                              </span>
+                              <div className="min-w-0">
+                                <span className="text-sm font-semibold text-slate-800">
+                                  {isAudit
+                                    ? (item.action === 'create' ? 'Quote created' : 'Status changed')
+                                    : isFu
+                                    ? `${(item.type ?? 'Follow-up').replace(/_/g,' ')} follow-up`
+                                    : cfg.label}
+                                </span>
+                                {directionLabel && (
+                                  <span className="ml-1.5 text-xs text-slate-400">{directionLabel}</span>
+                                )}
+                                {item.actor && (
+                                  <span className="ml-1.5 text-xs text-slate-400">by {item.actor}</span>
+                                )}
+                              </div>
+                            </div>
                             <span className="shrink-0 text-xs text-slate-400">{formatDatetime(item.created_at)}</span>
                           </div>
-                          {item._kind === 'communication' ? (
-                            <>
-                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span className="text-xs font-medium text-slate-500 capitalize">{item.type}</span>
-                                {item.direction && item.direction !== 'internal' && (
-                                  <span className="text-[10px] rounded-full bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-500 capitalize">{item.direction}</span>
-                                )}
-                                {item.call_outcome && (
-                                  <span className="text-xs text-slate-500">— {CALL_OUTCOMES[item.call_outcome] ?? item.call_outcome}</span>
-                                )}
-                                {item.subject && (
-                                  <span className="text-xs text-slate-600 truncate">&ldquo;{item.subject}&rdquo;</span>
-                                )}
-                              </div>
-                              {item.body && <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>}
-                            </>
-                          ) : item._kind === 'follow_up' ? (
-                            <>
-                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span className="text-xs text-slate-500 capitalize">{item.type?.replace(/_/g,' ')} follow-up</span>
-                                {item.status === 'completed' ? (
-                                  <span className="text-[10px] rounded-full bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">Completed</span>
-                                ) : (
-                                  <span className="text-[10px] rounded-full bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">Pending</span>
-                                )}
-                              </div>
-                              <p className="mt-0.5 text-sm text-slate-700">
-                                Due {item.follow_up_date}{item.follow_up_time ? ` at ${item.follow_up_time.slice(0,5)}` : ''}
-                                {item.assignee_name ? <span className="text-slate-500"> · {item.assignee_name}</span> : null}
-                              </p>
-                              {item.notes && <p className="mt-0.5 text-xs text-slate-500 italic">{item.notes}</p>}
-                            </>
-                          ) : (
-                            <p className="mt-0.5 text-sm text-slate-700">
-                              {item.action === 'create' ? 'Quote created'
-                                : item.action === 'status_change'
-                                ? `Status changed to ${OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? item.diff?.to}`
-                                : item.action === 'update' ? 'Details updated'
-                                : item.action}
-                              {!!item.diff?.reason && <span className="text-slate-500"> — {String(item.diff.reason)}</span>}
-                            </p>
+
+                          {/* Card body */}
+                          {item._kind === 'communication' && (
+                            <div className="pl-9">
+                              {item.call_outcome && (
+                                <p className="text-xs text-slate-500 mb-1">
+                                  Outcome: {CALL_OUTCOMES[item.call_outcome] ?? item.call_outcome}
+                                </p>
+                              )}
+                              {item.subject && (
+                                <p className="text-sm font-medium text-slate-700 mb-1">{item.subject}</p>
+                              )}
+                              {item.body && (
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>
+                              )}
+                            </div>
                           )}
-                        </div>
-                      </div>
-                    )
+
+                          {item._kind === 'follow_up' && (
+                            <div className="pl-9 space-y-0.5">
+                              <p className="text-sm text-slate-700">
+                                Due {item.follow_up_date}
+                                {item.follow_up_time ? ` at ${item.follow_up_time.slice(0, 5)}` : ''}
+                              </p>
+                              {item.assignee_name && (
+                                <p className="text-xs text-slate-500">{item.assignee_name}</p>
+                              )}
+                              {item.notes && (
+                                <p className="text-xs text-slate-500 italic">{item.notes}</p>
+                              )}
+                              <div className="pt-1">
+                                {item.status === 'completed' ? (
+                                  <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Completed</span>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Pending</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {item._kind === 'audit' && item.action === 'status_change' && (
+                            <div className="pl-9">
+                              <p className="text-sm text-slate-600">
+                                Status changed to{' '}
+                                <span className="font-medium text-slate-800">
+                                  {OPP_STATUSES.find(s => s.value === item.diff?.to)?.label ?? String(item.diff?.to ?? '')}
+                                </span>
+                              </p>
+                            </div>
+                          )}
+                        </article>
+                      )
+                    }
 
                     return (
                       <div className="space-y-6">
                         {upcomingItems.length > 0 && (
                           <div>
                             <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Upcoming</p>
-                            <div className="space-y-4">{upcomingItems.map(renderItem)}</div>
+                            <div className="space-y-3">{upcomingItems.map(renderItem)}</div>
                           </div>
                         )}
                         {monthGroups.map(({ month, items }) => (
                           <div key={month}>
                             <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">{month}</p>
-                            <div className="space-y-4">{items.map(renderItem)}</div>
+                            <div className="space-y-3">{items.map(renderItem)}</div>
                           </div>
                         ))}
                       </div>
@@ -1693,6 +1773,37 @@ export default function OpportunityDetailPage() {
 
             {/* Right sidebar */}
             <div className="space-y-4">
+
+              {/* Next Follow-up card */}
+              {(() => {
+                const nextFu = timeline
+                  .filter(item => item._kind === 'follow_up' && !item.completed_at)
+                  .sort((a, b) => (a.follow_up_date ?? '').localeCompare(b.follow_up_date ?? ''))[0] ?? null
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Next Follow-up</h2>
+                    {nextFu ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-sm text-slate-700">
+                          <Phone size={13} className="text-slate-400 shrink-0" />
+                          <span className="font-medium capitalize">
+                            {nextFu.type ?? 'Follow-up'} — {nextFu.follow_up_date}
+                            {nextFu.follow_up_time ? ` at ${nextFu.follow_up_time.slice(0, 5)}` : ''}
+                          </span>
+                        </div>
+                        {nextFu.assignee_name && (
+                          <p className="pl-5 text-xs text-slate-500">{nextFu.assignee_name}</p>
+                        )}
+                        {nextFu.notes && (
+                          <p className="pl-5 text-xs text-slate-500 italic">{nextFu.notes}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400">No follow-ups scheduled.</p>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Information card — expanded to match SmartMoving */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -1787,8 +1898,12 @@ export default function OpportunityDetailPage() {
                     </div>
                   )}
                   <InfoRow label="Move Size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
-                  <InfoRow label="Assigned To" value={opp.agent?.full_name ?? 'Unassigned'} />
-                  <InfoRow label="Source"     value={opp.lead_source?.name ?? '—'} />
+                  <InfoRow label="Assigned To"       value={opp.agent?.full_name ?? 'Unassigned'} />
+                  <InfoRow label="Source"            value={opp.lead_source?.name ?? '—'} />
+                  <InfoRow label="Branch"            value="Main Office" />
+                  <InfoRow label="Estimator"         value="Unassigned" />
+                  <InfoRow label="Move Coordinator"  value="Unassigned" />
+                  <InfoRow label="Lead Status"       value="—" />
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                     <span className="text-slate-500">Outstanding Balance</span>
                     <span className={cn('font-semibold', balanceDue > 0 ? 'text-red-600' : 'text-emerald-600')}>
