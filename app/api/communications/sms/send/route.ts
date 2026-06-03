@@ -39,17 +39,10 @@ type OpportunityRecord = {
   deposit_amount: number | null
   origin_city: string | null
   dest_city: string | null
-  customer?: CustomerRecord | CustomerRecord[] | null
-  agent?: { full_name: string | null } | { full_name: string | null }[] | null
 }
 
 function firstName(fullName: string | null | undefined) {
   return fullName?.trim().split(/\s+/)[0] ?? ''
-}
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (!value) return null
-  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 function maskPhone(phone: string) {
@@ -100,20 +93,20 @@ export async function POST(req: NextRequest) {
   if (opportunityId) {
     const { data, error } = await db
       .from('opportunities')
-      .select('id, opportunity_number, customer_id, sales_agent_id, service_date, deposit_amount, origin_city, dest_city, customer:customers!customer_id(id, full_name, phone, email), agent:profiles!sales_agent_id(full_name)')
+      .select('id, opportunity_number, customer_id, sales_agent_id, service_date, deposit_amount, origin_city, dest_city')
       .eq('id', opportunityId)
       .neq('is_deleted', true)
       .single()
 
     if (error || !data) {
-      console.error('[SMS] Opportunity lookup failed:', { opportunityId, error: error?.message, code: error?.code })
-      return NextResponse.json({ error: `Opportunity ${opportunityId} not found in database` }, { status: 404 })
+      console.error('[SMS] Opportunity lookup failed:', { opportunityId, error: error?.message, code: error?.code, details: error?.details })
+      return NextResponse.json({ error: `Opportunity ${opportunityId} not found (db error: ${error?.message ?? 'no rows'})` }, { status: 404 })
     }
     opportunity = data as unknown as OpportunityRecord
-    customer = one(opportunity.customer)
     customerId = customerId ?? opportunity.customer_id
   }
 
+  // Fetch customer separately — avoids FK join issues
   if (!customer && customerId) {
     const { data, error } = await db
       .from('customers')
@@ -122,7 +115,10 @@ export async function POST(req: NextRequest) {
       .neq('is_deleted', true)
       .single()
 
-    if (error || !data) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+    if (error || !data) {
+      console.error('[SMS] Customer lookup failed:', { customerId, error: error?.message })
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+    }
     customer = data as CustomerRecord
   }
 
@@ -135,7 +131,7 @@ export async function POST(req: NextRequest) {
     .eq('id', user.id)
     .single()
 
-  const agentName = profile?.full_name ?? one(opportunity?.agent)?.full_name ?? ''
+  const agentName = profile?.full_name ?? ''
   const templateVars = {
     customer_name: customer?.full_name ?? '',
     customer_first_name: firstName(customer?.full_name),
