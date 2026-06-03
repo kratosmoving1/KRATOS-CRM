@@ -102,6 +102,17 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 9 — Multi-Tier Package Recommendation)
+
+- Estimate tab → Package Recommendation card upgraded from 1-2 cards to 4 cards side by side
+- Tiers: Bronze (0 trucks, 2 crew), Silver (1 truck, 2 crew), Gold (1 truck, 3 crew), Platinum (1 truck, 4 crew)
+- Weekend/weekday rate detection per tier ($10 premium on weekends)
+- Smart recommendation: correct tier highlighted "Recommended" based on move_size
+- Click "Apply" on any card → `POST /api/admin/opportunities/[id]/apply-package` → creates or updates Moving Labor charge (no duplicates)
+- "Applied" badge + ring border on the active tier — persists on page refresh
+- Charges table and sidebar totals refresh automatically after apply
+- Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
+
 ## 🔧 Now
 
 _Tariff Configuration UI in Settings_

@@ -22,7 +22,7 @@ import QuickEditModal from '@/components/admin/modals/QuickEditModal'
 import EditAddressModal, { type EditAddressData } from '@/components/admin/modals/EditAddressModal'
 import ChargesSection from '@/components/admin/charges/ChargesSection'
 import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
-import TariffRecommendationPanel from '@/components/admin/charges/TariffRecommendationPanel'
+import { PackageTierCards } from '@/components/admin/charges/PackageTierCards'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS, MOVE_SIZE_VOLUME } from '@/lib/constants'
@@ -2186,19 +2186,15 @@ export default function OpportunityDetailPage() {
                 )
               })()}
 
-              {/* Tariff recommendation */}
-              <TariffRecommendationPanel
+              {/* Package recommendation — 4 tiers */}
+              <PackageTierCards
                 opportunityId={id}
-                serviceType={opp.service_type}
                 moveSize={opp.move_size}
                 moveDate={opp.service_date}
-                hasExistingLaborCharge={charges.some(c => c.charge_type === 'moving_labor')}
-                onApplyPackage={config => {
-                  const existingLabor = charges.find(c => c.charge_type === 'moving_labor') ?? null
-                  setTariffPreFill(config as unknown as Record<string, unknown>)
-                  setEditingCharge(existingLabor)
-                  setChargePanelOpen(true)
-                }}
+                appliedChargeConfig={
+                  (charges.find(c => c.charge_type === 'moving_labor')?.config ?? null) as Record<string, unknown> | null
+                }
+                onApplied={() => fetchCharges()}
               />
 
               {/* Charges */}

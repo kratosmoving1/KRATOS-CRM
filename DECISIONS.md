@@ -159,4 +159,24 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 ---
 
+## 2026-06 — Package Recommendation: 4 tiers (Bronze/Silver/Gold/Platinum), direct API apply
+
+**Decision:** The Package Recommendation card on the Estimate tab shows four tiers side-by-side. Clicking "Apply" on any tier calls `POST /api/admin/opportunities/[id]/apply-package` directly with `{ tier_id }`, which inserts or updates the Moving Labor charge without opening the ChargeSidePanel.
+
+**Tier rates (CAD, per hour):**
+| Tier | Trucks | Crew | Weekday | Weekend |
+|---|---|---|---|---|
+| Bronze | 0 | 2 | $129.99 | $139.99 |
+| Silver | 1 | 2 | $189.99 | $199.99 |
+| Gold | 1 | 3 | $229.99 | $239.99 |
+| Platinum | 1 | 4 | $259.99 | $269.99 |
+
+**Recommendation logic:** `lib/packages/tiers.ts` → `recommendTier(moveSize)` iterates PACKAGE_TIERS in order and returns the first tier whose `recommended_for` array contains the move_size. Falls back to Silver if no match.
+
+**Applied-tier detection:** `detectAppliedTier(config)` matches by `num_trucks + num_crew` against the Moving Labor charge config stored in `opportunity_charges.config`.
+
+**Apply route deduplication:** `POST apply-package` checks for an existing `moving_labor` charge via `.neq('is_deleted', true)`. If found, updates it in-place (same row ID). If not found, inserts a new row. Prevents duplicate Moving Labor charges.
+
+**Definitions live in:** `lib/packages/tiers.ts` — single source of truth for tier rates, crew, and recommendation mapping.
+
 ## (Append new decisions below as they happen)
