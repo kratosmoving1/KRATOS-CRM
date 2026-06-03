@@ -1273,16 +1273,15 @@ export default function OpportunityDetailPage() {
                       {/* ── CALL TAB ── */}
                       {commType === 'call' && (() => {
                         const showFollowUp = ['no_answer', 'busy', 'voicemail'].includes(commCallOutcome)
-                        const smsTpls   = FOLLOW_UP_SMS_TEMPLATES
-                        const emailTpls = FOLLOW_UP_EMAIL_TEMPLATES
+                        const dropdownCls = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400'
                         return (
                           <>
-                            {/* Direction + Outcome */}
-                            <div className="flex flex-wrap gap-2">
+                            {/* All controls inline in one row */}
+                            <div className="flex flex-wrap items-center gap-2">
                               <select
                                 value={commDirection}
                                 onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                                className={dropdownCls}
                               >
                                 <option value="outbound">Outbound</option>
                                 <option value="inbound">Inbound</option>
@@ -1294,80 +1293,59 @@ export default function OpportunityDetailPage() {
                                   setCallFollowUpSmsTplId('')
                                   setCallFollowUpEmailTplId('')
                                 }}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                                className={dropdownCls}
                               >
                                 <option value="">— Outcome —</option>
                                 {CALL_OUTCOME_OPTIONS.map(o => (
                                   <option key={o.value} value={o.value}>{o.label}</option>
                                 ))}
                               </select>
+
+                              {/* Follow-up template pickers — inline, only for non-connected outcomes */}
+                              {showFollowUp && (
+                                <>
+                                  <select
+                                    value={callFollowUpSmsTplId}
+                                    onChange={e => setCallFollowUpSmsTplId(e.target.value)}
+                                    disabled={!opp?.customer?.phone}
+                                    title={opp?.customer?.phone ? 'Pick an SMS template to send after logging' : 'Customer has no phone number'}
+                                    className={dropdownCls}
+                                  >
+                                    <option value="">{opp?.customer?.phone ? 'Send a Text' : 'Send a Text (no phone on file)'}</option>
+                                    {FOLLOW_UP_SMS_TEMPLATES.map(t => (
+                                      <option key={t.id} value={t.id}>{t.label}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={callFollowUpEmailTplId}
+                                    onChange={e => setCallFollowUpEmailTplId(e.target.value)}
+                                    disabled={!opp?.customer?.email}
+                                    title={opp?.customer?.email ? 'Pick an email template to send after logging' : 'Customer has no email address'}
+                                    className={dropdownCls}
+                                  >
+                                    <option value="">{opp?.customer?.email ? 'Send an Email' : 'Send an Email (no email on file)'}</option>
+                                    {FOLLOW_UP_EMAIL_TEMPLATES.map(t => (
+                                      <option key={t.id} value={t.id}>{t.label}</option>
+                                    ))}
+                                  </select>
+                                </>
+                              )}
+
+                              <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
+                                <span>Today</span>
+                                <Clock size={12} />
+                                <span>{new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                              </div>
                             </div>
 
-                            {/* Call notes */}
+                            {/* Call notes textarea */}
                             <textarea
                               rows={4}
                               value={commBody}
                               onChange={e => setCommBody(e.target.value)}
-                              placeholder="Describe the call…"
+                              placeholder="Describe the call… (optional — auto-filled if blank)"
                               className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                             />
-
-                            {/* Conditional follow-up section — only for no_answer / busy / voicemail */}
-                            {showFollowUp && (
-                              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  Send Follow-Up (optional)
-                                </p>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                  {/* SMS */}
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs text-slate-500">SMS Template</label>
-                                    <select
-                                      value={callFollowUpSmsTplId}
-                                      onChange={e => setCallFollowUpSmsTplId(e.target.value)}
-                                      disabled={!opp?.customer?.phone}
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos disabled:bg-slate-100 disabled:text-slate-400"
-                                    >
-                                      <option value="">— None —</option>
-                                      {smsTpls.map(t => (
-                                        <option key={t.id} value={t.id}>{t.label}</option>
-                                      ))}
-                                    </select>
-                                    {!opp?.customer?.phone && (
-                                      <p className="text-xs text-amber-600">No phone on customer record</p>
-                                    )}
-                                    {callFollowUpSmsTplId && (
-                                      <p className="text-xs text-slate-500 line-clamp-3 whitespace-pre-wrap">
-                                        {smsTpls.find(t => t.id === callFollowUpSmsTplId)?.body}
-                                      </p>
-                                    )}
-                                  </div>
-                                  {/* Email */}
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs text-slate-500">Email Template</label>
-                                    <select
-                                      value={callFollowUpEmailTplId}
-                                      onChange={e => setCallFollowUpEmailTplId(e.target.value)}
-                                      disabled={!opp?.customer?.email}
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos disabled:bg-slate-100 disabled:text-slate-400"
-                                    >
-                                      <option value="">— None —</option>
-                                      {emailTpls.map(t => (
-                                        <option key={t.id} value={t.id}>{t.label}</option>
-                                      ))}
-                                    </select>
-                                    {!opp?.customer?.email && (
-                                      <p className="text-xs text-amber-600">No email on customer record</p>
-                                    )}
-                                    {callFollowUpEmailTplId && (
-                                      <p className="text-xs text-slate-500 line-clamp-3 whitespace-pre-wrap">
-                                        {emailTpls.find(t => t.id === callFollowUpEmailTplId)?.body}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
                           </>
                         )
                       })()}

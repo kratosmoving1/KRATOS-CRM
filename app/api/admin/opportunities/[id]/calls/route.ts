@@ -11,6 +11,22 @@ import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 // Outcomes that warrant a follow-up send
 const FOLLOW_UP_OUTCOMES = new Set(['no_answer', 'busy', 'voicemail'])
 
+function defaultCallBody(direction: string, outcome: string | null): string {
+  const dir = direction === 'inbound' ? 'Inbound' : 'Outbound'
+  const outcomeLabel: Record<string, string> = {
+    connected:          'connected',
+    no_answer:          'no answer',
+    voicemail:          'left voicemail',
+    busy:               'line busy',
+    wrong_number:       'wrong number',
+    left_live_message:  'left live message',
+    number_disconnected: 'number disconnected',
+    pending:            'pending',
+  }
+  const out = outcome ? (outcomeLabel[outcome] ?? outcome) : 'logged'
+  return `${dir} call — ${out}`
+}
+
 // Valid call outcomes per SCHEMA.md
 const VALID_OUTCOMES = new Set([
   'connected', 'voicemail', 'no_answer', 'wrong_number',
@@ -100,7 +116,9 @@ export async function POST(
       type:           'call',
       direction:      direction === 'inbound' ? 'inbound' : 'outbound',
       call_outcome:   outcome ?? null,
-      body:           description,
+      body:           (description && description.trim().length > 0)
+                        ? description.trim()
+                        : defaultCallBody(direction, outcome),
       created_by:     user.id,
     })
     .select()
@@ -126,7 +144,9 @@ export async function POST(
         errors.push(`SMS not sent — invalid phone number: ${customer.phone}`)
       } else {
         const bodyText = interpolate(tpl.body, ctx)
-        try {
+        if (!bodyText.trim()) {
+          errors.push('SMS template produced empty body — not sent')
+        } else try {
           const result = await sendSmsTwilio(normalizedPhone.normalized, bodyText)
           const { data: smsRow, error: smsInsertErr } = await db
             .from('communications')
@@ -177,7 +197,9 @@ export async function POST(
     } else {
       const subjectText = interpolate(tpl.subject ?? 'Following up from Kratos Moving', ctx)
       const bodyText    = interpolate(tpl.body, ctx)
-      try {
+      if (!bodyText.trim()) {
+        errors.push('Email template produced empty body — not sent')
+      } else try {
         const result = await sendEmail({
           to:      customer.email,
           subject: subjectText,
