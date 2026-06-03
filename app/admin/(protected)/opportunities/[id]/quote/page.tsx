@@ -385,14 +385,9 @@ function CommTypeIcon({ type }: { type: string }) {
   return <Icon size={14} className="shrink-0" />
 }
 
-const CALL_TEMPLATES = [
-  { id: 'no_pickup_first',  label: 'No Pick Up – First Attempt',    body: 'Hey {{customer_first_name}}, tried reaching out but missed you. I have a quote for your move and would love to chat — call or text back when you have a minute. — Kratos Moving' },
-  { id: 'second_text',      label: 'Second Text – Set Up Time',      body: 'Hey {{customer_first_name}}, following up on your move quote. What\'s a good time today or tomorrow to chat for 5 mins? — Kratos Moving' },
-  { id: 'followup_1',       label: 'Follow-Up 1: Reminder',          body: 'Hi {{customer_first_name}}, just a quick reminder that we\'re holding the spot for your move. Let me know if you have any questions. — Kratos Moving' },
-  { id: 'followup_2',       label: 'Follow-Up 2: Emphasize Value',   body: 'Hi {{customer_first_name}}, Kratos Moving is fully insured and rated 5 stars. Happy to walk you through anything still on the fence. — Kratos Moving' },
-  { id: 'followup_3',       label: 'Follow-Up 3: Encourage Action',  body: 'Hi {{customer_first_name}}, your quote is still open. To lock it in I just need a quick yes — reply or give us a call. — Kratos Moving' },
-  { id: 'review_request',   label: 'Review Request',                 body: 'Hi {{customer_first_name}}, hope your move went smoothly! A quick Google review would mean a lot. Thanks for choosing Kratos Moving.' },
-] as const
+import { templatesByChannel } from '@/lib/templates/follow-up-templates'
+const FOLLOW_UP_SMS_TEMPLATES   = templatesByChannel('sms')
+const FOLLOW_UP_EMAIL_TEMPLATES = templatesByChannel('email')
 
 export default function OpportunityDetailPage() {
   const router = useRouter()
@@ -447,8 +442,9 @@ export default function OpportunityDetailPage() {
   const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
   // Unified templates — email + SMS loaded once when Sales tab opens
   const [allTemplates, setAllTemplates] = useState<CommunicationTemplate[]>([])
-  // Call tab template picker (inserts text into description field)
-  const [callTplId, setCallTplId] = useState('')
+  // Call tab follow-up template selectors
+  const [callFollowUpSmsTplId, setCallFollowUpSmsTplId] = useState('')
+  const [callFollowUpEmailTplId, setCallFollowUpEmailTplId] = useState('')
 
   // Timeline + filters
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -835,11 +831,46 @@ export default function OpportunityDetailPage() {
     finally { setCommSubmitting(false) }
   }
 
-  function applyCallTemplate(id: string) {
-    setCallTplId(id)
-    if (!id) return
-    const tpl = CALL_TEMPLATES.find(t => t.id === id)
-    if (tpl) setCommBody(prev => prev.trim() ? `${prev}\n\n${tpl.body}` : tpl.body)
+  async function submitCallWithFollowUp() {
+    if (!opp) return
+    if (!commCallOutcome) { toast.error('Select a call outcome'); return }
+    setCommSubmitting(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/calls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          direction:         commDirection,
+          outcome:           commCallOutcome,
+          description:       commBody.trim() || null,
+          sms_template_id:   callFollowUpSmsTplId || null,
+          email_template_id: callFollowUpEmailTplId || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof json.error === 'string' ? json.error : 'Failed to log call')
+        return
+      }
+      if (json.errors?.length) {
+        // Call was logged but follow-up sends had partial failures
+        toast.warning(`Call logged. Follow-up issues: ${(json.errors as string[]).join(' · ')}`)
+      } else {
+        const parts = ['Call logged']
+        if (json.created?.sms) parts.push('SMS sent')
+        if (json.created?.email) parts.push('email sent')
+        toast.success(parts.join(' · ') + '.')
+      }
+      setCommBody('')
+      setCommCallOutcome('')
+      setCallFollowUpSmsTplId('')
+      setCallFollowUpEmailTplId('')
+      loadTimeline()
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setCommSubmitting(false)
+    }
   }
 
   function selectPaymentMethod(method: PaymentMethod) {
@@ -1240,50 +1271,106 @@ export default function OpportunityDetailPage() {
                       )}
 
                       {/* ── CALL TAB ── */}
-                      {commType === 'call' && (
-                        <>
-                          {/* Three dropdowns: direction, outcome, template picker */}
-                          <div className="flex flex-wrap gap-2">
-                            <select
-                              value={commDirection}
-                              onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
-                            >
-                              <option value="outbound">Outbound</option>
-                              <option value="inbound">Inbound</option>
-                            </select>
-                            <select
-                              value={commCallOutcome}
-                              onChange={e => setCommCallOutcome(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
-                            >
-                              <option value="">— Outcome —</option>
-                              {CALL_OUTCOME_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={callTplId}
-                              onChange={e => applyCallTemplate(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
-                            >
-                              <option value="">Send a Text…</option>
-                              {CALL_TEMPLATES.map(t => (
-                                <option key={t.id} value={t.id}>{t.label}</option>
-                              ))}
-                            </select>
-                          </div>
+                      {commType === 'call' && (() => {
+                        const showFollowUp = ['no_answer', 'busy', 'voicemail'].includes(commCallOutcome)
+                        const smsTpls   = FOLLOW_UP_SMS_TEMPLATES
+                        const emailTpls = FOLLOW_UP_EMAIL_TEMPLATES
+                        return (
+                          <>
+                            {/* Direction + Outcome */}
+                            <div className="flex flex-wrap gap-2">
+                              <select
+                                value={commDirection}
+                                onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                              >
+                                <option value="outbound">Outbound</option>
+                                <option value="inbound">Inbound</option>
+                              </select>
+                              <select
+                                value={commCallOutcome}
+                                onChange={e => {
+                                  setCommCallOutcome(e.target.value)
+                                  setCallFollowUpSmsTplId('')
+                                  setCallFollowUpEmailTplId('')
+                                }}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                              >
+                                <option value="">— Outcome —</option>
+                                {CALL_OUTCOME_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
 
-                          {/* Call notes textarea */}
-                          <textarea
-                            rows={4}
-                            value={commBody}
-                            onChange={e => setCommBody(e.target.value)}
-                            placeholder="Describe the call…"
-                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
-                          />
-                        </>
-                      )}
+                            {/* Call notes */}
+                            <textarea
+                              rows={4}
+                              value={commBody}
+                              onChange={e => setCommBody(e.target.value)}
+                              placeholder="Describe the call…"
+                              className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                            />
+
+                            {/* Conditional follow-up section — only for no_answer / busy / voicemail */}
+                            {showFollowUp && (
+                              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Send Follow-Up (optional)
+                                </p>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  {/* SMS */}
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs text-slate-500">SMS Template</label>
+                                    <select
+                                      value={callFollowUpSmsTplId}
+                                      onChange={e => setCallFollowUpSmsTplId(e.target.value)}
+                                      disabled={!opp?.customer?.phone}
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos disabled:bg-slate-100 disabled:text-slate-400"
+                                    >
+                                      <option value="">— None —</option>
+                                      {smsTpls.map(t => (
+                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                      ))}
+                                    </select>
+                                    {!opp?.customer?.phone && (
+                                      <p className="text-xs text-amber-600">No phone on customer record</p>
+                                    )}
+                                    {callFollowUpSmsTplId && (
+                                      <p className="text-xs text-slate-500 line-clamp-3 whitespace-pre-wrap">
+                                        {smsTpls.find(t => t.id === callFollowUpSmsTplId)?.body}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {/* Email */}
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs text-slate-500">Email Template</label>
+                                    <select
+                                      value={callFollowUpEmailTplId}
+                                      onChange={e => setCallFollowUpEmailTplId(e.target.value)}
+                                      disabled={!opp?.customer?.email}
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos disabled:bg-slate-100 disabled:text-slate-400"
+                                    >
+                                      <option value="">— None —</option>
+                                      {emailTpls.map(t => (
+                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                      ))}
+                                    </select>
+                                    {!opp?.customer?.email && (
+                                      <p className="text-xs text-amber-600">No email on customer record</p>
+                                    )}
+                                    {callFollowUpEmailTplId && (
+                                      <p className="text-xs text-slate-500 line-clamp-3 whitespace-pre-wrap">
+                                        {emailTpls.find(t => t.id === callFollowUpEmailTplId)?.body}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
 
                       {/* ── TEXT TAB ── */}
                       {commType === 'sms' && (
@@ -1362,14 +1449,23 @@ export default function OpportunityDetailPage() {
                             {commSubmitting && <Loader2 size={14} className="animate-spin" />}
                             Send Email
                           </button>
-                        ) : (
+                        ) : commType === 'call' ? (
                           <button
-                            onClick={submitComm}
-                            disabled={commSubmitting || (commType !== 'call' && !commBody.trim()) || (commType === 'call' && !commCallOutcome)}
+                            onClick={submitCallWithFollowUp}
+                            disabled={commSubmitting || !commCallOutcome}
                             className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
                           >
                             {commSubmitting && <Loader2 size={14} className="animate-spin" />}
-                            {commType === 'note' ? 'Add Note' : 'Log Call'}
+                            Log Call
+                          </button>
+                        ) : (
+                          <button
+                            onClick={submitComm}
+                            disabled={commSubmitting || !commBody.trim()}
+                            className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50"
+                          >
+                            {commSubmitting && <Loader2 size={14} className="animate-spin" />}
+                            Add Note
                           </button>
                         )}
                       </div>
