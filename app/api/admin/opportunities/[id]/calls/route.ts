@@ -51,11 +51,15 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
+  console.log('[calls.POST] raw body', JSON.stringify(body))
+
   const direction    = String(body.direction ?? 'outbound')
   const outcome      = body.outcome ? String(body.outcome) : null
   const description  = body.description ? String(body.description).trim() : null
   const smsTplId     = body.sms_template_id ? String(body.sms_template_id) : null
   const emailTplId   = body.email_template_id ? String(body.email_template_id) : null
+
+  console.log('[calls.POST] parsed', { direction, outcome, smsTplId, emailTplId })
 
   if (outcome && !VALID_OUTCOMES.has(outcome)) {
     return NextResponse.json({ error: `Invalid call outcome: ${outcome}` }, { status: 400 })
@@ -132,22 +136,36 @@ export async function POST(
   // ── 2. Optionally send SMS follow-up ────────────────────────────────────────
   const shouldSendFollowUps = outcome ? FOLLOW_UP_OUTCOMES.has(outcome) : false
 
+  console.log('[calls.POST] follow-up decision', { shouldSendFollowUps, smsTplId, emailTplId })
+
   if (shouldSendFollowUps && smsTplId) {
+    console.log('[calls.POST.sms] entered branch')
     const tpl = getTemplate(smsTplId)
+    console.log('[calls.POST.sms] template', { found: !!tpl, channel: tpl?.channel, id: tpl?.id })
     if (!tpl || tpl.channel !== 'sms') {
       errors.push(`SMS template not found: ${smsTplId}`)
     } else if (!customer.phone) {
+      console.log('[calls.POST.sms] no phone on customer')
       errors.push('SMS not sent — customer has no phone number')
     } else {
       const normalizedPhone = normalizePhoneToE164(customer.phone)
+      console.log('[calls.POST.sms] phone', { raw: customer.phone, normalized: normalizedPhone.normalized, isE164: normalizedPhone.isE164 })
+      console.log('[calls.POST.sms] env', {
+        hasSid: !!process.env.TWILIO_ACCOUNT_SID,
+        hasToken: !!process.env.TWILIO_AUTH_TOKEN,
+        hasFrom: !!process.env.TWILIO_FROM_NUMBER,
+      })
       if (!normalizedPhone.isE164) {
         errors.push(`SMS not sent — invalid phone number: ${customer.phone}`)
       } else {
         const bodyText = interpolate(tpl.body, ctx)
+        console.log('[calls.POST.sms] body preview', bodyText.slice(0, 80))
         if (!bodyText.trim()) {
           errors.push('SMS template produced empty body — not sent')
         } else try {
+          console.log('[calls.POST.sms] calling sendSmsTwilio')
           const result = await sendSmsTwilio(normalizedPhone.normalized, bodyText)
+          console.log('[calls.POST.sms] Twilio success', { sid: result.sid, status: result.status })
           const { data: smsRow, error: smsInsertErr } = await db
             .from('communications')
             .insert({
@@ -168,8 +186,8 @@ export async function POST(
           else created.sms = smsRow
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Twilio send failed'
+          console.error('[calls.POST.sms] Twilio error', { message: msg, code: (err as any).twilioCode })
           errors.push(`SMS send failed: ${msg}`)
-          // Still save a failed record so the agent can see something happened
           await db.from('communications').insert({
             opportunity_id: params.id,
             customer_id:    opp.customer_id,
