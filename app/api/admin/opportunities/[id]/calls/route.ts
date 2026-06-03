@@ -65,11 +65,14 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const direction    = String(body.direction ?? 'outbound')
-  const outcome      = body.outcome ? String(body.outcome) : null
-  const description  = body.description ? String(body.description).trim() : null
-  const smsTplId     = body.sms_template_id ? String(body.sms_template_id) : null
-  const emailTplId   = body.email_template_id ? String(body.email_template_id) : null
+  const direction          = String(body.direction ?? 'outbound')
+  const outcome            = body.outcome ? String(body.outcome) : null
+  const description        = body.description ? String(body.description).trim() : null
+  const smsTplId           = body.sms_template_id ? String(body.sms_template_id) : null
+  const smsBodyOverride    = body.sms_body_override ? String(body.sms_body_override).trim() : null
+  const emailTplId         = body.email_template_id ? String(body.email_template_id) : null
+  const emailSubjectOverride = body.email_subject_override ? String(body.email_subject_override).trim() : null
+  const emailBodyOverride  = body.email_body_override ? String(body.email_body_override).trim() : null
 
   if (outcome && !VALID_OUTCOMES.has(outcome)) {
     return NextResponse.json({ error: `Invalid call outcome: ${outcome}` }, { status: 400 })
@@ -157,9 +160,9 @@ export async function POST(
       if (!normalizedPhone.isE164) {
         errors.push(`SMS not sent — invalid phone number: ${customer.phone}`)
       } else {
-        const bodyText = interpolate(tpl.body, ctx)
+        const bodyText = smsBodyOverride || interpolate(tpl.body, ctx)
         if (!bodyText.trim()) {
-          errors.push('SMS template produced empty body — not sent')
+          errors.push('SMS body is empty — not sent')
         } else try {
           const result = await sendSmsTwilio(normalizedPhone.normalized, bodyText)
           console.log('[calls.POST.sms] Twilio success', { sid: result.sid })
@@ -204,10 +207,10 @@ export async function POST(
     } else if (!customer.email) {
       errors.push('Email not sent — customer has no email address')
     } else {
-      const subjectText = interpolate(tpl.subject ?? 'Following up from Kratos Moving', ctx)
-      const bodyText    = interpolate(tpl.body, ctx)
+      const subjectText = emailSubjectOverride || interpolate(tpl.subject ?? 'Following up from Kratos Moving', ctx)
+      const bodyText    = emailBodyOverride || interpolate(tpl.body, ctx)
       if (!bodyText.trim()) {
-        errors.push('Email template produced empty body — not sent')
+        errors.push('Email body is empty — not sent')
       } else try {
         const result = await sendEmail({
           to:      customer.email,

@@ -120,3 +120,58 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json(data)
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const supabase = createClient()
+  const auth = await requireActiveProfile(supabase)
+  if (auth.response) return auth.response
+  const { user } = auth.context
+
+  // Verify customer exists and isn't already deleted
+  const { data: existing, error: checkErr } = await supabase
+    .from('customers')
+    .select('id, full_name')
+    .eq('id', params.id)
+    .neq('is_deleted', true)
+    .single()
+
+  if (checkErr || !existing) {
+    return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+  }
+
+  // Soft-delete the customer
+  const { error: custErr } = await supabase
+    .from('customers')
+    .update({ is_deleted: true, updated_at: new Date().toISOString() })
+    .eq('id', params.id)
+
+  if (custErr) return NextResponse.json({ error: custErr.message }, { status: 500 })
+
+  // Cascade soft-delete: opportunities linked to this customer
+  await supabase
+    .from('opportunities')
+    .update({ is_deleted: true, updated_at: new Date().toISOString() })
+    .eq('customer_id', params.id)
+    .neq('is_deleted', true)
+
+  // Cascade soft-delete: communications linked to this customer
+  await supabase
+    .from('communications')
+    .update({ is_deleted: true })
+    .eq('customer_id', params.id)
+    .neq('is_deleted', true)
+
+  // Audit trail
+  await supabase.from('audit_log').insert({
+    user_id:     user.id,
+    entity_type: 'customer',
+    entity_id:   params.id,
+    action:      'delete',
+    diff:        { full_name: existing.full_name } as unknown as import('@/types/database').Json,
+  })
+
+  return NextResponse.json({ success: true })
+}

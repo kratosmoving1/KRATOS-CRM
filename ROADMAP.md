@@ -84,6 +84,14 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 8 — Editable Templates + Smart Textarea + Delete Customer)
+
+- Call composer: picking an SMS template populates an editable textarea pre-filled with interpolated body (no {{tokens}}). Agent edits before Log Call. Edited body sent to Twilio.
+- Call composer: email template picker shows editable subject + body editors stacked below the dropdowns.
+- Call composer: textarea is adaptive — notes textarea when no template picked, SMS/email editors when templates are picked, notes textarea hidden to reduce clutter.
+- Customer detail page: Delete Customer button + confirmation modal. Shows real counts of linked quotes/communications. Cascade soft-deletes customer + opportunities + communications. Audit logged.
+- follow_ups NOT cascaded (live DB has no customer_id/opportunity_id columns — confirmed via REST).
+
 ## ✅ Done (Session 7 — Opportunity Page Final Polish + Inbound SMS)
 
 - Opportunity detail page redesign complete: hero header, contact row, activity cards, sidebar card shells with icons

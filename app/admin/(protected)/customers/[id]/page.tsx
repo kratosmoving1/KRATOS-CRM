@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ChevronRight, Phone, Mail, Calendar, Plus,
+  ChevronRight, Phone, Mail, Calendar, Plus, Trash2,
   TrendingUp, Package, CheckCircle, XCircle,
 } from 'lucide-react'
 import StatusPill from '@/components/ui/StatusPill'
@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/format'
 import { COMPANY_DIVISION_LABELS } from '@/lib/constants'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import { formatDisplayPhone } from '@/lib/phone/formatPhone'
+import DeleteCustomerModal from '@/components/admin/modals/DeleteCustomerModal'
 
 interface Opp {
   id: string; opportunity_number: string; status: string
@@ -65,6 +66,7 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -125,9 +127,17 @@ export default function CustomerDetailPage() {
             Customer since {formatDate(customer.created_at)}
           </p>
         </div>
-        <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          <Plus size={14} /> Add Follow-up
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <Plus size={14} /> Add Follow-up
+          </button>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={14} /> Delete
+          </button>
+        </div>
       </div>
 
       {/* 4 stat cards */}
@@ -290,6 +300,14 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       </div>
+
+      {showDeleteModal && customer && (
+        <DeleteCustomerModal
+          customerId={customer.id}
+          customerName={customer.full_name}
+          onClose={() => setShowDeleteModal(false)}
+        />
+      )}
     </div>
   )
 }

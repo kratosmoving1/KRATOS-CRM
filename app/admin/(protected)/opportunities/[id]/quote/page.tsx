@@ -386,6 +386,7 @@ function CommTypeIcon({ type }: { type: string }) {
 }
 
 import { templatesByChannel } from '@/lib/templates/follow-up-templates'
+import { interpolate } from '@/lib/templates/interpolate'
 const FOLLOW_UP_SMS_TEMPLATES   = templatesByChannel('sms')
 const FOLLOW_UP_EMAIL_TEMPLATES = templatesByChannel('email')
 
@@ -442,9 +443,12 @@ export default function OpportunityDetailPage() {
   const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
   // Unified templates — email + SMS loaded once when Sales tab opens
   const [allTemplates, setAllTemplates] = useState<CommunicationTemplate[]>([])
-  // Call tab follow-up template selectors
+  // Call tab follow-up template selectors + editable bodies
   const [callFollowUpSmsTplId, setCallFollowUpSmsTplId] = useState('')
+  const [callFollowUpSmsBody, setCallFollowUpSmsBody] = useState('')
   const [callFollowUpEmailTplId, setCallFollowUpEmailTplId] = useState('')
+  const [callFollowUpEmailSubject, setCallFollowUpEmailSubject] = useState('')
+  const [callFollowUpEmailBody, setCallFollowUpEmailBody] = useState('')
 
   // Timeline + filters
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -831,6 +835,32 @@ export default function OpportunityDetailPage() {
     finally { setCommSubmitting(false) }
   }
 
+  // Populate editable SMS body when template is picked
+  useEffect(() => {
+    if (!callFollowUpSmsTplId || !opp) { setCallFollowUpSmsBody(''); return }
+    const tpl = FOLLOW_UP_SMS_TEMPLATES.find(t => t.id === callFollowUpSmsTplId)
+    if (!tpl) return
+    setCallFollowUpSmsBody(interpolate(tpl.body, {
+      customer: { full_name: opp.customer?.full_name ?? '' },
+      opportunity: { opportunity_number: opp.opportunity_number, service_date: opp.service_date, move_size: opp.move_size },
+      agent: { full_name: opp.agent?.full_name ?? '' },
+    }))
+  }, [callFollowUpSmsTplId, opp])
+
+  // Populate editable email subject + body when template is picked
+  useEffect(() => {
+    if (!callFollowUpEmailTplId || !opp) { setCallFollowUpEmailSubject(''); setCallFollowUpEmailBody(''); return }
+    const tpl = FOLLOW_UP_EMAIL_TEMPLATES.find(t => t.id === callFollowUpEmailTplId)
+    if (!tpl) return
+    const ctx = {
+      customer: { full_name: opp.customer?.full_name ?? '' },
+      opportunity: { opportunity_number: opp.opportunity_number, service_date: opp.service_date, move_size: opp.move_size },
+      agent: { full_name: opp.agent?.full_name ?? '' },
+    }
+    setCallFollowUpEmailSubject(interpolate(tpl.subject ?? '', ctx))
+    setCallFollowUpEmailBody(interpolate(tpl.body, ctx))
+  }, [callFollowUpEmailTplId, opp])
+
   async function submitCallWithFollowUp() {
     if (!opp) return
     if (!commCallOutcome) { toast.error('Select a call outcome'); return }
@@ -840,11 +870,14 @@ export default function OpportunityDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          direction:         commDirection,
-          outcome:           commCallOutcome,
-          description:       commBody.trim() || null,
-          sms_template_id:   callFollowUpSmsTplId || null,
-          email_template_id: callFollowUpEmailTplId || null,
+          direction:            commDirection,
+          outcome:              commCallOutcome,
+          description:          commBody.trim() || null,
+          sms_template_id:      callFollowUpSmsTplId || null,
+          sms_body_override:    callFollowUpSmsBody.trim() || null,
+          email_template_id:    callFollowUpEmailTplId || null,
+          email_subject_override: callFollowUpEmailSubject.trim() || null,
+          email_body_override:  callFollowUpEmailBody.trim() || null,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -864,7 +897,10 @@ export default function OpportunityDetailPage() {
       setCommBody('')
       setCommCallOutcome('')
       setCallFollowUpSmsTplId('')
+      setCallFollowUpSmsBody('')
       setCallFollowUpEmailTplId('')
+      setCallFollowUpEmailSubject('')
+      setCallFollowUpEmailBody('')
       loadTimeline()
     } catch {
       toast.error('Network error — please try again')
@@ -1291,7 +1327,10 @@ export default function OpportunityDetailPage() {
                                 onChange={e => {
                                   setCommCallOutcome(e.target.value)
                                   setCallFollowUpSmsTplId('')
+                                  setCallFollowUpSmsBody('')
                                   setCallFollowUpEmailTplId('')
+                                  setCallFollowUpEmailSubject('')
+                                  setCallFollowUpEmailBody('')
                                 }}
                                 className={dropdownCls}
                               >
@@ -1338,14 +1377,57 @@ export default function OpportunityDetailPage() {
                               </div>
                             </div>
 
-                            {/* Call notes textarea */}
-                            <textarea
-                              rows={4}
-                              value={commBody}
-                              onChange={e => setCommBody(e.target.value)}
-                              placeholder="Describe the call… (optional — auto-filled if blank)"
-                              className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
-                            />
+                            {/* Editable SMS body — only when SMS template is picked */}
+                            {showFollowUp && callFollowUpSmsTplId && (
+                              <div>
+                                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  SMS to send — edit before logging
+                                </p>
+                                <textarea
+                                  rows={4}
+                                  value={callFollowUpSmsBody}
+                                  onChange={e => setCallFollowUpSmsBody(e.target.value)}
+                                  placeholder="SMS body…"
+                                  className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                                />
+                                <p className="mt-0.5 text-xs text-slate-400">{callFollowUpSmsBody.length} chars · to {opp?.customer?.phone}</p>
+                              </div>
+                            )}
+
+                            {/* Editable email subject + body — only when email template is picked */}
+                            {showFollowUp && callFollowUpEmailTplId && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Email to send — edit before logging
+                                </p>
+                                <input
+                                  type="text"
+                                  value={callFollowUpEmailSubject}
+                                  onChange={e => setCallFollowUpEmailSubject(e.target.value)}
+                                  placeholder="Subject…"
+                                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                                />
+                                <textarea
+                                  rows={5}
+                                  value={callFollowUpEmailBody}
+                                  onChange={e => setCallFollowUpEmailBody(e.target.value)}
+                                  placeholder="Email body…"
+                                  className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                                />
+                                <p className="text-xs text-slate-400">to {opp?.customer?.email}</p>
+                              </div>
+                            )}
+
+                            {/* Call notes textarea — shown when no SMS/email editor is active */}
+                            {!(showFollowUp && (callFollowUpSmsTplId || callFollowUpEmailTplId)) && (
+                              <textarea
+                                rows={4}
+                                value={commBody}
+                                onChange={e => setCommBody(e.target.value)}
+                                placeholder={commCallOutcome === 'connected' ? 'Describe the call…' : 'Notes (optional — auto-filled if blank)'}
+                                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
+                              />
+                            )}
                           </>
                         )
                       })()}
