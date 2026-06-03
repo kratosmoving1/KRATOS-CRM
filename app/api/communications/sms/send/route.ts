@@ -36,7 +36,6 @@ type OpportunityRecord = {
   customer_id: string
   sales_agent_id: string | null
   service_date: string | null
-  deposit_amount: number | null
   origin_city: string | null
   dest_city: string | null
 }
@@ -93,7 +92,7 @@ export async function POST(req: NextRequest) {
   if (opportunityId) {
     const { data, error } = await db
       .from('opportunities')
-      .select('id, opportunity_number, customer_id, sales_agent_id, service_date, deposit_amount, origin_city, dest_city')
+      .select('id, opportunity_number, customer_id, sales_agent_id, service_date, origin_city, dest_city')
       .eq('id', opportunityId)
       .neq('is_deleted', true)
       .single()
@@ -142,7 +141,7 @@ export async function POST(req: NextRequest) {
     company_phone: COMPANY_PHONE,
     move_date: opportunity?.service_date ?? '',
     quote_number: opportunity?.opportunity_number ?? '',
-    deposit_amount: opportunity?.deposit_amount != null ? `$${Number(opportunity.deposit_amount).toFixed(2)}` : '—',
+    deposit_amount: '—',
     portal_link: process.env.NEXT_PUBLIC_APP_URL ?? '',
     phone_number: customer?.phone ?? '',
     origin_city: opportunity?.origin_city ?? '',
