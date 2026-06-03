@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, type ElementType, type ReactNode } fr
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ChevronRight, RefreshCw, Trash2, Loader2,
+  ChevronRight, ChevronDown, RefreshCw, Trash2, Loader2,
   MapPin, Map as MapIcon, Phone, Mail, FileText, PhoneCall, MessageSquare, AtSign,
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
@@ -1066,34 +1066,38 @@ export default function OpportunityDetailPage() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                 {opp.customer?.full_name ?? 'Unknown Customer'}
               </h1>
-              <StatusPill status={opp.status} />
               <button
                 onClick={() => setShowQuickEdit(true)}
                 className="rounded p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                 title="Edit contact info"
+                aria-label="Edit customer"
               >
                 <Pencil size={14} />
               </button>
+              <StatusPill status={opp.status} />
             </div>
 
             {/* Contact row — phone + email directly under the name */}
             {(opp.customer?.phone || opp.customer?.email) && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                 {opp.customer?.phone && (
                   <a
                     href={`tel:${opp.customer.phone}`}
                     className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <Phone size={13} className="text-slate-400" />
-                    <span>{opp.customer.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}</span>
+                    <span>{opp.customer.phone.replace(/\D/g,'').slice(-10).replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}</span>
                     {opp.customer.phone_type && (
                       <span className="text-xs text-slate-400 capitalize">({opp.customer.phone_type})</span>
                     )}
                   </a>
+                )}
+                {opp.customer?.phone && opp.customer?.email && (
+                  <span className="text-slate-300 select-none">·</span>
                 )}
                 {opp.customer?.email && (
                   <a
@@ -1641,31 +1645,41 @@ export default function OpportunityDetailPage() {
                     }
 
                     const ACTIVITY_ICON_CONFIG: Record<string, { label: string; colorClass: string }> = {
-                      note:           { label: 'Note',           colorClass: 'text-amber-600 bg-amber-50' },
-                      sms:            { label: 'SMS',            colorClass: 'text-purple-600 bg-purple-50' },
-                      email:          { label: 'Email',          colorClass: 'text-blue-600 bg-blue-50' },
-                      call:           { label: 'Call',           colorClass: 'text-green-600 bg-green-50' },
-                      follow_up:      { label: 'Follow-up',      colorClass: 'text-orange-600 bg-orange-50' },
-                      create:         { label: 'Quote created',  colorClass: 'text-slate-500 bg-slate-100' },
-                      status_change:  { label: 'Status changed', colorClass: 'text-slate-500 bg-slate-100' },
+                      note:           { label: 'Note',            colorClass: 'text-amber-600 bg-amber-50' },
+                      sms_outbound:   { label: 'Outgoing SMS',    colorClass: 'text-purple-600 bg-purple-50' },
+                      sms_inbound:    { label: 'Incoming SMS',    colorClass: 'text-indigo-600 bg-indigo-50' },
+                      sms:            { label: 'SMS',             colorClass: 'text-purple-600 bg-purple-50' },
+                      email_outbound: { label: 'Email Sent',      colorClass: 'text-blue-600 bg-blue-50' },
+                      email_inbound:  { label: 'Email Received',  colorClass: 'text-cyan-600 bg-cyan-50' },
+                      email:          { label: 'Email',           colorClass: 'text-blue-600 bg-blue-50' },
+                      call_outbound:  { label: 'Outbound Call',   colorClass: 'text-green-600 bg-green-50' },
+                      call_inbound:   { label: 'Inbound Call',    colorClass: 'text-emerald-600 bg-emerald-50' },
+                      call:           { label: 'Call',            colorClass: 'text-green-600 bg-green-50' },
+                      follow_up:      { label: 'Follow-up',       colorClass: 'text-orange-600 bg-orange-50' },
+                      create:         { label: 'Quote created',   colorClass: 'text-kratos bg-orange-50' },
+                      status_change:  { label: 'Status changed',  colorClass: 'text-slate-500 bg-slate-100' },
                     }
 
                     const renderItem = (item: TimelineItem) => {
                       const isAudit = item._kind === 'audit'
                       const isFu    = item._kind === 'follow_up'
-                      const typeKey = isFu ? 'follow_up' : isAudit ? (item.action ?? 'create') : (item.type ?? 'note')
-                      const cfg     = ACTIVITY_ICON_CONFIG[typeKey] ?? { label: typeKey, colorClass: 'text-slate-500 bg-slate-100' }
+                      const rawType = item.type ?? 'note'
+                      const dir     = item.direction
+                      const typeKey = isFu
+                        ? 'follow_up'
+                        : isAudit
+                        ? (item.action ?? 'create')
+                        : (dir && dir !== 'internal')
+                          ? `${rawType}_${dir}`
+                          : rawType
+                      const cfg     = ACTIVITY_ICON_CONFIG[typeKey] ?? ACTIVITY_ICON_CONFIG[rawType] ?? { label: rawType, colorClass: 'text-slate-500 bg-slate-100' }
                       const isSlim  = isAudit
-
-                      const directionLabel = item.direction && item.direction !== 'internal'
-                        ? item.direction === 'outbound' ? 'Sent' : 'Received'
-                        : null
 
                       return (
                         <article
                           key={item.id}
                           className={cn(
-                            'rounded-lg border border-slate-200 bg-white',
+                            'rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors',
                             isSlim ? 'px-4 py-3' : 'p-4',
                           )}
                         >
@@ -1676,7 +1690,7 @@ export default function OpportunityDetailPage() {
                                 'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
                                 cfg.colorClass,
                               )}>
-                                <CommTypeIcon type={isFu ? 'follow_up' : isAudit ? (item.action === 'status_change' ? 'status' : 'audit') : (item.type ?? 'note')} />
+                                <CommTypeIcon type={isFu ? 'follow_up' : isAudit ? (item.action === 'status_change' ? 'status' : 'audit') : rawType} />
                               </span>
                               <div className="min-w-0">
                                 <span className="text-sm font-semibold text-slate-800">
@@ -1686,9 +1700,6 @@ export default function OpportunityDetailPage() {
                                     ? `${(item.type ?? 'Follow-up').replace(/_/g,' ')} follow-up`
                                     : cfg.label}
                                 </span>
-                                {directionLabel && (
-                                  <span className="ml-1.5 text-xs text-slate-400">{directionLabel}</span>
-                                )}
                                 {item.actor && (
                                   <span className="ml-1.5 text-xs text-slate-400">by {item.actor}</span>
                                 )}
@@ -1855,7 +1866,7 @@ export default function OpportunityDetailPage() {
                 )}
 
                 <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Information</h2>
-                <div className="space-y-2 text-sm">
+                <dl>
                   <InfoRow label="Quote #"  value={formatQuoteNumber(opp.opportunity_number)} />
                   <InfoRow label="Service"  value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
                   <InfoRow label="Type"     value="Local" />
@@ -1898,19 +1909,21 @@ export default function OpportunityDetailPage() {
                     </div>
                   )}
                   <InfoRow label="Move Size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
-                  <InfoRow label="Assigned To"       value={opp.agent?.full_name ?? 'Unassigned'} />
+                  <InfoRow label="Assigned To" value={opp.agent?.full_name ?? 'Unassigned'} editable onClick={() => setShowQuickEdit(true)} />
                   <InfoRow label="Source"            value={opp.lead_source?.name ?? '—'} />
                   <InfoRow label="Branch"            value="Main Office" />
                   <InfoRow label="Estimator"         value="Unassigned" />
                   <InfoRow label="Move Coordinator"  value="Unassigned" />
                   <InfoRow label="Lead Status"       value="—" />
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                    <span className="text-slate-500">Outstanding Balance</span>
-                    <span className={cn('font-semibold', balanceDue > 0 ? 'text-red-600' : 'text-emerald-600')}>
-                      {estimateTotal > 0 ? (balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid') : '—'}
-                    </span>
-                  </div>
-                </div>
+                  <InfoRow
+                    label="Outstanding Balance"
+                    value={
+                      <span className={cn('font-semibold', balanceDue > 0 ? 'text-red-600' : 'text-emerald-600')}>
+                        {estimateTotal > 0 ? (balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid') : '—'}
+                      </span>
+                    }
+                  />
+                </dl>
               </div>
 
               {/* Stops card */}
@@ -2713,11 +2726,30 @@ export default function OpportunityDetailPage() {
   )
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  editable,
+  onClick,
+}: {
+  label: string
+  value: ReactNode
+  editable?: boolean
+  onClick?: () => void
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="shrink-0 text-slate-500">{label}</span>
-      <span className="text-right font-medium text-slate-800 truncate">{value}</span>
+    <div className="flex items-center justify-between gap-2 border-b border-slate-100 py-1.5 last:border-0">
+      <dt className="shrink-0 text-xs text-slate-500">{label}</dt>
+      <dd
+        className={cn(
+          'text-right text-sm font-medium text-slate-900',
+          editable && 'flex cursor-pointer items-center gap-0.5 hover:text-kratos',
+        )}
+        onClick={editable ? onClick : undefined}
+      >
+        {value}
+        {editable && <ChevronDown size={11} className="text-slate-400 shrink-0" />}
+      </dd>
     </div>
   )
 }

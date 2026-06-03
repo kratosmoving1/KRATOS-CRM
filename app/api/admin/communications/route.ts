@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       .from('opportunities')
       .select('sales_agent_id')
       .eq('id', body.opportunity_id)
-      .eq('is_deleted', false)
+      .neq('is_deleted', true)
       .single()
     isAssigned = opp?.sales_agent_id === user.id
   } else if (body.customer_id) {
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       .from('opportunities')
       .select('sales_agent_id')
       .eq('customer_id', body.customer_id)
-      .eq('is_deleted', false)
+      .neq('is_deleted', true)
     isAssigned = Boolean(opps?.some(opp => opp.sales_agent_id === user.id))
   }
 
