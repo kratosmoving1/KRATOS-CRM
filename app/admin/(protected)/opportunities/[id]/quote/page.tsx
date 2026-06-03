@@ -385,6 +385,15 @@ function CommTypeIcon({ type }: { type: string }) {
   return <Icon size={14} className="shrink-0" />
 }
 
+const CALL_TEMPLATES = [
+  { id: 'no_pickup_first',  label: 'No Pick Up – First Attempt',    body: 'Hey {{customer_first_name}}, tried reaching out but missed you. I have a quote for your move and would love to chat — call or text back when you have a minute. — Kratos Moving' },
+  { id: 'second_text',      label: 'Second Text – Set Up Time',      body: 'Hey {{customer_first_name}}, following up on your move quote. What\'s a good time today or tomorrow to chat for 5 mins? — Kratos Moving' },
+  { id: 'followup_1',       label: 'Follow-Up 1: Reminder',          body: 'Hi {{customer_first_name}}, just a quick reminder that we\'re holding the spot for your move. Let me know if you have any questions. — Kratos Moving' },
+  { id: 'followup_2',       label: 'Follow-Up 2: Emphasize Value',   body: 'Hi {{customer_first_name}}, Kratos Moving is fully insured and rated 5 stars. Happy to walk you through anything still on the fence. — Kratos Moving' },
+  { id: 'followup_3',       label: 'Follow-Up 3: Encourage Action',  body: 'Hi {{customer_first_name}}, your quote is still open. To lock it in I just need a quick yes — reply or give us a call. — Kratos Moving' },
+  { id: 'review_request',   label: 'Review Request',                 body: 'Hi {{customer_first_name}}, hope your move went smoothly! A quick Google review would mean a lot. Thanks for choosing Kratos Moving.' },
+] as const
+
 export default function OpportunityDetailPage() {
   const router = useRouter()
   const { id } = useParams<{ id: string }>()
@@ -438,14 +447,8 @@ export default function OpportunityDetailPage() {
   const [showCreateFollowUp, setShowCreateFollowUp] = useState(false)
   // Unified templates — email + SMS loaded once when Sales tab opens
   const [allTemplates, setAllTemplates] = useState<CommunicationTemplate[]>([])
-  // Call tab template selection (for follow-up sends)
-  const [callEmailTplId, setCallEmailTplId] = useState('')
-  const [callSmsTplId, setCallSmsTplId] = useState('')
-  const [callEmailSubject, setCallEmailSubject] = useState('')
-  const [callEmailBody, setCallEmailBody] = useState('')
-  const [callSmsBody, setCallSmsBody] = useState('')
-  const [noAnswerSmsSending, setNoAnswerSmsSending] = useState(false)
-  const [callEmailSending, setCallEmailSending] = useState(false)
+  // Call tab template picker (inserts text into description field)
+  const [callTplId, setCallTplId] = useState('')
 
   // Timeline + filters
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -832,86 +835,11 @@ export default function OpportunityDetailPage() {
     finally { setCommSubmitting(false) }
   }
 
-  const showCallFollowUpActions = commType === 'call' && (commCallOutcome === 'no_answer' || commCallOutcome === 'busy')
-
-  function selectCallSmsTemplate(templateId: string) {
-    setCallSmsTplId(templateId)
-    const template = mergeTemplateLists(BUILTIN_SMS_TEMPLATES, allTemplates.filter(t => t.channel === 'sms' && t.is_active))
-      .find(t => t.id === templateId)
-    setCallSmsBody(template ? applyMerge(template.body, opp as OppDetail) : '')
-  }
-
-  function selectCallEmailTemplate(templateId: string) {
-    setCallEmailTplId(templateId)
-    const template = mergeTemplateLists(BUILTIN_EMAIL_TEMPLATES, allTemplates.filter(t => t.channel === 'email' && t.is_active))
-      .find(t => t.id === templateId)
-    setCallEmailSubject(template?.subject ? applyMerge(template.subject, opp as OppDetail) : '')
-    setCallEmailBody(template ? applyMerge(template.body, opp as OppDetail) : '')
-  }
-
-  async function sendCallFollowUpSms() {
-    if (!opp?.customer) { toast.error('No customer linked'); return }
-    if (!callSmsTplId || !callSmsBody.trim()) { toast.error('Select an SMS template first'); return }
-
-    setNoAnswerSmsSending(true)
-    toast.message('Sending SMS...')
-    try {
-      const res = await fetch('/api/communications/sms/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          opportunityId: opp.id,
-          customerId: opp.customer.id,
-          toPhoneNumber: opp.customer.phone,
-          messageBody: callSmsBody,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(typeof data.error === 'string' ? data.error : 'Unable to send SMS')
-        loadTimeline()
-      } else {
-        toast.success('SMS sent.')
-        loadTimeline()
-      }
-    } catch {
-      toast.error('Unable to send SMS')
-    } finally {
-      setNoAnswerSmsSending(false)
-    }
-  }
-
-  async function sendCallFollowUpEmail() {
-    if (!opp?.customer) { toast.error('No customer linked'); return }
-    if (!callEmailTplId || !callEmailBody.trim()) { toast.error('Select an email template first'); return }
-
-    setCallEmailSending(true)
-    toast.message('Sending email...')
-    try {
-      const res = await fetch('/api/communications/email/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          opportunityId: opp.id,
-          customerId: opp.customer.id,
-          toEmail: opp.customer.email,
-          subject: callEmailSubject || 'Kratos Moving follow-up',
-          messageBody: callEmailBody,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(typeof data.error === 'string' ? data.error : 'Unable to send email')
-        loadTimeline()
-      } else {
-        toast.success('Email sent.')
-        loadTimeline()
-      }
-    } catch {
-      toast.error('Unable to send email')
-    } finally {
-      setCallEmailSending(false)
-    }
+  function applyCallTemplate(id: string) {
+    setCallTplId(id)
+    if (!id) return
+    const tpl = CALL_TEMPLATES.find(t => t.id === id)
+    if (tpl) setCommBody(prev => prev.trim() ? `${prev}\n\n${tpl.body}` : tpl.body)
   }
 
   function selectPaymentMethod(method: PaymentMethod) {
@@ -1314,7 +1242,8 @@ export default function OpportunityDetailPage() {
                       {/* ── CALL TAB ── */}
                       {commType === 'call' && (
                         <>
-                          <div className="grid grid-cols-2 gap-2">
+                          {/* Three dropdowns: direction, outcome, template picker */}
+                          <div className="flex flex-wrap gap-2">
                             <select
                               value={commDirection}
                               onChange={e => setCommDirection(e.target.value as 'outbound' | 'inbound')}
@@ -1325,22 +1254,22 @@ export default function OpportunityDetailPage() {
                             </select>
                             <select
                               value={commCallOutcome}
-                              onChange={e => {
-                                const next = e.target.value
-                                setCommCallOutcome(next)
-                                if (next !== 'no_answer' && next !== 'busy') {
-                                  setCallEmailTplId('')
-                                  setCallSmsTplId('')
-                                  setCallEmailSubject('')
-                                  setCallEmailBody('')
-                                  setCallSmsBody('')
-                                }
-                              }}
+                              onChange={e => setCommCallOutcome(e.target.value)}
                               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
                             >
                               <option value="">— Outcome —</option>
                               {CALL_OUTCOME_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={callTplId}
+                              onChange={e => applyCallTemplate(e.target.value)}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-kratos"
+                            >
+                              <option value="">Send a Text…</option>
+                              {CALL_TEMPLATES.map(t => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
                               ))}
                             </select>
                           </div>
@@ -1353,87 +1282,6 @@ export default function OpportunityDetailPage() {
                             placeholder="Describe the call…"
                             className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-kratos focus:bg-white focus:ring-2 focus:ring-kratos/20"
                           />
-
-                          {showCallFollowUpActions && (
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  {commCallOutcome === 'busy' ? 'Busy' : 'No Answer'} follow-up actions
-                                </p>
-                              </div>
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                <select
-                                  value={callEmailTplId}
-                                  onChange={e => selectCallEmailTemplate(e.target.value)}
-                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
-                                >
-                                  <option value="">— Email Template —</option>
-                                  {emailTpls.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                  ))}
-                                </select>
-                                <select
-                                  value={callSmsTplId}
-                                  onChange={e => selectCallSmsTemplate(e.target.value)}
-                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
-                                >
-                                  <option value="">— SMS Template —</option>
-                                  {smsTpls.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              {(callSmsBody || callEmailBody) && (
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  {callEmailBody && (
-                                    <textarea
-                                      rows={3}
-                                      value={callEmailBody}
-                                      onChange={e => setCallEmailBody(e.target.value)}
-                                      className="resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
-                                    />
-                                  )}
-                                  {callSmsBody && (
-                                    <textarea
-                                      rows={3}
-                                      value={callSmsBody}
-                                      onChange={e => setCallSmsBody(e.target.value)}
-                                      className="resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-kratos"
-                                    />
-                                  )}
-                                </div>
-                              )}
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={sendCallFollowUpEmail}
-                                  disabled={callEmailSending || !callEmailTplId || !callEmailBody.trim()}
-                                  title={!callEmailTplId ? 'Select an Email template' : undefined}
-                                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  {callEmailSending && <Loader2 size={12} className="animate-spin" />}
-                                  Send Email
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={sendCallFollowUpSms}
-                                  disabled={noAnswerSmsSending || !callSmsTplId || !callSmsBody.trim()}
-                                  title={!callSmsTplId ? 'Select an SMS template' : !smsStatus?.canSend ? (smsStatus?.reason ?? 'Twilio SMS is not configured.') : undefined}
-                                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  {noAnswerSmsSending && <Loader2 size={12} className="animate-spin" />}
-                                  Send SMS
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowCreateFollowUp(true)}
-                                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                                >
-                                  <CalendarPlus size={12} /> Create Follow-up
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </>
                       )}
 
@@ -1816,108 +1664,23 @@ export default function OpportunityDetailPage() {
                 )
               })()}
 
-              {/* Information card — expanded to match SmartMoving */}
+              {/* Information card */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                {/* Customer quick-access */}
-                {opp.customer && (
-                  <div className="mb-4 pb-4 border-b border-slate-100 space-y-1.5">
-                    <Link
-                      href={`/admin/customers/${opp.customer.id}`}
-                      className="block font-semibold text-slate-900 hover:text-kratos text-sm"
-                    >
-                      {opp.customer.full_name}
-                    </Link>
-                    {opp.customer.phone && (
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <Phone size={12} className="text-slate-400 shrink-0" />
-                        <RingCentralCallButton
-                          phoneNumber={opp.customer.phone}
-                          label={opp.customer.phone}
-                          opportunityId={opp.id}
-                          customerId={opp.customer.id}
-                          className="text-slate-600 hover:text-kratos text-sm"
-                        />
-                        {opp.customer.phone_type && (
-                          <span className="capitalize text-xs text-slate-400">({opp.customer.phone_type})</span>
-                        )}
-                      </div>
-                    )}
-                    {opp.customer.secondary_phone && (
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <Phone size={12} className="text-slate-400 shrink-0" />
-                        <RingCentralCallButton
-                          phoneNumber={opp.customer.secondary_phone}
-                          label={opp.customer.secondary_phone}
-                          opportunityId={opp.id}
-                          customerId={opp.customer.id}
-                          className="text-slate-600 hover:text-kratos text-sm"
-                        />
-                      </div>
-                    )}
-                    {opp.customer.email && (
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <Mail size={12} className="text-slate-400 shrink-0" />
-                        <a href={`mailto:${opp.customer.email}`} className="hover:text-kratos break-all text-sm truncate">
-                          {opp.customer.email}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 <div className="flex items-center gap-2 mb-3">
                   <Info size={14} className="text-slate-400" />
                   <h3 className="text-sm font-semibold text-slate-700">Information</h3>
                 </div>
                 <dl>
-                  <InfoRow label="Quote #"  value={formatQuoteNumber(opp.opportunity_number)} />
-                  <InfoRow label="Service"  value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
-                  <InfoRow label="Type"     value="Local" />
-                  {/* Move date inline edit */}
-                  {showDateEdit ? (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Move Date</span>
-                        <button type="button" onClick={() => setShowDateEdit(false)} className="text-slate-400 hover:text-slate-600">
-                          <X size={14} />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" id="tbd-check" checked={editingTbd} onChange={e => setEditingTbd(e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 accent-kratos" />
-                        <label htmlFor="tbd-check" className="text-sm text-slate-600 cursor-pointer select-none">TBD</label>
-                      </div>
-                      {!editingTbd && (
-                        <input type="date" value={editingDate} onChange={e => setEditingDate(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20" />
-                      )}
-                      <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => setShowDateEdit(false)} className="rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100">Cancel</button>
-                        <button type="button" onClick={saveDateEdit} disabled={savingDate}
-                          className="flex items-center gap-1.5 rounded-lg bg-kratos px-3 py-1.5 text-xs font-semibold text-slate-900 hover:opacity-90 disabled:opacity-50">
-                          {savingDate && <Loader2 size={12} className="animate-spin" />}
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Service Date</span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-medium text-slate-900">{opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}</span>
-                        <button type="button" onClick={openDateEdit} className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit date">
-                          <Calendar size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <InfoRow label="Move Size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
-                  <InfoRow label="Assigned To" value={opp.agent?.full_name ?? 'Unassigned'} editable onClick={() => setShowQuickEdit(true)} />
-                  <InfoRow label="Source"            value={opp.lead_source?.name ?? '—'} />
-                  <InfoRow label="Branch"            value="Main Office" />
-                  <InfoRow label="Estimator"         value="Unassigned" />
-                  <InfoRow label="Move Coordinator"  value="Unassigned" />
-                  <InfoRow label="Lead Status"       value="—" />
+                  <InfoRow label="Quote Number"       value={formatQuoteNumber(opp.opportunity_number)} />
+                  <InfoRow label="Service Type"       value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
+                  <InfoRow label="Move Size"          value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
+                  <InfoRow label="Branch"             value="Main Office" />
+                  <InfoRow label="Opportunity Type"   value={opp.service_type === 'long_distance' || opp.service_type === 'international' ? opp.service_type.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Local'} />
+                  <InfoRow label="Source"             value={opp.lead_source?.name ?? '—'} />
+                  <InfoRow label="Assigned To"        value={opp.agent?.full_name ?? 'Unassigned'} editable onClick={() => setShowQuickEdit(true)} />
+                  <InfoRow label="Estimator"          value="Unassigned" />
+                  <InfoRow label="Move Coordinator"   value="Unassigned" />
+                  <InfoRow label="Lead Status"        value="—" />
                   <InfoRow
                     label="Outstanding Balance"
                     value={
