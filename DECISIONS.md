@@ -139,4 +139,24 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 ---
 
+## 2026-06 — is_deleted filter: use .neq('is_deleted', true) not .eq('is_deleted', false)
+
+**Decision:** All Supabase queries filtering soft-deleted rows must use `.neq('is_deleted', true)` not `.eq('is_deleted', false)`.
+
+**Reasoning:** Postgres treats NULL as neither true nor false. `.eq('is_deleted', false)` silently excludes rows where `is_deleted IS NULL` (which happens for records inserted before a DEFAULT FALSE was enforced). `.neq('is_deleted', true)` correctly includes both `false` and `null` rows.
+
+**Implication:** Any new query that filters `is_deleted` must use `.neq('is_deleted', true)`. This was the root cause of "Opportunity not found" in the SMS send route (session 5).
+
+---
+
+## 2026-06 — Customers are the parent entity; opportunities are children
+
+**Decision:** Customers exist independently of opportunities. A customer can be created without any quote attached. The + Create menu offers "New Customer" as a standalone flow. The New Quote modal supports picking an existing customer OR creating a new one.
+
+**Reasoning:** The previous flow required creating a quote to capture a lead, forcing every new contact to have a fake opportunity. This produced bad data (contacts with no real move intent cluttering the opportunity pipeline). Customers are now the root entity.
+
+**Implication:** POST /api/admin/customers exists for standalone customer creation. The New Quote modal has an "Existing customer / New customer" toggle at the top of step 1.
+
+---
+
 ## (Append new decisions below as they happen)

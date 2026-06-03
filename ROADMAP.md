@@ -76,13 +76,21 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 5 — Communications & Customer Creation Fixes)
+
+- **Bug 1 (Create Customer)**: New Customer modal added to + create menu. POST /api/admin/customers route created. Existing-customer picker added to New Quote modal step 1.
+- **Bug 2 (SMS "Opportunity not found")**: Root cause was `.eq('is_deleted', false)` matching only explicit `false`, not NULL. Fixed to `.neq('is_deleted', true)` in SMS send route and findOrCreateCustomer.
+- **Bug 3 (Activity timeline)**: Same is_deleted NULL bug in timeline communications query fixed. Timeline already had the correct merged architecture (communications + audit_log + follow_ups).
+
+---
+
 ## 🔧 Now
 
 _Update this section at the start of every new session._
 
 - Verify Google Maps autocomplete works in production (incognito browser test)
 - Verify save flows complete without column-name errors in production
-- All four documentation files committed and pushed
+- Incognito test: Create Customer flow, SMS send, activity timeline after SMS
 
 ---
 
