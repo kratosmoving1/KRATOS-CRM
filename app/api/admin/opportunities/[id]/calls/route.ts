@@ -8,6 +8,20 @@ import { sendSmsTwilio } from '@/lib/sms/twilio'
 import { sendEmail } from '@/lib/email/sendEmail'
 import { normalizePhoneToE164 } from '@/lib/phone/normalizePhone'
 
+// Verified live columns for communications — confirmed 2026-06-03 via REST API.
+// phone_number, status, provider, provider_message_id, error_message do NOT exist.
+const COMMUNICATIONS_COLUMNS = new Set([
+  'id', 'opportunity_id', 'customer_id', 'type', 'direction',
+  'subject', 'body', 'call_outcome', 'call_duration_seconds',
+  'email_to', 'email_cc', 'created_by', 'company_id', 'created_at', 'is_deleted',
+])
+
+function filterComm(payload: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([k]) => COMMUNICATIONS_COLUMNS.has(k)),
+  )
+}
+
 // Outcomes that warrant a follow-up send
 const FOLLOW_UP_OUTCOMES = new Set(['no_answer', 'busy', 'voicemail'])
 
@@ -51,15 +65,11 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  console.log('[calls.POST] raw body', JSON.stringify(body))
-
   const direction    = String(body.direction ?? 'outbound')
   const outcome      = body.outcome ? String(body.outcome) : null
   const description  = body.description ? String(body.description).trim() : null
   const smsTplId     = body.sms_template_id ? String(body.sms_template_id) : null
   const emailTplId   = body.email_template_id ? String(body.email_template_id) : null
-
-  console.log('[calls.POST] parsed', { direction, outcome, smsTplId, emailTplId })
 
   if (outcome && !VALID_OUTCOMES.has(outcome)) {
     return NextResponse.json({ error: `Invalid call outcome: ${outcome}` }, { status: 400 })
@@ -114,7 +124,7 @@ export async function POST(
   // ── 1. Log the call ─────────────────────────────────────────────────────────
   const { data: callRow, error: callErr } = await db
     .from('communications')
-    .insert({
+    .insert(filterComm({
       opportunity_id: params.id,
       customer_id:    opp.customer_id,
       type:           'call',
@@ -124,7 +134,7 @@ export async function POST(
                         ? description.trim()
                         : defaultCallBody(direction, outcome),
       created_by:     user.id,
-    })
+    }))
     .select()
     .single()
 
@@ -136,70 +146,51 @@ export async function POST(
   // ── 2. Optionally send SMS follow-up ────────────────────────────────────────
   const shouldSendFollowUps = outcome ? FOLLOW_UP_OUTCOMES.has(outcome) : false
 
-  console.log('[calls.POST] follow-up decision', { shouldSendFollowUps, smsTplId, emailTplId })
-
   if (shouldSendFollowUps && smsTplId) {
-    console.log('[calls.POST.sms] entered branch')
     const tpl = getTemplate(smsTplId)
-    console.log('[calls.POST.sms] template', { found: !!tpl, channel: tpl?.channel, id: tpl?.id })
     if (!tpl || tpl.channel !== 'sms') {
       errors.push(`SMS template not found: ${smsTplId}`)
     } else if (!customer.phone) {
-      console.log('[calls.POST.sms] no phone on customer')
       errors.push('SMS not sent — customer has no phone number')
     } else {
       const normalizedPhone = normalizePhoneToE164(customer.phone)
-      console.log('[calls.POST.sms] phone', { raw: customer.phone, normalized: normalizedPhone.normalized, isE164: normalizedPhone.isE164 })
-      console.log('[calls.POST.sms] env', {
-        hasSid: !!process.env.TWILIO_ACCOUNT_SID,
-        hasToken: !!process.env.TWILIO_AUTH_TOKEN,
-        hasFrom: !!process.env.TWILIO_FROM_NUMBER,
-      })
       if (!normalizedPhone.isE164) {
         errors.push(`SMS not sent — invalid phone number: ${customer.phone}`)
       } else {
         const bodyText = interpolate(tpl.body, ctx)
-        console.log('[calls.POST.sms] body preview', bodyText.slice(0, 80))
         if (!bodyText.trim()) {
           errors.push('SMS template produced empty body — not sent')
         } else try {
-          console.log('[calls.POST.sms] calling sendSmsTwilio')
           const result = await sendSmsTwilio(normalizedPhone.normalized, bodyText)
-          console.log('[calls.POST.sms] Twilio success', { sid: result.sid, status: result.status })
+          console.log('[calls.POST.sms] Twilio success', { sid: result.sid })
           const { data: smsRow, error: smsInsertErr } = await db
             .from('communications')
-            .insert({
-              opportunity_id:    params.id,
-              customer_id:       opp.customer_id,
-              type:              'sms',
-              direction:         'outbound',
-              body:              bodyText,
-              phone_number:      normalizedPhone.normalized,
-              provider:          'twilio',
-              provider_message_id: result.sid,
-              status:            'sent',
-              created_by:        user.id,
-            })
+            .insert(filterComm({
+              opportunity_id: params.id,
+              customer_id:    opp.customer_id,
+              type:           'sms',
+              direction:      'outbound',
+              body:           bodyText,
+              created_by:     user.id,
+            }))
             .select()
             .single()
-          if (smsInsertErr) errors.push(`SMS logged but DB save failed: ${smsInsertErr.message}`)
-          else created.sms = smsRow
+          if (smsInsertErr) {
+            console.error('[calls.POST.sms] DB insert failed', smsInsertErr.message)
+            errors.push(`SMS sent but not saved: ${smsInsertErr.message}`)
+          } else created.sms = smsRow
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Twilio send failed'
-          console.error('[calls.POST.sms] Twilio error', { message: msg, code: (err as any).twilioCode })
+          console.error('[calls.POST.sms] Twilio error', msg)
           errors.push(`SMS send failed: ${msg}`)
-          await db.from('communications').insert({
+          await db.from('communications').insert(filterComm({
             opportunity_id: params.id,
             customer_id:    opp.customer_id,
             type:           'sms',
             direction:      'outbound',
-            body:           bodyText,
-            phone_number:   normalizedPhone.normalized,
-            provider:       'twilio',
-            status:         'failed',
-            error_message:  msg,
+            body:           `[Send failed: ${msg}] ${bodyText}`,
             created_by:     user.id,
-          })
+          }))
         }
       }
     }
@@ -226,39 +217,36 @@ export async function POST(
         })
         const { data: emailRow, error: emailInsertErr } = await db
           .from('communications')
-          .insert({
-            opportunity_id:    params.id,
-            customer_id:       opp.customer_id,
-            type:              'email',
-            direction:         'outbound',
-            subject:           subjectText,
-            body:              bodyText,
-            email_to:          customer.email,
-            provider:          result.provider,
-            provider_message_id: result.id ?? null,
-            status:            'sent',
-            created_by:        user.id,
-          })
+          .insert(filterComm({
+            opportunity_id: params.id,
+            customer_id:    opp.customer_id,
+            type:           'email',
+            direction:      'outbound',
+            subject:        subjectText,
+            body:           bodyText,
+            email_to:       customer.email,
+            created_by:     user.id,
+          }))
           .select()
           .single()
-        if (emailInsertErr) errors.push(`Email logged but DB save failed: ${emailInsertErr.message}`)
-        else created.email = emailRow
+        if (emailInsertErr) {
+          console.error('[calls.POST.email] DB insert failed', emailInsertErr.message)
+          errors.push(`Email sent but not saved: ${emailInsertErr.message}`)
+        } else created.email = emailRow
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Email send failed'
+        console.error('[calls.POST.email] send error', msg)
         errors.push(`Email send failed: ${msg}`)
-        await db.from('communications').insert({
+        await db.from('communications').insert(filterComm({
           opportunity_id: params.id,
           customer_id:    opp.customer_id,
           type:           'email',
           direction:      'outbound',
           subject:        subjectText,
-          body:           bodyText,
+          body:           `[Send failed: ${msg}] ${bodyText}`,
           email_to:       customer.email,
-          provider:       'resend',
-          status:         'failed',
-          error_message:  msg,
           created_by:     user.id,
-        })
+        }))
       }
     }
   }

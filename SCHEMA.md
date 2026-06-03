@@ -244,6 +244,8 @@ Scheduled follow-up actions linked to opportunities.
 
 Every interaction logged against an opportunity: notes, calls, SMS, emails.
 
+**Verified against live DB on 2026-06-03** via REST API (`GET /rest/v1/communications?limit=1`). The columns below are the actual live columns. Five columns that appeared in earlier versions of this file (`phone_number`, `status`, `provider`, `provider_message_id`, `error_message`) **do not exist** in the production database — do not reference them in code.
+
 | Column | Type | Description |
 |---|---|---|
 | `id` | `uuid` | Primary key |
@@ -251,21 +253,18 @@ Every interaction logged against an opportunity: notes, calls, SMS, emails.
 | `customer_id` | `uuid \| null` | FK to `customers.id` |
 | `type` | `'note' \| 'email' \| 'call' \| 'sms'` | Communication channel |
 | `direction` | `'inbound' \| 'outbound' \| 'internal' \| null` | Who initiated |
-| `subject` | `text \| null` | Email subject line |
-| `body` | `text` | Message body or call notes |
-| `call_outcome` | `'connected' \| 'voicemail' \| 'no_answer' \| 'wrong_number' \| 'busy' \| 'pending' \| null` | Result for call-type records |
+| `subject` | `text \| null` | Email subject line (email only) |
+| `body` | `text` | Message body or call notes — NOT NULL |
+| `call_outcome` | `'connected' \| 'voicemail' \| 'no_answer' \| 'wrong_number' \| 'busy' \| 'pending' \| 'left_live_message' \| 'number_disconnected' \| null` | Result for call-type records |
 | `call_duration_seconds` | `integer \| null` | Call length |
-| `phone_number` | `text \| null` | Phone number dialed or that called in |
-| `status` | `text \| null` | Provider delivery status (e.g. `delivered`, `failed`) |
-| `provider` | `text \| null` | e.g. `ringcentral`, `resend` |
-| `provider_message_id` | `text \| null` | Provider's own message ID |
-| `error_message` | `text \| null` | Error from provider if delivery failed |
-| `email_to` | `text \| null` | Recipient email address |
-| `email_cc` | `text \| null` | CC email address |
+| `email_to` | `text \| null` | Recipient email address (email only) |
+| `email_cc` | `text \| null` | CC email address (email only) |
 | `created_by` | `uuid \| null` | FK to `profiles.id` |
 | `company_id` | `uuid \| null` | Multi-company placeholder (unused) |
 | `created_at` | `timestamptz` | |
 | `is_deleted` | `boolean` | Soft delete flag |
+
+> **If you need `phone_number`, `status`, `provider`, or `provider_message_id`:** run the SQL to add them first, then update this file and regenerate `types/database.ts`.
 
 ---
 

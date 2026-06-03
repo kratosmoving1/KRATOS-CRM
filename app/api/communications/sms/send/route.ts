@@ -183,32 +183,21 @@ export async function POST(req: NextRequest) {
     userAgent: req.headers.get('user-agent'),
   })
 
-  async function saveComm(status: 'sent' | 'failed', providerMessageId: string | null, errorMessage: string | null) {
-    const base = {
+  async function saveComm(status: 'sent' | 'failed', _providerMessageId: string | null, errorMessage: string | null) {
+    // Only columns that exist in the live communications table.
+    // phone_number, status, provider, provider_message_id, error_message do not
+    // exist in the live DB — confirmed via REST API on 2026-06-03.
+    const payload = {
       opportunity_id: opportunityId,
       customer_id: customerId,
       type: 'sms',
       direction: 'outbound',
-      body: text,
+      body: status === 'failed' && errorMessage
+        ? `[Send failed: ${errorMessage}] ${text ?? ''}`
+        : (text ?? ''),
       created_by: user.id,
     }
-    const full = {
-      ...base,
-      phone_number: normalizedTo?.isE164 ? normalizedTo.normalized : recipientRaw,
-      status,
-      provider: 'twilio',
-      provider_message_id: providerMessageId,
-      error_message: errorMessage,
-    }
-    const result = await db.from('communications').insert(full).select().single()
-    if (!result.error) return result
-
-    console.error('[SMS/Twilio] Full communication insert failed; falling back to base insert:', result.error)
-    const fallback = {
-      ...base,
-      body: errorMessage ? `${text}\n\nSend error: ${errorMessage}` : text,
-    }
-    return db.from('communications').insert(fallback).select().single()
+    return db.from('communications').insert(payload).select().single()
   }
 
   if (!recipientRaw || !normalizedTo) {
