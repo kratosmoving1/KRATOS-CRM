@@ -92,6 +92,12 @@ _Update this section at the start of every new session._
 - Verify save flows complete without column-name errors in production
 - Incognito test: Create Customer flow, SMS send, activity timeline after SMS
 
+## ✅ Done (Session 6 — Opportunity Detail Page Visual Redesign)
+
+- **Header**: Customer name now 2xl bold. Phone + email contact row sits directly under the name with clickable tel:/mailto: links. Pencil edit icon inline next to name. Meta row shows service type, date, move size, quote number.
+- **Sidebar**: Next Follow-up card added as the first sidebar card (pulls from live timeline state). Information card gains Branch, Estimator, Move Coordinator, Lead Status rows (hardcoded placeholders pending schema columns). 
+- **Activity**: Timeline items converted from plain rows to white bordered cards with colored icon chips per activity type (amber=note, purple=SMS, blue=email, green=call, orange=follow-up, slate=audit). Generic "Details updated" audit events filtered out entirely. CommTypeIcon extended to handle all type keys.
+
 ---
 
 ## 🔜 Next
