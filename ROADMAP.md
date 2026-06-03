@@ -84,13 +84,23 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 7 — Opportunity Page Final Polish + Inbound SMS)
+
+- Opportunity detail page redesign complete: hero header, contact row, activity cards, sidebar card shells with icons
+- Inbound SMS webhook at `/api/webhooks/twilio/sms` — replies auto-appear in activity feed as "Incoming SMS" cards
+- Activity cards unified: all item types (notes, SMS, email, calls, follow-ups, audit events) render as bordered cards with colored icon badges
+- Quote created card: FilePlus icon, orange badge, full `p-4` padding matching SMS cards
+- Sidebar: Next Follow-up / Information / Stops / Opportunity Details each have icon + proper title header
+
+---
+
 ## 🔧 Now
 
-_Update this section at the start of every new session._
+_Tariff Configuration UI in Settings_
 
-- Verify Google Maps autocomplete works in production (incognito browser test)
-- Verify save flows complete without column-name errors in production
-- Incognito test: Create Customer flow, SMS send, activity timeline after SMS
+- New "Tariffs" section in Settings — AJ inputs real pricing rules
+- Hourly rate matrix: crew size × move size × distance bracket
+- Estimate generation pulls from selected tariff and populates Estimate tab line items automatically
 
 ## ✅ Done (Session 6 — Opportunity Detail Page Visual Redesign)
 

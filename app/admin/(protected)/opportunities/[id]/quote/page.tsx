@@ -9,6 +9,7 @@ import {
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
   ClipboardCheck, ShieldCheck, Calendar, Pencil,
+  FilePlus, Info, Briefcase, Bell,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
@@ -378,7 +379,7 @@ function CommTypeIcon({ type }: { type: string }) {
   const icons: Record<string, React.ElementType> = {
     note: FileText, call: PhoneCall, sms: MessageSquare, email: AtSign,
     follow_up: CalendarPlus, status: RefreshCw, status_change: RefreshCw,
-    audit: CheckCircle2, create: CheckCircle2,
+    audit: CheckCircle2, create: FilePlus, status_changed: RefreshCw,
   }
   const Icon = icons[type] ?? FileText
   return <Icon size={14} className="shrink-0" />
@@ -1656,8 +1657,8 @@ export default function OpportunityDetailPage() {
                       call_inbound:   { label: 'Inbound Call',    colorClass: 'text-emerald-600 bg-emerald-50' },
                       call:           { label: 'Call',            colorClass: 'text-green-600 bg-green-50' },
                       follow_up:      { label: 'Follow-up',       colorClass: 'text-orange-600 bg-orange-50' },
-                      create:         { label: 'Quote created',   colorClass: 'text-kratos bg-orange-50' },
-                      status_change:  { label: 'Status changed',  colorClass: 'text-slate-500 bg-slate-100' },
+                      create:         { label: 'Quote created',   colorClass: 'text-orange-600 bg-orange-50' },
+                      status_change:  { label: 'Status changed',  colorClass: 'text-slate-600 bg-slate-100' },
                     }
 
                     const renderItem = (item: TimelineItem) => {
@@ -1672,16 +1673,12 @@ export default function OpportunityDetailPage() {
                         : (dir && dir !== 'internal')
                           ? `${rawType}_${dir}`
                           : rawType
-                      const cfg     = ACTIVITY_ICON_CONFIG[typeKey] ?? ACTIVITY_ICON_CONFIG[rawType] ?? { label: rawType, colorClass: 'text-slate-500 bg-slate-100' }
-                      const isSlim  = isAudit
+                      const cfg = ACTIVITY_ICON_CONFIG[typeKey] ?? ACTIVITY_ICON_CONFIG[rawType] ?? { label: rawType, colorClass: 'text-slate-500 bg-slate-100' }
 
                       return (
                         <article
                           key={item.id}
-                          className={cn(
-                            'rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors',
-                            isSlim ? 'px-4 py-3' : 'p-4',
-                          )}
+                          className="rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300 transition-colors"
                         >
                           {/* Card header */}
                           <div className="flex items-center justify-between gap-3 mb-2">
@@ -1792,7 +1789,10 @@ export default function OpportunityDetailPage() {
                   .sort((a, b) => (a.follow_up_date ?? '').localeCompare(b.follow_up_date ?? ''))[0] ?? null
                 return (
                   <div className="rounded-xl border border-slate-200 bg-white p-5">
-                    <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Next Follow-up</h2>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bell size={14} className="text-slate-400" />
+                      <h3 className="text-sm font-semibold text-slate-700">Next Follow-up</h3>
+                    </div>
                     {nextFu ? (
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm text-slate-700">
@@ -1865,7 +1865,10 @@ export default function OpportunityDetailPage() {
                   </div>
                 )}
 
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Information</h2>
+                <div className="flex items-center gap-2 mb-3">
+                  <Info size={14} className="text-slate-400" />
+                  <h3 className="text-sm font-semibold text-slate-700">Information</h3>
+                </div>
                 <dl>
                   <InfoRow label="Quote #"  value={formatQuoteNumber(opp.opportunity_number)} />
                   <InfoRow label="Service"  value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
@@ -1928,7 +1931,10 @@ export default function OpportunityDetailPage() {
 
               {/* Stops card */}
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Stops</h2>
+                <div className="flex items-center gap-2 mb-3">
+                  <MapPin size={14} className="text-slate-400" />
+                  <h3 className="text-sm font-semibold text-slate-700">Stops</h3>
+                </div>
                 <div className="space-y-4">
                   {/* Origin */}
                   <div>
@@ -1975,7 +1981,10 @@ export default function OpportunityDetailPage() {
                 if (!vol) return null
                 return (
                   <div className="rounded-xl border border-slate-200 bg-white p-5">
-                    <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Opportunity Details</h2>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Briefcase size={14} className="text-slate-400" />
+                      <h3 className="text-sm font-semibold text-slate-700">Opportunity Details</h3>
+                    </div>
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Volume</p>
