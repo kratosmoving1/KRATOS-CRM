@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Tag, PlugZap, FileText } from 'lucide-react'
+import { Tag, PlugZap, FileText, BookOpen } from 'lucide-react'
 
 const ACTIVE_SECTIONS = [
   {
@@ -13,6 +13,12 @@ const ACTIVE_SECTIONS = [
     icon: FileText,
     title: 'Communication Templates',
     description: 'SMS and email templates for no-answer, follow-ups, and estimate sends.',
+  },
+  {
+    href: '/admin/settings/documents',
+    icon: BookOpen,
+    title: 'Document Templates',
+    description: 'Estimates, contracts, invoices, and work orders with merge fields.',
   },
   {
     href: '/admin/settings/integrations',

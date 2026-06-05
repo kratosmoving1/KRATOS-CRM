@@ -8,12 +8,25 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "tsx supabase/seed/seed.ts"
+    "seed": "tsx supabase/seed/seed.ts",
+    "seed:documents": "tsx scripts/seed-document-templates.ts"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
+    "@tiptap/extension-image": "^3.25.0",
+    "@tiptap/extension-link": "^3.25.0",
+    "@tiptap/extension-placeholder": "^3.25.0",
+    "@tiptap/extension-table": "^3.25.0",
+    "@tiptap/extension-table-cell": "^3.25.0",
+    "@tiptap/extension-table-header": "^3.25.0",
+    "@tiptap/extension-table-row": "^3.25.0",
+    "@tiptap/extension-text-align": "^3.25.0",
+    "@tiptap/extension-underline": "^3.25.0",
+    "@tiptap/pm": "^3.25.0",
+    "@tiptap/react": "^3.25.0",
+    "@tiptap/starter-kit": "^3.25.0",
     "@types/google.maps": "^3.64.1",
     "autoprefixer": "10.5.0",
     "class-variance-authority": "^0.7.1",
@@ -30,6 +43,7 @@
     "tailwindcss": "3.4.19"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@types/node": "^20.17.50",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",

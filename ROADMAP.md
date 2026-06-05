@@ -102,6 +102,23 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 10 — Document Templates Library Phase 1A)
+
+- `document_templates` table with categories, draft/published status, soft-delete, auto-updated_at trigger
+- Settings → Documents grid page: 4-column card layout, category badge, Modified/Published dates, three-dot menu (Edit, Duplicate, Delete)
+- Empty state with "+ Create your first template" CTA
+- TipTap rich text editor with full toolbar: Bold, Italic, Underline, Strikethrough, H1/H2/H3, Lists, Blockquote, Code, HR, Link, Image, Table, Text Align, Undo/Redo
+- Merge field picker side panel: 42 fields across 8 groups (Customer, Opportunity, Addresses, Package, Charges, Agent, Company, Document); live search filter; click to insert at cursor
+- Merge fields render as styled orange monospace pills (`.kratos-merge-field` CSS class)
+- Template form: Name, Category, Description, Draft/Published status; Save/Cancel/Delete
+- New template page at `/admin/settings/documents/new`
+- Edit template page at `/admin/settings/documents/[id]`
+- API routes: GET/POST list, GET/PATCH/DELETE single, POST duplicate
+- 5 seed templates: Estimate, Contract, Invoice, Damage Waiver, Work Order (run `npm run seed:documents` after SQL migration)
+- Settings nav and settings home page updated with "Document Templates" entry
+- `@tailwindcss/typography` installed; `prose prose-sm` applied to editor
+- **Seed method:** `npx tsx scripts/seed-document-templates.ts`
+
 ## ✅ Done (Session 9 — Multi-Tier Package Recommendation)
 
 - Estimate tab → Package Recommendation card upgraded from 1-2 cards to 4 cards side by side
@@ -113,7 +130,17 @@ The "Now" section is what the current session is working on. The "Next" section 
 - Charges table and sidebar totals refresh automatically after apply
 - Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
 
-## 🔧 Now
+## 🔧 Next
+
+### Document Templates Phase 1B — Per-Opportunity Document Generation
+
+- "Generate Document" button on opportunity Estimate tab → pick a template → preview rendered HTML with all merge fields replaced
+- Server-side merge field substitution (replace `{{token}}` with real opportunity/customer data)
+- Download as PDF (html-pdf or Puppeteer)
+- "Send to Customer" via email (Resend)
+- "Publish to Existing Jobs" button on template grid
+
+## 🔧 Now (Tariff Configuration)
 
 _Tariff Configuration UI in Settings_
 

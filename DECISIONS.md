@@ -179,4 +179,26 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 **Definitions live in:** `lib/packages/tiers.ts` — single source of truth for tier rates, crew, and recommendation mapping.
 
+## 2026-06 — Document Templates: TipTap editor, inline merge field spans (Phase 1A)
+
+**Decision:** Document template editing uses TipTap (not Lexical or Slate). Merge fields are styled inline `<span>` elements (not atomic ProseMirror nodes) for Phase 1A.
+
+**TipTap rationale:**
+- TipTap is React-first, has excellent TypeScript support, and a simple `useEditor` hook
+- Extensions are composable and well-documented
+- Compared to Lexical (Facebook's editor): TipTap has significantly simpler plugin API and better maintained community extensions
+- The `insertContent(html)` method makes merge-field insertion trivial
+
+**Merge field spans (not atomic nodes) for Phase 1A:**
+- Merge fields are inserted as `<span class="kratos-merge-field" data-merge-field="token">{{token}}</span>`
+- Users delete them character-by-character with backspace (acceptable trade-off)
+- Phase 2+ can upgrade to custom atomic `MergeField` ProseMirror nodes for better UX (select-to-delete, non-editable pills)
+- Inline spans survive HTML round-trips correctly — no serialization issues
+
+**Content storage:**
+- `content_html` — the primary content column. Rendered server-side when generating documents (Phase 1B).
+- `content_json` — TipTap JSON representation stored alongside for editor re-hydration. Not used for rendering.
+
+**Seed method:** `npx tsx scripts/seed-document-templates.ts` — uses service role key directly. Safe to re-run (skips existing templates by name+category).
+
 ## (Append new decisions below as they happen)

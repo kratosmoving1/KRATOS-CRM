@@ -366,6 +366,30 @@ Line-item charges attached to an opportunity. Powers the Estimate tab charges bu
 
 ---
 
+## Table: `document_templates`
+
+Document templates for estimates, contracts, invoices, and other customer-facing or crew-facing documents. Templates contain HTML content with `{{token}}` merge field placeholders.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `name` | `text` | Template display name (e.g. "Estimate for Moving Services") |
+| `category` | `text` | One of: `opportunity_estimate`, `opportunity_contract`, `opportunity_addendum`, `opportunity_invoice`, `job_contract`, `job_addendum`, `job_work_order` |
+| `description` | `text \| null` | Internal notes about the template |
+| `content_html` | `text` | Full HTML content of the template (may contain `.kratos-merge-field` spans) |
+| `content_json` | `jsonb \| null` | TipTap JSON representation of the content (for re-hydrating the editor) |
+| `status` | `text` | `draft` or `published` |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `updated_by` | `uuid \| null` | FK to `profiles.id` |
+| `published_by` | `uuid \| null` | FK to `profiles.id` — who published it |
+| `published_at` | `timestamptz \| null` | When it was published |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger `trg_document_templates_updated_at` |
+| `is_deleted` | `boolean` | Soft delete flag — never hard-delete |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+---
+
 ## Common Mistakes to Avoid
 
 These column name mistakes have appeared repeatedly in past sessions and broken saves:

@@ -251,6 +251,27 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['communication_templates']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['communication_templates']['Insert']>
       }
+      document_templates: {
+        Row: {
+          id: string
+          name: string
+          category: 'opportunity_estimate' | 'opportunity_contract' | 'opportunity_addendum' | 'opportunity_invoice' | 'job_contract' | 'job_addendum' | 'job_work_order'
+          description: string | null
+          content_html: string
+          content_json: Json | null
+          status: 'draft' | 'published'
+          created_by: string | null
+          updated_by: string | null
+          published_by: string | null
+          published_at: string | null
+          created_at: string
+          updated_at: string
+          is_deleted: boolean
+          deleted_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['document_templates']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['document_templates']['Insert']>
+      }
     }
   }
 }

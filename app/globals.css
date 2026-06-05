@@ -27,3 +27,16 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* Document template editor — merge field pill */
+.kratos-merge-field {
+  display: inline-block;
+  background: #fff4e0;
+  color: #b45309;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875em;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+}
