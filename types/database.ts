@@ -272,6 +272,31 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['document_templates']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['document_templates']['Insert']>
       }
+      documents: {
+        Row: {
+          id: string
+          opportunity_id: string
+          template_id: string | null
+          name: string
+          category: string
+          status: 'not_started' | 'generated' | 'sent' | 'viewed' | 'signed' | 'completed'
+          rendered_html: string | null
+          rendered_at: string | null
+          sent_at: string | null
+          sent_to: string | null
+          viewed_at: string | null
+          signed_at: string | null
+          signature_data: Json | null
+          document_number: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          is_deleted: boolean
+          deleted_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['documents']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['documents']['Insert']>
+      }
     }
   }
 }

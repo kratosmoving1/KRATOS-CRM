@@ -248,4 +248,21 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 **Unselect API route:** Reuses existing `DELETE /api/admin/opportunities/[id]/charges/[chargeId]` — no new route needed.
 
+## 2026-06 — Docs access lives in the right sidebar Information card
+
+**Decision:** The Versions / Activity / Docs buttons live at the bottom of the Information card on the right sidebar of the Estimate tab, not in the page header. Mirrors SmartMoving's pattern where these actions are contextual to the sidebar rather than the main header toolbar.
+
+**Versions and Activity** are placeholder buttons (disabled, `cursor-not-allowed`, "Coming soon" tooltip) until those features are built.
+
+**Docs button** opens the `DocsSidePanel` slide-out from the right. It shows a numeric badge when documents exist.
+
+**Document generation flow:**
+1. Agent clicks "Generate Documents" in the panel
+2. POST `/api/admin/opportunities/[id]/documents/generate`
+3. Server loads all published `document_templates`, renders each one with the opportunity's real data via `lib/documents/render.ts`
+4. Each rendered document is upserted into the `documents` table (update if template+opportunity pair exists, insert if not)
+5. Panel refreshes and shows the document list
+
+**Merge field engine** (`lib/documents/render.ts`): simple regex replace `{{token}}` → value from a context object built at render time. Falls back to `{{token}}` for unknown fields so partial data doesn't break documents.
+
 ## (Append new decisions below as they happen)

@@ -390,6 +390,34 @@ Document templates for estimates, contracts, invoices, and other customer-facing
 
 ---
 
+## Table: `documents`
+
+Generated document instances for a specific opportunity. Each row is a rendered version of a `document_template` applied to real opportunity data.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `opportunity_id` | `uuid` | FK to `opportunities.id` (cascade delete) |
+| `template_id` | `uuid \| null` | FK to `document_templates.id` (set null on template delete) |
+| `name` | `text` | Document name (copied from template at generation time) |
+| `category` | `text` | Category (copied from template, e.g. `opportunity_estimate`) |
+| `status` | `text` | One of: `not_started`, `generated`, `sent`, `viewed`, `signed`, `completed` |
+| `rendered_html` | `text \| null` | Full rendered HTML with merge fields substituted |
+| `rendered_at` | `timestamptz \| null` | When the document was last rendered |
+| `sent_at` | `timestamptz \| null` | When marked as sent |
+| `sent_to` | `text \| null` | Email address it was sent to |
+| `viewed_at` | `timestamptz \| null` | When customer first viewed it |
+| `signed_at` | `timestamptz \| null` | When customer signed it |
+| `signature_data` | `jsonb \| null` | Signature capture data |
+| `document_number` | `text \| null` | Auto-generated reference (e.g. `DOC-K1042-EST`) |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+---
+
 ## Common Mistakes to Avoid
 
 These column name mistakes have appeared repeatedly in past sessions and broken saves:

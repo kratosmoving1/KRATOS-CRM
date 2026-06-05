@@ -9,7 +9,7 @@ import {
   Clock, CheckCircle2, CreditCard, Banknote, Landmark, ReceiptText,
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
   ClipboardCheck, ShieldCheck, Calendar, Pencil,
-  FilePlus, Info, Briefcase, Bell,
+  FilePlus, Info, Briefcase, Bell, History, Activity,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
@@ -24,6 +24,8 @@ import ChargesSection from '@/components/admin/charges/ChargesSection'
 import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
 import { PackageTierCards } from '@/components/admin/charges/PackageTierCards'
 import { PACKAGE_TIERS, detectAppliedTier } from '@/lib/packages/tiers'
+import DocsSidePanel, { type DocumentRow } from '@/components/admin/documents/DocsSidePanel'
+import DocumentPreviewModal from '@/components/admin/documents/DocumentPreviewModal'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS, MOVE_SIZE_VOLUME } from '@/lib/constants'
@@ -469,6 +471,12 @@ export default function OpportunityDetailPage() {
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [notesTab, setNotesTab] = useState<'internal' | 'customer' | 'crew' | 'dispatcher'>('internal')
+
+  // Documents panel
+  const [docsPanelOpen, setDocsPanelOpen] = useState(false)
+  const [documentCount, setDocumentCount] = useState(0)
+  const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -2250,6 +2258,43 @@ export default function OpportunityDetailPage() {
                   <InfoRow label="Move date" value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} />
                   <InfoRow label="Move size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
                 </div>
+
+                {/* Versions / Activity / Docs actions */}
+                <div className="grid grid-cols-3 gap-1 mt-4 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled
+                    title="Coming soon"
+                    className="flex flex-col items-center gap-1 px-2 py-2 text-xs text-slate-400 rounded-md cursor-not-allowed"
+                  >
+                    <History className="w-4 h-4" />
+                    Versions
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    title="Coming soon"
+                    className="flex flex-col items-center gap-1 px-2 py-2 text-xs text-slate-400 rounded-md cursor-not-allowed"
+                  >
+                    <Activity className="w-4 h-4" />
+                    Activity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDocsPanelOpen(true)}
+                    className="relative flex flex-col items-center gap-1 px-2 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-700 rounded-md font-medium transition-colors"
+                  >
+                    <span className="relative">
+                      <FileText className="w-4 h-4" />
+                      {documentCount > 0 && (
+                        <span className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold">
+                          {documentCount}
+                        </span>
+                      )}
+                    </span>
+                    Docs
+                  </button>
+                </div>
               </section>
 
               <PanelSection title="Quote Total" icon={ShieldCheck}>
@@ -2575,6 +2620,22 @@ export default function OpportunityDetailPage() {
         defaultLaborConfig={tariffPreFill}
         onClose={() => { setChargePanelOpen(false); setEditingCharge(null); setTariffPreFill(null) }}
         onSaved={() => { fetchCharges(); setTariffPreFill(null) }}
+      />
+
+      {/* Documents panel + preview */}
+      <DocsSidePanel
+        opportunityId={id}
+        quoteNumber={formatQuoteNumber(opp?.opportunity_number ?? '')}
+        isOpen={docsPanelOpen}
+        onClose={() => setDocsPanelOpen(false)}
+        onCountChange={setDocumentCount}
+        onPreviewDoc={doc => { setPreviewDoc(doc); setPreviewOpen(true) }}
+      />
+      <DocumentPreviewModal
+        doc={previewDoc}
+        isOpen={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        onRefresh={() => { setPreviewOpen(false); setDocsPanelOpen(true) }}
       />
 
       {showDeleteConfirm && (
