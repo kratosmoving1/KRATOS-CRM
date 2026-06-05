@@ -221,4 +221,16 @@ Move date is edited inline in the Information card (calendar icon → date popov
 - Root cause was `disabled={applyingId !== null || isApplied}` — now split into two separate button elements: one disabled green "Applied" for the active tier, one fully interactive "Apply" for all others
 - Only the in-flight card (the one being applied) shows "Applying..." and is briefly disabled
 
+## 2026-06 — Estimate tab bug sweep: single source of truth, idempotent apply, no Job Summary
+
+**Decisions:**
+
+1. **Removed Job Summary section from Estimate tab.** Single source of truth for crew/rate/hours is the Moving Labor row in `opportunity_charges`. The Job Summary section duplicated this data from the same config object but was read independently, causing drift when the rate changed. Deleted entirely.
+
+2. **Apply-package is idempotent — every click refreshes the stored rate.** There is no "skip if same tier" optimization. Every click to `POST /apply-package` overwrites the Moving Labor charge config with the current tier's rate from `getRateForDate(tier, opp.service_date)`. This handles: legacy data with wrong rates, pricing updates without manual cleanup, and re-apply as a quick "force refresh".
+
+3. **PACKAGE hero card reads from `config.tier_id` (then falls back to `detectAppliedTier`).** The card shows `tier.label` (e.g., "Silver") and `config.hourly_rate` formatted as `$X.XX/hr`. Not from a separate field on the opportunity. Not from a derived calculation. From the stored Moving Labor charge.
+
+4. **Tier cards always clickable — "Applied · Re-apply" pattern.** The previously-applied tier card shows a green "Applied · Re-apply" button that is fully clickable. Only `applyingId === tier.id` (the in-flight card) briefly disables its button. This fixes the UX where agents couldn't switch tiers or force-refresh the rate.
+
 ## (Append new decisions below as they happen)

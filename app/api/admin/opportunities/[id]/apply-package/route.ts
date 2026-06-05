@@ -32,6 +32,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { rate, isWeekend } = getRateForDate(tier, opp.service_date)
 
+  console.log('[apply-package]', {
+    opportunity_id: params.id,
+    tier_id: tier.id,
+    move_date: opp.service_date,
+    resolved_rate: rate,
+    is_weekend: isWeekend,
+  })
+
   const labor_hours = MINIMUM_HOURS
   const billable_hours = MINIMUM_HOURS
   const subtotal = +(billable_hours * rate).toFixed(2)

@@ -102,6 +102,15 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 12 — Estimate Tab Bug Sweep)
+
+- Tier switching: all 4 cards always clickable, including the applied one ("Applied · Re-apply" pattern)
+- Stale rate: apply-package is idempotent — every click overwrites `hourly_rate` with the live rate from `getRateForDate()`; no skip optimization
+- PACKAGE hero card: now reads `config.tier_id` → `PACKAGE_TIERS.find()` for tier label; shows `$X.XX/hr` from `config.hourly_rate`
+- Job Summary section deleted: was duplicative with Charges table row, caused $169.99 vs $189.99 drift
+- `console.log('[apply-package]', ...)` added for Vercel log verification; remove once confirmed working
+- Deleted dead code: `packageDisplayName()` function, `numTrucks`/`numCrew`/`billableHours`/`travelHours`/`loadHours`/`unloadHours`/`bufferHours`/`hasLaborCharge` local vars
+
 ## ✅ Done (Session 11 — Estimate Tab Refactor + Tier Switching Fix)
 
 - **Bug fix:** Tier switching — Apply buttons on non-active tier cards remain fully clickable after a tier is applied. Root cause: `disabled={applyingId !== null || isApplied}` changed to two separate button elements.
@@ -143,7 +152,7 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ## 🔧 Next
 
-### Document Templates Phase 1B — Per-Opportunity Document Generation (next prompt)
+### Document Templates Phase 1B — Per-Opportunity Document Generation (next session)
 
 - "Generate Document" button on opportunity Estimate tab → pick a template → preview rendered HTML with all merge fields replaced
 - Server-side merge field substitution (replace `{{token}}` with real opportunity/customer data)

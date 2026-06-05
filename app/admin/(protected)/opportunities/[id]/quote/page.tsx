@@ -23,6 +23,7 @@ import EditAddressModal, { type EditAddressData } from '@/components/admin/modal
 import ChargesSection from '@/components/admin/charges/ChargesSection'
 import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
 import { PackageTierCards } from '@/components/admin/charges/PackageTierCards'
+import { PACKAGE_TIERS, detectAppliedTier } from '@/lib/packages/tiers'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS, MOVE_SIZE_VOLUME } from '@/lib/constants'
@@ -213,11 +214,6 @@ function getVolumeForMoveSize(moveSize: string | null | undefined) {
   return key ? (MOVE_SIZE_VOLUME[key] ?? null) : null
 }
 
-function packageDisplayName(value: string | null | undefined) {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return null
-  return /package$/i.test(trimmed) ? trimmed : `${trimmed} Package`
-}
 
 interface CommunicationTemplate {
   id: string
@@ -1932,20 +1928,12 @@ export default function OpportunityDetailPage() {
                 const vol = getVolumeForMoveSize(opp.move_size)
                 const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
                 const lc = laborCharge?.config ?? {}
-                const pkgName = packageDisplayName(lc.package_name as string | null)
-                const numTrucks = Number(lc.num_trucks ?? 1)
-                const numCrew = Number(lc.num_crew ?? 2)
                 const hourlyRate = Number(lc.hourly_rate ?? 0)
-                const billableHours = Number(lc.billable_hours ?? lc.labor_hours ?? 0)
-                const travelHours = Number(lc.travel_hours ?? 0)
-                const loadHours = Number(lc.load_hours ?? 0)
-                const unloadHours = Number(lc.unload_hours ?? 0)
-                const bufferHours = Number(lc.handling_buffer_hours ?? 0)
-                const hasLaborCharge = Boolean(laborCharge)
+                const configTierId = (lc.tier_id as string | null) ?? detectAppliedTier(laborCharge?.config)
+                const appliedTier = configTierId ? (PACKAGE_TIERS.find(t => t.id === configTierId) ?? null) : null
 
                 return (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Size</p>
                         <select
@@ -1987,44 +1975,10 @@ export default function OpportunityDetailPage() {
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Package</p>
-                        <p className="mt-1 text-base font-bold text-slate-900">{pkgName ?? '—'}</p>
-                        {hourlyRate > 0 && <p className="mt-0.5 text-[10px] text-slate-400">{formatCurrency(hourlyRate)}/hr</p>}
+                        <p className="mt-1 text-base font-bold text-slate-900">{appliedTier?.label ?? '—'}</p>
+                        {hourlyRate > 0 && <p className="mt-0.5 text-[10px] text-slate-400">${hourlyRate.toFixed(2)}/hr</p>}
                       </div>
-                    </div>
-
-                    {/* Job Summary — only shown when a Moving Labor charge exists */}
-                    {hasLaborCharge && (
-                      <div className="rounded-xl border border-slate-200 bg-white p-4">
-                        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Job Summary</h2>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 text-sm">
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Crew</p>
-                            <p className="mt-0.5 font-semibold text-slate-900">{numTrucks} truck · {numCrew} movers</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Hourly rate</p>
-                            <p className="mt-0.5 font-semibold text-slate-900">{formatCurrency(hourlyRate)}/hr</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Labour time</p>
-                            <p className="mt-0.5 font-semibold text-slate-900">{billableHours}h billable</p>
-                            {(loadHours > 0 || unloadHours > 0 || bufferHours > 0) && (
-                              <p className="text-[10px] text-slate-400">
-                                {loadHours}h load · {unloadHours}h unload · {bufferHours}h buffer
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Travel time</p>
-                            <p className="mt-0.5 font-semibold text-slate-900">{travelHours}h</p>
-                            {lc.distance_km != null && (
-                              <p className="text-[10px] text-slate-400">{String(lc.distance_km)} km · {String(lc.drive_time_minutes ?? '?')} min drive</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  </div>
                 )
               })()}
 
