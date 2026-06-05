@@ -201,4 +201,24 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 **Seed method:** `npx tsx scripts/seed-document-templates.ts` — uses service role key directly. Safe to re-run (skips existing templates by name+category).
 
+## 2026-06 — Estimate tab: single unified Charges table (no Main Package section)
+
+**Decision:** The Estimate tab uses one unified "Charges" table for all line items. The Moving Labor charge created by a package tier renders as a regular row — not in a separate "Main Package" section.
+
+**Reasoning:**
+- Matches SmartMoving's UX (reference product): one table, one mental model
+- Simpler for agents: no need to scan two sections to see the full cost picture
+- Single source of truth — the table renders exactly what's in `opportunity_charges`, no derived state
+- The old "Main Package" card grid (with Trucks/Movers/Rate/Hours breakdown cards) was duplicating data already visible in the RATE column
+
+**Applied pattern:**
+- NAME column: `charge.name` (e.g. "Silver Package — Moving Labor") + charge type label below
+- RATE column: formatted by `lib/charges/format.ts → formatRate()`, e.g. `3h @ $189.99/hr (1 truck, 2 crew)`
+- Estimated Total row in `<tfoot>` — replaces the old "Charges Total" footer
+
+**Tier switching fix:**
+- The Apply button on non-applied tier cards must remain clickable after another tier is applied
+- Root cause was `disabled={applyingId !== null || isApplied}` — now split into two separate button elements: one disabled green "Applied" for the active tier, one fully interactive "Apply" for all others
+- Only the in-flight card (the one being applied) shows "Applying..." and is briefly disabled
+
 ## (Append new decisions below as they happen)

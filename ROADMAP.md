@@ -102,6 +102,17 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ---
 
+## ✅ Done (Session 11 — Estimate Tab Refactor + Tier Switching Fix)
+
+- **Bug fix:** Tier switching — Apply buttons on non-active tier cards remain fully clickable after a tier is applied. Root cause: `disabled={applyingId !== null || isApplied}` changed to two separate button elements.
+- **UI refactor:** "Main Package" section deleted. "Supplementary Charges" section deleted. Both replaced by a single unified "Charges" table.
+- All charges (Moving Labor + supplementary) appear as rows in one table with columns: Name / Rate / Subtotal / Discount / Total.
+- Rate column formatted by `lib/charges/format.ts → formatRate()`: `3h @ $189.99/hr (1 truck, 2 crew)` pattern.
+- Estimated Total footer row in `<tfoot>` replaces the old "Charges Total" line.
+- Collapse toggle on the Charges header.
+- Moving Labor row has Edit + Delete in three-dot menu (no Duplicate — matches existing API behavior).
+- Files changed: `components/admin/charges/PackageTierCards.tsx`, `components/admin/charges/ChargesSection.tsx`, `lib/charges/format.ts` (new)
+
 ## ✅ Done (Session 10 — Document Templates Library Phase 1A)
 
 - `document_templates` table with categories, draft/published status, soft-delete, auto-updated_at trigger
@@ -132,7 +143,7 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ## 🔧 Next
 
-### Document Templates Phase 1B — Per-Opportunity Document Generation
+### Document Templates Phase 1B — Per-Opportunity Document Generation (next prompt)
 
 - "Generate Document" button on opportunity Estimate tab → pick a template → preview rendered HTML with all merge fields replaced
 - Server-side merge field substitution (replace `{{token}}` with real opportunity/customer data)

@@ -30,7 +30,6 @@ export function PackageTierCards({
   const [applyingId, setApplyingId] = useState<PackageTierId | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Compute isWeekend once (same date for all tiers)
   const { isWeekend } = getRateForDate(PACKAGE_TIERS[0], moveDate)
 
   const handleApply = async (tierId: PackageTierId) => {
@@ -139,23 +138,26 @@ export function PackageTierCards({
                 <p>{tier.num_crew} movers</p>
               </div>
 
-              {/* Apply button */}
-              <button
-                type="button"
-                onClick={() => handleApply(tier.id)}
-                disabled={applyingId !== null || isApplied}
-                className={`mt-auto w-full px-3 py-2 rounded-lg text-sm font-semibold text-white transition-colors ${
-                  isApplied
-                    ? 'bg-green-600 cursor-default'
-                    : `${tier.theme.button_bg} ${tier.theme.button_bg_hover} disabled:opacity-50`
-                }`}
-              >
-                {applyingId === tier.id
-                  ? 'Applying...'
-                  : isApplied
-                  ? 'Applied'
-                  : 'Apply'}
-              </button>
+              {/* Apply button — split into two separate elements to keep non-applied buttons interactive */}
+              {isApplied ? (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-auto w-full px-3 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 cursor-default flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Applied
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleApply(tier.id)}
+                  disabled={applyingId === tier.id}
+                  className={`mt-auto w-full px-3 py-2 rounded-lg text-sm font-semibold text-white transition-colors ${tier.theme.button_bg} ${tier.theme.button_bg_hover} disabled:opacity-70`}
+                >
+                  {applyingId === tier.id ? 'Applying...' : 'Apply'}
+                </button>
+              )}
             </article>
           )
         })}
