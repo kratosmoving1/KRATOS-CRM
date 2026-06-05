@@ -2141,15 +2141,19 @@ export default function OpportunityDetailPage() {
               })()}
 
               {/* Package recommendation — 4 tiers */}
-              <PackageTierCards
-                opportunityId={id}
-                moveSize={opp.move_size}
-                moveDate={opp.service_date}
-                appliedChargeConfig={
-                  (charges.find(c => c.charge_type === 'moving_labor')?.config ?? null) as Record<string, unknown> | null
-                }
-                onApplied={() => fetchCharges()}
-              />
+              {(() => {
+                const movingLaborCharge = charges.find(c => c.charge_type === 'moving_labor')
+                return (
+                  <PackageTierCards
+                    opportunityId={id}
+                    moveSize={opp.move_size}
+                    moveDate={opp.service_date}
+                    appliedChargeId={movingLaborCharge?.id ?? null}
+                    appliedChargeConfig={(movingLaborCharge?.config ?? null) as Record<string, unknown> | null}
+                    onChanged={() => fetchCharges()}
+                  />
+                )
+              })()}
 
               {/* Charges */}
               <ChargesSection

@@ -14,17 +14,14 @@ export interface PackageTier {
   weekend_rate: number
   /** Move sizes this tier is the recommended default for */
   recommended_for: string[]
-  /** Tailwind color theme — classes written literally so Tailwind JIT picks them up */
+  /** Tailwind color theme — all classes written literally so Tailwind JIT picks them up */
   theme: {
-    border: string
-    border_recommended: string
-    border_applied: string
     bg: string
-    badge_bg: string
-    badge_text: string
-    accent_text: string
-    button_bg: string
-    button_bg_hover: string
+    bg_hover: string
+    border: string
+    icon: string
+    title: string
+    muted: string
   }
 }
 
@@ -40,15 +37,12 @@ export const PACKAGE_TIERS: PackageTier[] = [
     weekend_rate: 139.99,
     recommended_for: ['few_items'],
     theme: {
-      border: 'border-orange-200',
-      border_recommended: 'border-orange-400',
-      border_applied: 'border-orange-500',
-      bg: 'bg-orange-50',
-      badge_bg: 'bg-orange-100',
-      badge_text: 'text-orange-800',
-      accent_text: 'text-orange-700',
-      button_bg: 'bg-orange-600',
-      button_bg_hover: 'hover:bg-orange-700',
+      bg: 'bg-amber-200',
+      bg_hover: 'hover:bg-amber-300',
+      border: 'border-amber-400',
+      icon: 'text-amber-800',
+      title: 'text-amber-950',
+      muted: 'text-amber-800',
     },
   },
   {
@@ -72,15 +66,12 @@ export const PACKAGE_TIERS: PackageTier[] = [
       'storage',
     ],
     theme: {
-      border: 'border-slate-200',
-      border_recommended: 'border-slate-400',
-      border_applied: 'border-slate-600',
-      bg: 'bg-slate-50',
-      badge_bg: 'bg-slate-200',
-      badge_text: 'text-slate-700',
-      accent_text: 'text-slate-700',
-      button_bg: 'bg-slate-700',
-      button_bg_hover: 'hover:bg-slate-800',
+      bg: 'bg-slate-300',
+      bg_hover: 'hover:bg-slate-400',
+      border: 'border-slate-500',
+      icon: 'text-slate-800',
+      title: 'text-slate-950',
+      muted: 'text-slate-700',
     },
   },
   {
@@ -109,15 +100,12 @@ export const PACKAGE_TIERS: PackageTier[] = [
       'office',
     ],
     theme: {
-      border: 'border-yellow-200',
-      border_recommended: 'border-yellow-500',
-      border_applied: 'border-yellow-600',
-      bg: 'bg-yellow-50',
-      badge_bg: 'bg-yellow-100',
-      badge_text: 'text-yellow-800',
-      accent_text: 'text-yellow-700',
-      button_bg: 'bg-yellow-600',
-      button_bg_hover: 'hover:bg-yellow-700',
+      bg: 'bg-yellow-300',
+      bg_hover: 'hover:bg-yellow-400',
+      border: 'border-yellow-500',
+      icon: 'text-yellow-900',
+      title: 'text-yellow-950',
+      muted: 'text-yellow-800',
     },
   },
   {
@@ -142,15 +130,12 @@ export const PACKAGE_TIERS: PackageTier[] = [
       '5_bedroom_plus',
     ],
     theme: {
-      border: 'border-violet-200',
-      border_recommended: 'border-violet-500',
-      border_applied: 'border-violet-600',
-      bg: 'bg-violet-50',
-      badge_bg: 'bg-violet-100',
-      badge_text: 'text-violet-800',
-      accent_text: 'text-violet-700',
-      button_bg: 'bg-violet-600',
-      button_bg_hover: 'hover:bg-violet-700',
+      bg: 'bg-indigo-200',
+      bg_hover: 'hover:bg-indigo-300',
+      border: 'border-indigo-400',
+      icon: 'text-indigo-800',
+      title: 'text-indigo-950',
+      muted: 'text-indigo-700',
     },
   },
 ]
@@ -166,7 +151,6 @@ export function getRateForDate(
   if (!date) return { rate: tier.weekday_rate, isWeekend: false }
   let day: number
   if (typeof date === 'string') {
-    // Parse as local date to prevent UTC timezone shift (e.g. '2026-06-06' staying on the right day)
     const [year, month, d] = date.split('-').map(Number)
     day = new Date(year, month - 1, d).getDay()
   } else {
@@ -187,12 +171,16 @@ export function recommendTier(moveSize: string | null | undefined): PackageTierI
 
 /**
  * Given the config stored on the existing Moving Labor charge, find which
- * PACKAGE_TIERS entry it matches by num_trucks + num_crew.
+ * PACKAGE_TIERS entry it matches — first by config.tier_id, then by num_trucks + num_crew.
  */
 export function detectAppliedTier(
   config: Record<string, unknown> | null | undefined,
 ): PackageTierId | null {
   if (!config) return null
+  if (config.tier_id) {
+    const byId = PACKAGE_TIERS.find(t => t.id === config.tier_id)
+    if (byId) return byId.id
+  }
   const match = PACKAGE_TIERS.find(
     t => t.num_trucks === Number(config.num_trucks) && t.num_crew === Number(config.num_crew),
   )

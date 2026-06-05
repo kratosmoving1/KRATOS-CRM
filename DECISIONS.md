@@ -233,4 +233,19 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 4. **Tier cards always clickable — "Applied · Re-apply" pattern.** The previously-applied tier card shows a green "Applied · Re-apply" button that is fully clickable. Only `applyingId === tier.id` (the in-flight card) briefly disables its button. This fixes the UX where agents couldn't switch tiers or force-refresh the rate.
 
+## 2026-06 — Tier picker: whole-card clickable button, toggle behavior, saturated tier colors
+
+**Decision:** The tier recommendation card is a single `<button>` element (the entire card). No nested button inside. Clicking anywhere on the card triggers selection.
+
+**Toggle behavior:** Clicking the currently-selected (applied) card soft-deletes the Moving Labor charge via `DELETE /api/admin/opportunities/[id]/charges/[chargeId]`. Clicking any other card calls `POST /apply-package`. This makes the picker feel like a radio group with toggle-off capability.
+
+**Colors:** Tier card backgrounds use saturated Tailwind 200/300 levels (amber-200, slate-300, yellow-300, indigo-200) so each card visually reads as its metal. The old pastel 50-level backgrounds (bg-*-50) were near-white and invisible.
+
+**State indicators:**
+- Recommended (not applied): Kratos orange ring-4 + floating orange "✨ Recommended" ribbon at top of card
+- Applied: green ring-4 + floating green "✓ Selected" ribbon at top of card
+- Both ribbons use absolute positioning (`-top-3.5 left-1/2 -translate-x-1/2`) to float above the card border without clipping
+
+**Unselect API route:** Reuses existing `DELETE /api/admin/opportunities/[id]/charges/[chargeId]` — no new route needed.
+
 ## (Append new decisions below as they happen)

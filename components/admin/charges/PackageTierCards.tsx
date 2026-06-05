@@ -14,159 +14,176 @@ interface Props {
   opportunityId: string
   moveSize: string | null | undefined
   moveDate: string | null | undefined
-  appliedChargeConfig: Record<string, unknown> | null | undefined
-  onApplied?: () => void
+  /** ID of the existing Moving Labor charge row (null if none applied) */
+  appliedChargeId: string | null
+  /** config object from the existing Moving Labor charge (null if none applied) */
+  appliedChargeConfig: Record<string, unknown> | null
+  onChanged?: () => void
 }
 
 export function PackageTierCards({
   opportunityId,
   moveSize,
   moveDate,
+  appliedChargeId,
   appliedChargeConfig,
-  onApplied,
+  onChanged,
 }: Props) {
   const recommendedId = recommendTier(moveSize)
   const appliedId = detectAppliedTier(appliedChargeConfig)
-  const [applyingId, setApplyingId] = useState<PackageTierId | null>(null)
+  const [busyId, setBusyId] = useState<PackageTierId | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const { isWeekend } = getRateForDate(PACKAGE_TIERS[0], moveDate)
 
-  const handleApply = async (tierId: PackageTierId) => {
-    setApplyingId(tierId)
+  const handleCardClick = async (tierId: PackageTierId) => {
+    if (busyId) return
     setError(null)
+    setBusyId(tierId)
     try {
-      const res = await fetch(
-        `/api/admin/opportunities/${opportunityId}/apply-package`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tier_id: tierId }),
-        },
-      )
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        setError(j.error ?? 'Failed to apply package')
-        return
+      if (appliedId === tierId && appliedChargeId) {
+        // Toggle off — soft-delete the existing Moving Labor charge
+        const res = await fetch(
+          `/api/admin/opportunities/${opportunityId}/charges/${appliedChargeId}`,
+          { method: 'DELETE' },
+        )
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error ?? 'Failed to remove package')
+        }
+      } else {
+        // Apply (or switch) — create/update Moving Labor charge to this tier
+        const res = await fetch(
+          `/api/admin/opportunities/${opportunityId}/apply-package`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier_id: tierId }),
+          },
+        )
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error ?? 'Failed to apply package')
+        }
       }
-      onApplied?.()
+      onChanged?.()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Network error')
     } finally {
-      setApplyingId(null)
+      setBusyId(null)
     }
   }
 
   return (
-    <section className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+    <section className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-amber-500" />
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+          <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
             Package Recommendation
           </h3>
         </div>
         {isWeekend && (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
             Weekend / Peak rate
           </span>
         )}
       </div>
 
-      {/* 4-card grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* 4-card grid — extra top padding so ribbons don't clip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 pt-4">
         {PACKAGE_TIERS.map(tier => {
           const isRecommended = tier.id === recommendedId
           const isApplied = tier.id === appliedId
-          const isInFlight = applyingId === tier.id
+          const isBusy = busyId === tier.id
           const { rate } = getRateForDate(tier, moveDate)
           const Icon = tier.icon
 
+          const stateRing = isApplied
+            ? 'ring-4 ring-green-500 ring-offset-2'
+            : isRecommended
+            ? 'ring-4 ring-orange-400 ring-offset-2'
+            : ''
+
+          const interactivity = isBusy
+            ? 'opacity-70 cursor-wait'
+            : 'cursor-pointer hover:scale-[1.03] hover:shadow-lg active:scale-[0.98]'
+
           return (
-            <article
+            <button
               key={tier.id}
-              className={`relative rounded-xl border-2 p-4 ${tier.theme.bg} ${
-                isApplied
-                  ? `${tier.theme.border_applied} ring-2 ring-offset-1 ${tier.theme.border_applied.replace('border-', 'ring-')}`
-                  : isRecommended
-                  ? tier.theme.border_recommended
-                  : tier.theme.border
-              } flex flex-col`}
+              type="button"
+              onClick={() => handleCardClick(tier.id)}
+              disabled={!!busyId}
+              aria-pressed={isApplied}
+              className={`group relative rounded-xl border-2 p-5 flex flex-col text-left transition-all duration-200 ${tier.theme.bg} ${tier.theme.bg_hover} ${tier.theme.border} ${stateRing} ${interactivity}`}
             >
-              {/* Tier label + status badge */}
-              <div className="flex items-center justify-between mb-2">
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${tier.theme.badge_bg} ${tier.theme.badge_text}`}
-                >
-                  <Icon className="w-3 h-3" />
-                  {tier.label}
-                </span>
-                {!isApplied && isRecommended && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">
-                    Recommended
-                  </span>
-                )}
+              {/* RECOMMENDED ribbon */}
+              {isRecommended && !isApplied && (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-full shadow uppercase tracking-wider whitespace-nowrap">
+                  ✨ Recommended
+                </div>
+              )}
+
+              {/* SELECTED ribbon */}
+              {isApplied && (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-green-600 text-white text-[10px] font-bold rounded-full shadow uppercase tracking-wider inline-flex items-center gap-1 whitespace-nowrap">
+                  <Check className="w-2.5 h-2.5" />
+                  Selected
+                </div>
+              )}
+
+              {/* Icon + name */}
+              <div className="flex items-center gap-2 mb-3 mt-1">
+                <Icon className={`w-5 h-5 ${tier.theme.icon}`} />
+                <h4 className={`text-lg font-bold ${tier.theme.title}`}>{tier.label}</h4>
               </div>
 
               {/* Description */}
-              <p className="text-xs text-slate-600 mb-3">{tier.description}</p>
+              <p className={`text-xs ${tier.theme.muted} mb-4 leading-snug`}>
+                {tier.description}
+              </p>
 
               {/* Rate */}
               <div className="mb-4">
-                <p className={`text-2xl font-bold ${tier.theme.accent_text}`}>
+                <p className={`text-3xl font-bold ${tier.theme.title}`}>
                   ${rate.toFixed(2)}
-                  <span className="text-sm font-normal text-slate-500">/hr</span>
+                  <span className="text-sm font-normal ml-1">/hr</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className={`text-xs ${tier.theme.muted} mt-0.5`}>
                   {isWeekend ? 'Weekend Rate' : 'Weekday Rate'}
                 </p>
               </div>
 
               {/* Crew breakdown */}
-              <div className="text-xs text-slate-600 mb-4 space-y-0.5">
-                <p>
+              <div className={`text-sm ${tier.theme.title} space-y-1 mb-4`}>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 shrink-0" />
                   {tier.num_trucks === 0
                     ? 'No truck (labour only)'
                     : `${tier.num_trucks} truck${tier.num_trucks > 1 ? 's' : ''}`}
-                </p>
-                <p>{tier.num_crew} movers</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 shrink-0" />
+                  {tier.num_crew} movers
+                </div>
               </div>
 
-              {/* Always-clickable apply button. Applied tier shows "Applied · Re-apply" in green. */}
-              <button
-                type="button"
-                onClick={() => handleApply(tier.id)}
-                disabled={isInFlight}
-                className={`mt-auto w-full px-3 py-2 rounded-md text-sm font-semibold text-white transition-colors disabled:opacity-70 ${
-                  isApplied
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : `${tier.theme.button_bg} ${tier.theme.button_bg_hover}`
-                }`}
-              >
-                {isInFlight ? (
-                  'Applying...'
-                ) : isApplied ? (
-                  <span className="inline-flex items-center justify-center gap-1">
-                    <Check className="w-3.5 h-3.5" />
-                    Applied · Re-apply
-                  </span>
-                ) : (
-                  'Apply'
-                )}
-              </button>
-            </article>
+              {/* Status hint at card bottom */}
+              <div className={`mt-auto pt-2 text-xs font-semibold ${tier.theme.muted} border-t ${tier.theme.border} border-opacity-40`}>
+                {isBusy
+                  ? 'Working...'
+                  : isApplied
+                  ? '✓ Click again to remove'
+                  : 'Click to select'}
+              </div>
+            </button>
           )
         })}
       </div>
 
-      {/* Footer notices */}
-      {appliedId && (
-        <p className="mt-3 text-xs text-slate-500">
-          Applying a different package will update the existing Moving Labor charge.
-        </p>
-      )}
-      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-xs text-red-600 font-medium">{error}</p>}
     </section>
   )
 }
