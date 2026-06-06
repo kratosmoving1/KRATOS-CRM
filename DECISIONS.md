@@ -277,4 +277,14 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Stops section:** Four rows in order — Dispatch (departure) → 1 Pick-up → 2 Drop-off → Dispatch (return). Bottom dispatch row has a muted "(Return)" label. Both rows use the same `KRATOS_DISPATCH_ADDRESS` constant.
 
+## 2026-06 — Estimate tab hero row matches SmartMoving
+
+**Decision:** Estimate tab hero row shows: Move Size | Volume & Weight | Estimated Total | Est. Profit. The Package card was removed — package info lives in the tier recommendation section and in the Charges table (Moving Labor row).
+
+**Est. Profit placeholder cost model:** `cost = ($15/hr per mover + $25/hr per truck) × billable_hours`. This is a rough placeholder. Real cost model (fuel, insurance, wages) is a future Settings feature. The `calcProfit()` helper in `quote/page.tsx` is the single source — not duplicated elsewhere.
+
+**Placeholders (visual only, toast on click):** Trip Info section, Add Job tab, Add Rooms, Inventory button, Add End Date, Summary Breakdown, Recalculate. Re-rate Shipment, date picker pill, and Agent dropdown ARE functional.
+
+**Agent dropdown:** The Information card Agent row is now a `<select>` that loads `/api/admin/profiles` on estimate tab open and PATCHes `opportunities.sales_agent_id` on change. Uses existing PATCH allowlist — no schema change needed.
+
 ## (Append new decisions below as they happen)

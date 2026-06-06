@@ -113,22 +113,28 @@ export default function ChargesSection({
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         {/* Section header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setCollapsed(v => !v)}
+              className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              Charges
+            </button>
+            <button
+              type="button"
+              onClick={onAddCharge}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-700 transition-colors"
+            >
+              <Plus size={12} /> Add Charge
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setCollapsed(v => !v)}
-            className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+            className="text-slate-400 hover:text-slate-600 transition-colors"
           >
-            {collapsed
-              ? <ChevronRight size={13} />
-              : <ChevronDown size={13} />}
-            Charges
-          </button>
-          <button
-            type="button"
-            onClick={onAddCharge}
-            className="flex items-center gap-1.5 rounded-lg bg-kratos px-3 py-1.5 text-xs font-semibold text-slate-950 hover:opacity-90 transition-opacity"
-          >
-            <Plus size={12} /> Add Charge
+            {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
           </button>
         </div>
 

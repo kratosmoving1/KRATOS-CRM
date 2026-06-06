@@ -10,6 +10,7 @@ import {
   WalletCards, X, CalendarPlus, Boxes, ArrowRight,
   ClipboardCheck, ShieldCheck, Calendar, Pencil,
   FilePlus, Info, Briefcase, Bell, History, Activity,
+  Truck, Users, DollarSign, Package, MoreHorizontal, Plus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import StatusPill from '@/components/ui/StatusPill'
@@ -23,7 +24,6 @@ import EditAddressModal, { type EditAddressData } from '@/components/admin/modal
 import ChargesSection from '@/components/admin/charges/ChargesSection'
 import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
 import { PackageTierCards } from '@/components/admin/charges/PackageTierCards'
-import { PACKAGE_TIERS, detectAppliedTier } from '@/lib/packages/tiers'
 import DocsSidePanel, { type DocumentRow } from '@/components/admin/documents/DocsSidePanel'
 import DocumentPreviewModal from '@/components/admin/documents/DocumentPreviewModal'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
@@ -473,6 +473,9 @@ export default function OpportunityDetailPage() {
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [notesTab, setNotesTab] = useState<'internal' | 'customer' | 'crew' | 'dispatcher'>('internal')
 
+  // Profiles (for Agent dropdown in Information card)
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; email: string }[]>([])
+
   // Documents panel
   const [docsPanelOpen, setDocsPanelOpen] = useState(false)
   const [documentCount, setDocumentCount] = useState(0)
@@ -607,6 +610,47 @@ export default function OpportunityDetailPage() {
     }
   }
 
+  function calcProfit(lc: Record<string, unknown>, chargesSubtotal: number) {
+    const numCrew = Number(lc.num_crew ?? 0)
+    const numTrucks = Number(lc.num_trucks ?? 0)
+    const billableHours = Number(lc.billable_hours ?? lc.labor_hours ?? 0)
+    if (!billableHours || !numCrew) return null
+    const cost = (15 * numCrew + 25 * numTrucks) * billableHours
+    const profit = chargesSubtotal - cost
+    const margin = chargesSubtotal > 0 ? (profit / chargesSubtotal * 100) : 0
+    return { cost, profit, margin }
+  }
+
+  async function handleReRate(tierId: string | null) {
+    if (!tierId) { toast.info('Apply a package first'); return }
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/apply-package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier_id: tierId }),
+      })
+      if (res.ok) { await fetchCharges(); toast.success('Rate refreshed.') }
+      else toast.error('Re-rate failed')
+    } catch { toast.error('Network error') }
+  }
+
+  async function handleAgentChange(newAgentId: string) {
+    if (!opp) return
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sales_agent_id: newAgentId || null }),
+      })
+      if (!res.ok) { toast.error('Failed to update agent'); return }
+      const profile = profiles.find(p => p.id === newAgentId)
+      setOpp(p => p ? {
+        ...p,
+        agent: profile ? { id: profile.id, full_name: profile.full_name, email: profile.email } : null,
+      } : p)
+    } catch { toast.error('Network error') }
+  }
+
   function openAddressEdit(prefix: 'origin' | 'dest') {
     if (!opp) return
     const isOrigin = prefix === 'origin'
@@ -650,7 +694,15 @@ export default function OpportunityDetailPage() {
     if (tab === 'estimate') {
       fetchCharges()
       fetchTripData()
+      // Load profiles for Agent dropdown (only once per tab open)
+      if (profiles.length === 0) {
+        fetch('/api/admin/profiles')
+          .then(r => r.ok ? r.json() : [])
+          .then(data => setProfiles(data))
+          .catch(() => {})
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, fetchCharges, fetchTripData])
 
   async function deleteCharge(chargeId: string) {
@@ -1932,24 +1984,25 @@ export default function OpportunityDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Left: move details + addresses + notes */}
             <div className="space-y-4 lg:col-span-2">
-              {/* Stat cards */}
+              {/* Hero card row: MOVE SIZE | VOLUME & WEIGHT | ESTIMATED TOTAL | EST. PROFIT */}
               {(() => {
                 const vol = getVolumeForMoveSize(opp.move_size)
                 const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
                 const lc = laborCharge?.config ?? {}
-                const hourlyRate = Number(lc.hourly_rate ?? 0)
-                const configTierId = (lc.tier_id as string | null) ?? detectAppliedTier(laborCharge?.config)
-                const appliedTier = configTierId ? (PACKAGE_TIERS.find(t => t.id === configTierId) ?? null) : null
+                const tierIdInConfig = lc.tier_id as string | null
+                const profitData = laborCharge ? calcProfit(lc, subtotal) : null
 
                 return (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Size</p>
+                    {/* Card 1 — MOVE SIZE */}
+                    <div className="flex flex-col rounded-xl border border-slate-200 bg-white px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Move Size</p>
+                      <div className="flex-1">
                         <select
                           value={opp.move_size ?? ''}
                           onChange={event => saveMoveSize(event.target.value)}
                           disabled={savingMoveSize}
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20 disabled:opacity-60"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20 disabled:opacity-60"
                         >
                           <option value="">—</option>
                           {Object.entries(MOVE_SIZE_LABELS).map(([value, label]) => (
@@ -1958,40 +2011,194 @@ export default function OpportunityDetailPage() {
                         </select>
                         {vol && <p className="mt-0.5 text-[10px] text-slate-400">{vol.cuft.toLocaleString()} cu ft · {vol.lbs.toLocaleString()} lbs</p>}
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Move Date</p>
-                          <button
-                            type="button"
-                            onClick={openDateEdit}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            title="Edit move date"
-                          >
-                            <Calendar size={13} />
-                          </button>
-                        </div>
-                        <p className="mt-1 text-base font-bold text-slate-900 leading-tight">
-                          {opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}
-                        </p>
-                        {daysUntilMove && <p className="mt-0.5 text-[10px] text-slate-400">{daysUntilMove}</p>}
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        <button type="button" onClick={() => toast.info('Rooms editor coming soon')} className="text-[10px] text-slate-500 hover:text-slate-700">
+                          + ADD ROOMS
+                        </button>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Total</p>
-                        <p className="mt-1 text-base font-bold text-slate-900">
+                    </div>
+
+                    {/* Card 2 — VOLUME & WEIGHT */}
+                    <div className="flex flex-col rounded-xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Volume &amp; Weight</p>
+                        <button type="button" onClick={() => toast.info('Inventory editor coming soon')} className="flex items-center gap-0.5 text-[10px] text-slate-400 hover:text-slate-600">
+                          <Package size={11} /> Inventory
+                        </button>
+                      </div>
+                      <div className="flex-1 flex items-center gap-2 py-1">
+                        {vol ? (
+                          <>
+                            <span className="text-xl font-bold text-slate-900">{vol.cuft.toLocaleString()}<span className="text-xs font-normal text-slate-500 ml-0.5">cuft</span></span>
+                            <span className="text-slate-300">|</span>
+                            <span className="text-xl font-bold text-slate-900">{vol.lbs.toLocaleString()}<span className="text-xs font-normal text-slate-500 ml-0.5">lbs</span></span>
+                          </>
+                        ) : (
+                          <span className="text-xl font-bold text-slate-400">—</span>
+                        )}
+                      </div>
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Calculated from move size</p>
+                      </div>
+                    </div>
+
+                    {/* Card 3 — ESTIMATED TOTAL */}
+                    <div className="flex flex-col rounded-xl border border-slate-200 bg-orange-50/60 px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Estimated Total</p>
+                      <div className="flex-1 flex items-center">
+                        <p className="text-3xl font-bold text-slate-900">
                           {estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'}
                         </p>
-                        {balanceDue > 0 && <p className="mt-0.5 text-[10px] text-slate-400">Balance: {formatCurrency(balanceDue)}</p>}
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Package</p>
-                        <p className="mt-1 text-base font-bold text-slate-900">{appliedTier?.label ?? '—'}</p>
-                        {hourlyRate > 0 && <p className="mt-0.5 text-[10px] text-slate-400">${hourlyRate.toFixed(2)}/hr</p>}
+                      <div className="mt-2 border-t border-orange-100 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => handleReRate(tierIdInConfig)}
+                          className="text-[10px] text-slate-500 hover:text-slate-700"
+                        >
+                          🧾 RE-RATE SHIPMENT
+                        </button>
                       </div>
+                    </div>
+
+                    {/* Card 4 — EST. PROFIT */}
+                    <div className="flex flex-col rounded-xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Est. Profit</p>
+                        <button type="button" onClick={() => toast.info('Profit recalculation coming soon')} className="text-[10px] text-slate-400 hover:text-slate-600">
+                          🔄 Recalc
+                        </button>
+                      </div>
+                      <div className="flex-1 flex items-center">
+                        {profitData ? (
+                          <div>
+                            <p className={`text-xl font-bold ${profitData.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {profitData.margin.toFixed(1)}%
+                            </p>
+                            <p className={`text-xs font-medium ${profitData.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              ({profitData.profit >= 0 ? '+' : ''}{formatCurrency(profitData.profit)})
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xl font-bold text-slate-400">—</p>
+                        )}
+                      </div>
+                      <div className="mt-2 border-t border-slate-100 pt-2">
+                        <button type="button" onClick={() => toast.info('Breakdown view coming soon')} className="text-[10px] text-slate-500 hover:text-slate-700">
+                          👁 SUMMARY BREAKDOWN
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )
               })()}
 
-              {/* Trip Info — SmartMoving-style with dispatch, legs, map */}
+              {/* Trip Info section (slim) */}
+              <section className="bg-white rounded-lg border border-slate-200 px-5 py-3 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-slate-700">Trip Info</h3>
+                <button
+                  type="button"
+                  onClick={() => toast.info('Pickup/delivery spread coming soon')}
+                  className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  ADD PICK-UP / DELIVERY SPREAD
+                </button>
+              </section>
+
+              {/* Job tabs row */}
+              <div className="flex items-center border-b border-slate-200">
+                <button
+                  type="button"
+                  className="px-4 py-2 border-b-2 border-orange-500 text-sm font-medium text-slate-900 flex items-center gap-2"
+                >
+                  <span>Moving</span>
+                  <span className="text-xs text-slate-500">{opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}</span>
+                  <span className="text-xs text-slate-400">{formatQuoteNumber(opp.opportunity_number)}-1</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toast.info('Add Job coming soon')}
+                  title="Coming soon"
+                  className="px-4 py-2 text-sm text-slate-400 inline-flex items-center gap-1 cursor-not-allowed"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Job
+                </button>
+              </div>
+
+              {/* Job summary row */}
+              {(() => {
+                const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
+                const lc = laborCharge?.config ?? {}
+                const numTrucks = Number(lc.num_trucks ?? null)
+                const numCrew = Number(lc.num_crew ?? null)
+                const hourlyRate = Number(lc.hourly_rate ?? null)
+                const laborHours = Number(lc.billable_hours ?? lc.labor_hours ?? null)
+                const minHours = Number(lc.minimum_hours ?? null)
+                const hasStats = Boolean(laborCharge)
+
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 space-y-3">
+                    {/* Top row: label + status pills */}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Moving {formatQuoteNumber(opp.opportunity_number)}-1
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Unscheduled</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Unconfirmed</span>
+                        <button type="button" onClick={() => toast.info('Coming soon')} className="text-slate-400 hover:text-slate-600">
+                          <MoreHorizontal size={15} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="flex items-center gap-6 text-sm text-slate-700">
+                      <span className="flex items-center gap-1.5">
+                        <Truck size={13} className="text-slate-400" />
+                        {hasStats ? numTrucks : '—'}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Users size={13} className="text-slate-400" />
+                        {hasStats ? numCrew : '—'}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <DollarSign size={13} className="text-slate-400" />
+                        {hasStats ? `$${hourlyRate.toFixed(2)}/hr` : '—'}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Clock size={13} className="text-slate-400" />
+                        {hasStats ? `${laborHours}h (Min. ${minHours}h)` : '—'}
+                      </span>
+                    </div>
+
+                    {/* Bottom row: date pill + est charges */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={openDateEdit}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                        >
+                          <Calendar size={12} />
+                          {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'} @ TBD
+                        </button>
+                        <button type="button" onClick={() => toast.info('End date coming soon')} className="text-xs text-slate-400 hover:text-slate-600">
+                          + Add End Date
+                        </button>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700">
+                        Est. Moving Charges{' '}
+                        <span className="text-slate-900">{subtotal > 0 ? formatCurrency(subtotal) : '—'}</span>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Stops — SmartMoving-style with dispatch, legs, map */}
               {(() => {
                 const mapsUrl = buildMapsUrl(opp)
                 return (
@@ -2270,7 +2477,19 @@ export default function OpportunityDetailPage() {
                 <div className="space-y-2 text-sm">
                   <InfoRow label="Quote #" value={formatQuoteNumber(opp.opportunity_number)} />
                   <InfoRow label="Status" value={OPP_STATUSES.find(s => s.value === opp.status)?.label ?? opp.status} />
-                  <InfoRow label="Agent" value={opp.agent?.full_name ?? '—'} />
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 py-1.5">
+                    <span className="text-sm text-slate-500 shrink-0">Agent</span>
+                    <select
+                      value={opp.agent?.id ?? ''}
+                      onChange={e => handleAgentChange(e.target.value)}
+                      className="text-sm text-slate-900 bg-transparent hover:bg-slate-50 rounded px-1 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-400 max-w-[160px] truncate"
+                    >
+                      <option value="">Unassigned</option>
+                      {profiles.map(p => (
+                        <option key={p.id} value={p.id}>{p.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <InfoRow label="Source" value={opp.lead_source?.name ?? '—'} />
                   <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
                   <InfoRow label="Move date" value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} />
