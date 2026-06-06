@@ -5,17 +5,11 @@
 
 import { formatRate } from '@/lib/charges/format'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
+import { KRATOS_COMPANY } from '@/lib/constants/company'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const COMPANY = {
-  name: 'Kratos Moving Inc.',
-  phone: '(800) 321-3222',
-  email: 'hello@kratosmoving.ca',
-  address: '27 Roytec Rd, Woodbridge, ON L4L 8E3',
-  website: 'kratosmoving.ca',
-  slogan: 'Done As Promised',
-}
+const COMPANY = KRATOS_COMPANY
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

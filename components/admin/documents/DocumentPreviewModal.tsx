@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X, Send, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -32,9 +32,27 @@ interface Props {
 }
 
 export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }: Props) {
+  const [livDoc, setLivDoc] = useState<DocumentRow | null>(null)
+  const [loading, setLoading] = useState(false)
   const [markingSent, setMarkingSent] = useState(false)
 
+  // Re-fetch fresh rendered HTML every time the modal opens
+  useEffect(() => {
+    if (!isOpen || !doc) {
+      setLivDoc(null)
+      return
+    }
+    setLoading(true)
+    fetch(`/api/admin/documents/${doc.id}`)
+      .then(r => r.json())
+      .then(data => setLivDoc(data))
+      .catch(() => setLivDoc(doc))
+      .finally(() => setLoading(false))
+  }, [isOpen, doc])
+
   if (!isOpen || !doc) return null
+
+  const displayed = livDoc ?? doc
 
   async function handleMarkSent() {
     if (!doc) return
@@ -73,9 +91,9 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
             <h2 className="text-base font-semibold text-slate-900 truncate">{doc.name}</h2>
             <span className={cn(
               'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold',
-              STATUS_STYLES[doc.status] ?? 'bg-slate-100 text-slate-500',
+              STATUS_STYLES[displayed.status] ?? 'bg-slate-100 text-slate-500',
             )}>
-              {STATUS_LABELS[doc.status] ?? doc.status}
+              {STATUS_LABELS[displayed.status] ?? displayed.status}
             </span>
           </div>
           <button
@@ -89,10 +107,14 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {doc.rendered_html ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="animate-spin text-slate-400" size={22} />
+            </div>
+          ) : displayed.rendered_html ? (
             <div
               className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: doc.rendered_html }}
+              dangerouslySetInnerHTML={{ __html: displayed.rendered_html }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -110,12 +132,12 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
         <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
           <span className={cn(
             'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
-            STATUS_STYLES[doc.status] ?? 'bg-slate-100 text-slate-500',
+            STATUS_STYLES[displayed.status] ?? 'bg-slate-100 text-slate-500',
           )}>
-            Status: {STATUS_LABELS[doc.status] ?? doc.status}
+            Status: {STATUS_LABELS[displayed.status] ?? displayed.status}
           </span>
           <div className="flex items-center gap-2">
-            {doc.status === 'generated' && (
+            {displayed.status === 'generated' && (
               <button
                 type="button"
                 onClick={handleMarkSent}

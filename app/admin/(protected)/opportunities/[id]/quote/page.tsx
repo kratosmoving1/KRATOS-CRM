@@ -45,7 +45,8 @@ const CALL_OUTCOMES: Record<string, string> = {
   number_disconnected: 'Number Disconnected',
 }
 
-const DISPATCH_ADDRESS = '27 Roytec Rd, Woodbridge, ON L4L 8E3, Canada'
+import { KRATOS_DISPATCH_ADDRESS } from '@/lib/constants/company'
+const DISPATCH_ADDRESS = KRATOS_DISPATCH_ADDRESS
 
 interface TripLeg {
   label: string
@@ -2125,8 +2126,9 @@ export default function OpportunityDetailPage() {
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-kratos text-[11px] font-bold text-slate-950">
                             2
                           </div>
+                          <div className="mt-1 w-px flex-1 bg-slate-200" style={{ minHeight: 20 }} />
                         </div>
-                        <div className="min-w-0 flex-1">
+                        <div className="pb-4 min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
                               <MapPin size={10} /> Drop-off / Destination
@@ -2141,6 +2143,22 @@ export default function OpportunityDetailPage() {
                             </button>
                           </div>
                           <AddressBlock prefix="dest" data={opp} />
+                        </div>
+                      </div>
+
+                      {/* DISPATCH RETURN */}
+                      <div className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white">
+                            <div className="h-2 w-2 rounded-full bg-slate-400" />
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Dispatch</p>
+                          <p className="text-sm text-slate-600">
+                            {DISPATCH_ADDRESS}
+                            <span className="text-xs text-slate-400 ml-2">(Return)</span>
+                          </p>
                         </div>
                       </div>
                     </div>

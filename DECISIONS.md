@@ -265,4 +265,16 @@ Move date is edited inline in the Information card (calendar icon → date popov
 
 **Merge field engine** (`lib/documents/render.ts`): simple regex replace `{{token}}` → value from a context object built at render time. Falls back to `{{token}}` for unknown fields so partial data doesn't break documents.
 
+## 2026-06 — Document preview: live-render for draft statuses, frozen snapshot for sent+
+
+**Decision:** Documents render live from current opportunity data while in `not_started` or `generated` status. The GET `/api/admin/documents/[id]` route re-renders from the template + current DB data on every request. No intermediate snapshot is stored during preview.
+
+Status `sent` (and `viewed`, `signed`, `completed`) freeze the `rendered_html` snapshot — what the customer received is what stays. The PATCH handler for `status → sent` captures a fresh render into `rendered_html` at the exact moment of marking.
+
+This means agents can change addresses, charges, etc. and the next preview will reflect the updates, but once sent, the document is immutable.
+
+**Dispatch yard address:** constant in `lib/constants/company.ts → KRATOS_DISPATCH_ADDRESS`. Referenced in three places: `quote/page.tsx`, `travel-estimate/route.ts`, and `lib/documents/render.ts` (via `KRATOS_COMPANY.address`). One source, no string literals in application code.
+
+**Stops section:** Four rows in order — Dispatch (departure) → 1 Pick-up → 2 Drop-off → Dispatch (return). Bottom dispatch row has a muted "(Return)" label. Both rows use the same `KRATOS_DISPATCH_ADDRESS` constant.
+
 ## (Append new decisions below as they happen)

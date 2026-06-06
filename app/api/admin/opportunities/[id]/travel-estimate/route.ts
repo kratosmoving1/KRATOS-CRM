@@ -15,8 +15,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireActiveProfile } from '@/lib/auth/server'
 import { recommendReturnTravel } from '@/lib/tariff/packages'
+import { KRATOS_DISPATCH_ADDRESS } from '@/lib/constants/company'
 
-const DISPATCH_ADDRESS = '27 Roytec Rd, Woodbridge, ON L4L 8E3, Canada'
+const DISPATCH_ADDRESS = KRATOS_DISPATCH_ADDRESS
 
 type GoogleDistanceMatrixRow = {
   elements: Array<{

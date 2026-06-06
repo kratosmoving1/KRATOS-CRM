@@ -92,7 +92,7 @@ export function PackageTierCards({
       </div>
 
       {/* 4-card grid — extra top padding so ribbons don't clip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 pt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
         {PACKAGE_TIERS.map(tier => {
           const isRecommended = tier.id === recommendedId
           const isApplied = tier.id === appliedId
@@ -117,7 +117,7 @@ export function PackageTierCards({
               onClick={() => handleCardClick(tier.id)}
               disabled={!!busyId}
               aria-pressed={isApplied}
-              className={`group relative rounded-xl border-2 p-5 flex flex-col text-left transition-all duration-200 ${tier.theme.bg} ${tier.theme.bg_hover} ${tier.theme.border} ${stateRing} ${interactivity}`}
+              className={`group relative rounded-xl border-2 p-4 flex flex-col text-left transition-all duration-200 ${tier.theme.bg} ${tier.theme.bg_hover} ${tier.theme.border} ${stateRing} ${interactivity}`}
             >
               {/* RECOMMENDED ribbon */}
               {isRecommended && !isApplied && (
@@ -134,48 +134,37 @@ export function PackageTierCards({
                 </div>
               )}
 
-              {/* Icon + name */}
-              <div className="flex items-center gap-2 mb-3 mt-1">
+              {/* Tier name + icon */}
+              <div className="flex items-center gap-2 mb-2 mt-1">
                 <Icon className={`w-5 h-5 ${tier.theme.icon}`} />
-                <h4 className={`text-lg font-bold ${tier.theme.title}`}>{tier.label}</h4>
+                <h4 className={`text-base font-bold ${tier.theme.title}`}>{tier.label}</h4>
               </div>
-
-              {/* Description */}
-              <p className={`text-xs ${tier.theme.muted} mb-4 leading-snug`}>
-                {tier.description}
-              </p>
 
               {/* Rate */}
-              <div className="mb-4">
-                <p className={`text-3xl font-bold ${tier.theme.title}`}>
+              <div className="mb-3">
+                <p className={`text-2xl font-bold ${tier.theme.title} leading-tight`}>
                   ${rate.toFixed(2)}
-                  <span className="text-sm font-normal ml-1">/hr</span>
+                  <span className="text-xs font-normal ml-0.5">/hr</span>
                 </p>
-                <p className={`text-xs ${tier.theme.muted} mt-0.5`}>
-                  {isWeekend ? 'Weekend Rate' : 'Weekday Rate'}
+                <p className={`text-[11px] ${tier.theme.muted}`}>
+                  {isWeekend ? 'Weekend rate' : 'Weekday rate'}
                 </p>
               </div>
 
-              {/* Crew breakdown */}
-              <div className={`text-sm ${tier.theme.title} space-y-1 mb-4`}>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 shrink-0" />
-                  {tier.num_trucks === 0
-                    ? 'No truck (labour only)'
-                    : `${tier.num_trucks} truck${tier.num_trucks > 1 ? 's' : ''}`}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 shrink-0" />
-                  {tier.num_crew} movers
-                </div>
-              </div>
+              {/* Crew breakdown — single line */}
+              <p className={`text-xs ${tier.theme.title} mb-3`}>
+                {tier.num_trucks === 0
+                  ? 'Labour only · '
+                  : `${tier.num_trucks} truck${tier.num_trucks > 1 ? 's' : ''} · `}
+                {tier.num_crew} movers
+              </p>
 
-              {/* Status hint at card bottom */}
-              <div className={`mt-auto pt-2 text-xs font-semibold ${tier.theme.muted} border-t ${tier.theme.border} border-opacity-40`}>
+              {/* Status hint */}
+              <div className={`mt-auto pt-2 text-[11px] font-medium ${tier.theme.muted} border-t ${tier.theme.border} border-opacity-40`}>
                 {isBusy
                   ? 'Working...'
                   : isApplied
-                  ? '✓ Click again to remove'
+                  ? '✓ Click to remove'
                   : 'Click to select'}
               </div>
             </button>
