@@ -57,6 +57,7 @@ export const PACKAGE_TIERS: PackageTier[] = [
     recommended_for: [
       'studio_apartment',
       '1_bedroom_apartment',
+      '1_bedroom_house',
       'partial',
       'storage_5x5',
       'storage_5x10',
@@ -86,7 +87,6 @@ export const PACKAGE_TIERS: PackageTier[] = [
     recommended_for: [
       '2_bedroom_apartment',
       '3_bedroom_apartment',
-      '1_bedroom_house',
       '2_bedroom_house',
       '3_bedroom_house',
       'small_office',

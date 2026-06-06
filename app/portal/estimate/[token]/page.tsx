@@ -4,6 +4,7 @@ import { MOVE_SIZE_LABELS } from '@/lib/constants'
 import EstimatePortalContent, { type PortalCharge, type PortalPageData } from '@/components/portal/EstimatePortalContent'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 type PageProps = {
   params: { token: string }
@@ -59,7 +60,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     .from('opportunities')
     .select('*, customer:customers!customer_id(full_name, email, phone)')
     .eq('id', link.opportunity_id)
-    .eq('is_deleted', false)
+    .neq('is_deleted', true)
     .single()
 
   if (!opp) return <PortalError title="Estimate not found" />

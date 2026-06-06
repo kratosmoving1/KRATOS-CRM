@@ -287,4 +287,24 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Agent dropdown:** The Information card Agent row is now a `<select>` that loads `/api/admin/profiles` on estimate tab open and PATCHes `opportunities.sales_agent_id` on change. Uses existing PATCH allowlist — no schema change needed.
 
+## 2026-06 — Customer portal at /portal/estimate/[token] is force-dynamic
+
+**Decision:** The customer portal at `/portal/estimate/[token]` is rendered with `export const dynamic = 'force-dynamic'` and `export const revalidate = 0`. All opportunity data (charges, addresses, move size, move date, tier) is read live from the database on every request. No caching, no snapshots, no stored totals are trusted.
+
+**Reasoning:** The portal must always reflect the latest state in the CRM. If an agent changes the tier, rate, or any charge, the customer reloading the portal URL must see the new data immediately.
+
+**Implication:** Do not add `unstable_cache`, fetch caching, or any snapshot column reads to the portal route. The `rendered_html` column on the `documents` table is for generated documents only — not for the portal.
+
+## 2026-06 — 1 Bedroom House recommends Silver tier
+
+**Decision:** The `1_bedroom_house` move size maps to the Silver tier in `lib/packages/tiers.ts → recommended_for`. It was previously in Gold's array and has been moved to Silver's.
+
+**Reasoning:** A 1BR house contents fit comfortably in a small truck with 2 movers. 3 movers (Gold) is overkill and overprices the job. Silver (1 truck, 2 movers) is the correct default.
+
+## 2026-06 — Date pill in Estimate tab job summary row is the primary date-editing affordance
+
+**Decision:** The date pill in the Estimate tab's job summary row is a clickable inline editor. Clicking it transforms the pill into a native `<input type="date">` that saves on blur or Enter, and cancels on Escape. It PATCHes `service_date` via the general `PATCH /api/admin/opportunities/[id]` route.
+
+**End Date is not in scope.** The "+ Add End Date" placeholder has been removed entirely. If end dates are added in the future, they will be a new feature, not a re-addition of this placeholder.
+
 ## (Append new decisions below as they happen)

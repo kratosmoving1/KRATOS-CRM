@@ -404,11 +404,15 @@ export default function OpportunityDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Move date inline edit
+  // Move date inline edit (Information card modal)
   const [showDateEdit, setShowDateEdit] = useState(false)
   const [editingDate, setEditingDate] = useState('')
   const [editingTbd, setEditingTbd] = useState(false)
   const [savingDate, setSavingDate] = useState(false)
+
+  // Date pill inline edit (Estimate tab job summary row)
+  const [editingPillDate, setEditingPillDate] = useState(false)
+  const [savingPillDate, setSavingPillDate] = useState(false)
 
   // Address edit modal
   const [addressEditData, setAddressEditData] = useState<EditAddressData | null>(null)
@@ -607,6 +611,35 @@ export default function OpportunityDetailPage() {
       toast.error('Network error — please try again')
     } finally {
       setSavingDate(false)
+    }
+  }
+
+  async function commitPillDate(newDate: string) {
+    if (!opp) return
+    const currentDate = opp.service_date ?? ''
+    if (!newDate || newDate === currentDate) {
+      setEditingPillDate(false)
+      return
+    }
+    setSavingPillDate(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service_date: newDate }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(j.error || 'Failed to update date')
+        return
+      }
+      setOpp(p => p ? { ...p, service_date: j.service_date } : p)
+      toast.success('Move date updated.')
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setSavingPillDate(false)
+      setEditingPillDate(false)
     }
   }
 
@@ -2177,17 +2210,29 @@ export default function OpportunityDetailPage() {
                     {/* Bottom row: date pill + est charges */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={openDateEdit}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
-                        >
-                          <Calendar size={12} />
-                          {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'} @ TBD
-                        </button>
-                        <button type="button" onClick={() => toast.info('End date coming soon')} className="text-xs text-slate-400 hover:text-slate-600">
-                          + Add End Date
-                        </button>
+                        {editingPillDate ? (
+                          <input
+                            type="date"
+                            defaultValue={opp.service_date ?? ''}
+                            autoFocus
+                            disabled={savingPillDate}
+                            onBlur={(e) => { commitPillDate(e.target.value) }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setEditingPillDate(false)
+                              if (e.key === 'Enter') commitPillDate((e.target as HTMLInputElement).value)
+                            }}
+                            className="px-3 py-1 rounded-md border border-orange-400 ring-2 ring-orange-100 text-xs text-slate-900 focus:outline-none"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingPillDate(true)}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                          >
+                            <Calendar size={12} />
+                            {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'} @ TBD
+                          </button>
+                        )}
                       </div>
                       <span className="text-xs font-semibold text-slate-700">
                         Est. Moving Charges{' '}
