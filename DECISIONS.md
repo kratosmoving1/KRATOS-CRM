@@ -307,4 +307,16 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **End Date is not in scope.** The "+ Add End Date" placeholder has been removed entirely. If end dates are added in the future, they will be a new feature, not a re-addition of this placeholder.
 
+## 2026-06 — Workforce board uses @dnd-kit for drag-drop
+
+**Decision:** The Workforce board at `/admin/workforce` uses `@dnd-kit/core` + `@dnd-kit/sortable` for drag-and-drop. Do not use `react-beautiful-dnd` (deprecated) or HTML5 native drag (poor UX on mobile).
+
+**Position model:** Column and person positions are integers stored in `workforce_columns.position` and `workforce_people.position`. Every drag-end sends a full reorder batch to `/api/admin/workforce/columns/reorder` or `/api/admin/workforce/people/reorder`, which renumbers all affected rows in one round trip. No gaps or fractional positions.
+
+**Soft delete — not cascade:** Columns and people are soft-deleted (`is_deleted = true`). When a column is deleted, its people become unassigned (`column_id = null`) rather than cascade-deleted. This prevents accidental data loss.
+
+**Taxonomy tables:** Statuses and tiers are stored in `workforce_statuses` and `workforce_tiers` tables with seeded defaults. The UI always renders from these rows — nothing is hardcoded in components. A settings page for editing/adding statuses and tiers ships in Phase 2.
+
+**Unassigned people (Phase 2):** People with `column_id = null` are not currently visible on the board. Phase 2 will add an "Unassigned" virtual column or a stash panel to surface them.
+
 ## (Append new decisions below as they happen)

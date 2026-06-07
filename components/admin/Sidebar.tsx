@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Warehouse,
   Users,
+  HardHat,
   Phone,
   Bell,
   Receipt,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: '/admin/follow-ups',    label: 'Follow-ups',    icon: Bell },
   { href: '/admin/invoices',      label: 'Invoices',      icon: Receipt },
   { href: '/admin/reports',       label: 'Reports',       icon: BarChart2 },
+  { href: '/admin/workforce',     label: 'Workforce',     icon: HardHat },
   { href: '/admin/settings',      label: 'Settings',      icon: Settings },
 ]
 

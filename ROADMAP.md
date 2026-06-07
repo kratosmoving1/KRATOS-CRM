@@ -150,6 +150,27 @@ The "Now" section is what the current session is working on. The "Next" section 
 - Charges table and sidebar totals refresh automatically after apply
 - Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
 
+## ✅ Done (Workforce Board Phase 1)
+
+- New `workforce_columns`, `workforce_statuses`, `workforce_tiers`, `workforce_people` tables with triggers, indexes, RLS
+- Seeded 3 statuses (Solid/Inconsistent/Problem) and 8 tiers (S/A/B/C/D/E/F/X)
+- Sidebar entry "Workforce" with HardHat icon between Reports and Settings
+- `/admin/workforce` Kanban board with drag-and-drop columns and cards (`@dnd-kit`)
+- Create / rename / delete columns
+- Create / delete people cards
+- Inline edit: name, role, status (badge dropdown), tier (badge dropdown)
+- All changes persist to Supabase via API routes
+- API routes: board GET, columns CRUD + reorder, people CRUD + reorder
+
+## 🔧 Now — Workforce Board Phase 2
+
+- Search / filter (by status, tier, role) + sort
+- Detail drawer for optional fields (notes, tenure, referred_by)
+- Settings page to edit/add/delete statuses and tiers
+- "Unassigned" virtual column for people with column_id = null
+- Multi-select / bulk actions
+- Activity log of moves
+
 ## 🔧 Next
 
 ### Document Templates Phase 1B — Per-Opportunity Document Generation (next session)

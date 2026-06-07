@@ -418,6 +418,90 @@ Generated document instances for a specific opportunity. Each row is a rendered 
 
 ---
 
+---
+
+## Table: `workforce_columns`
+
+Freeform grouping columns on the Workforce Kanban board.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `name` | `text` | Column display name |
+| `position` | `integer` | Sort order (0 = leftmost) |
+| `color` | `text \| null` | Optional hex accent for column header |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+---
+
+## Table: `workforce_statuses`
+
+Configurable status taxonomy for workforce members (e.g. Solid/Inconsistent/Problem).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `key` | `text` | Unique stable identifier (e.g. `solid`) |
+| `label` | `text` | Display label (e.g. `Solid`) |
+| `color` | `text` | Hex color string (e.g. `#22c55e`) |
+| `position` | `integer` | Display order |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+
+**Seeded defaults:** Solid (`#22c55e`), Inconsistent (`#f59e0b`), Problem (`#ef4444`)
+
+---
+
+## Table: `workforce_tiers`
+
+Configurable rating ladder for workforce members (S → F + X).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `key` | `text` | Unique stable identifier (e.g. `S`, `A`, `X`) |
+| `label` | `text` | Display label (usually same as key) |
+| `color` | `text` | Hex color string |
+| `position` | `integer` | Display order (0 = best) |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+
+**Seeded defaults:** S (gold), A (violet), B (blue), C (green), D (yellow), E (orange), F (red), X (slate/unrated)
+
+---
+
+## Table: `workforce_people`
+
+Individual workforce members (cards) on the Workforce board.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `name` | `text` | Person's display name |
+| `role` | `text \| null` | Role label (e.g. "Crew Lead") |
+| `status_id` | `uuid \| null` | FK to `workforce_statuses.id` (SET NULL on delete) |
+| `tier_id` | `uuid \| null` | FK to `workforce_tiers.id` (SET NULL on delete) |
+| `tenure_started_at` | `date \| null` | When they started (Phase 2 detail drawer) |
+| `referred_by` | `text \| null` | Who referred them (Phase 2 detail drawer) |
+| `column_id` | `uuid \| null` | FK to `workforce_columns.id` (SET NULL on delete); null = unassigned |
+| `position` | `integer` | Sort order within the column |
+| `notes` | `text \| null` | Internal notes (Phase 2 detail drawer) |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+---
+
 ## Common Mistakes to Avoid
 
 These column name mistakes have appeared repeatedly in past sessions and broken saves:
