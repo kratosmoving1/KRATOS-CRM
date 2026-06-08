@@ -319,4 +319,28 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Unassigned people (Phase 2):** People with `column_id = null` are not currently visible on the board. Phase 2 will add an "Unassigned" virtual column or a stash panel to surface them.
 
+## 2026-06 — Dispatch is the top-level container for crew-related views
+
+**Decision:** "Dispatch" replaces the standalone "Workforce" sidebar entry. Dispatch is a top-level nav item with two tabs: Workforce (primary, default) and Calendar (deferred placeholder). The sidebar link goes to `/admin/dispatch` which redirects to `/admin/dispatch/workforce`.
+
+**Reasoning:** Workforce management and calendar scheduling are tightly coupled operationally. Grouping them under a single Dispatch umbrella is cleaner than two separate top-level entries. The old `/admin/workforce` page redirects to the new location.
+
+## 2026-06 — People list view is the primary workforce surface
+
+**Decision:** The default view at `/admin/dispatch/workforce` is a grid of person cards (list view). The kanban board at `/admin/dispatch/workforce/board` is a secondary view. List is default because it's better for viewing and editing rich person attributes. The board is for organizing people into freeform columns.
+
+**View toggle:** List | Board toggle in the top-right of the workforce page. Both views read from the same `fetchBoardState()` data source.
+
+## 2026-06 — Profile pictures stored in Supabase Storage bucket `workforce-photos`
+
+**Decision:** Profile pictures are uploaded directly from the browser to Supabase Storage using the anon-key client (no API route proxy). Bucket `workforce-photos` is public (URLs are accessible without auth). 5MB file size limit. JPEG/PNG/WebP/GIF allowed.
+
+**Upload pattern:** `createClient()` from `@/lib/supabase/client` + `supabase.storage.from('workforce-photos').upload(...)`. Plain `<img>` tag for display (not Next.js `<Image>`) — Supabase Storage domain is not in the Next.js image allowlist and configuring it is extra work not worth it here.
+
+## 2026-06 — Locations and roles are configurable taxonomies (stored in DB)
+
+**Decision:** `workforce_locations` and `workforce_roles` are separate tables with `key`, `label`, `color`, `position` columns — same pattern as `workforce_statuses` and `workforce_tiers`. Seeded with Kratos-specific defaults. Settings UI for editing/adding/deleting these taxonomies ships in a later prompt.
+
+**Rationale:** Hardcoding locations in the UI would prevent AJ from adding new cities (e.g. when expanding) without a code change. The DB-driven approach scales to any configurable taxonomy.
+
 ## (Append new decisions below as they happen)

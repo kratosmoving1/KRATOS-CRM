@@ -6,7 +6,7 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const [colRes, peopleRes, statusRes, tierRes] = await Promise.all([
+  const [colRes, peopleRes, statusRes, tierRes, roleRes, locationRes] = await Promise.all([
     supabase
       .from('workforce_columns')
       .select('id, name, position, color')
@@ -14,7 +14,14 @@ export async function GET() {
       .order('position', { ascending: true }),
     supabase
       .from('workforce_people')
-      .select('id, name, role, status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes, status:workforce_statuses(id,key,label,color,position), tier:workforce_tiers(id,key,label,color,position)')
+      .select(`
+        id, name, role, role_id, location_id, english_proficiency, profile_picture_url,
+        status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes,
+        status:workforce_statuses(id,key,label,color,position),
+        tier:workforce_tiers(id,key,label,color,position),
+        role_data:workforce_roles(id,key,label,color,position),
+        location:workforce_locations(id,key,label,color,position)
+      `)
       .neq('is_deleted', true)
       .order('position', { ascending: true }),
     supabase
@@ -27,6 +34,16 @@ export async function GET() {
       .select('id, key, label, color, position')
       .neq('is_deleted', true)
       .order('position', { ascending: true }),
+    supabase
+      .from('workforce_roles')
+      .select('id, key, label, color, position')
+      .neq('is_deleted', true)
+      .order('position', { ascending: true }),
+    supabase
+      .from('workforce_locations')
+      .select('id, key, label, color, position')
+      .neq('is_deleted', true)
+      .order('position', { ascending: true }),
   ])
 
   return NextResponse.json({
@@ -34,5 +51,7 @@ export async function GET() {
     people: peopleRes.data ?? [],
     statuses: statusRes.data ?? [],
     tiers: tierRes.data ?? [],
+    roles: roleRes.data ?? [],
+    locations: locationRes.data ?? [],
   })
 }

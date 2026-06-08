@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const ALLOWED = ['name', 'role', 'status_id', 'tier_id', 'tenure_started_at', 'referred_by', 'column_id', 'position', 'notes']
+const ALLOWED = [
+  'name', 'role', 'role_id', 'location_id', 'status_id', 'tier_id',
+  'english_proficiency', 'profile_picture_url',
+  'tenure_started_at', 'referred_by',
+  'column_id', 'position', 'notes',
+]
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -17,7 +22,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .update(payload)
     .eq('id', params.id)
     .neq('is_deleted', true)
-    .select('id, name, role, status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes')
+    .select(`
+      id, name, role, role_id, location_id, english_proficiency, profile_picture_url,
+      status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes,
+      status:workforce_statuses(id,key,label,color,position),
+      tier:workforce_tiers(id,key,label,color,position),
+      role_data:workforce_roles(id,key,label,color,position),
+      location:workforce_locations(id,key,label,color,position)
+    `)
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

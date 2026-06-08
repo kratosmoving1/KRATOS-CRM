@@ -150,6 +150,22 @@ The "Now" section is what the current session is working on. The "Next" section 
 - Charges table and sidebar totals refresh automatically after apply
 - Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
 
+## ✅ Done (Dispatch Restructure + People Database)
+
+- Sidebar: replaced top-level "Workforce" with "Dispatch" (Truck icon)
+- New Dispatch layout at `/admin/dispatch` with Workforce + Calendar tabs
+- Calendar tab: "Coming soon" placeholder
+- Old `/admin/workforce` redirects to `/admin/dispatch/workforce`
+- New tables: `workforce_locations` (5 seeded), `workforce_roles` (5 seeded)
+- New columns on `workforce_people`: `role_id`, `location_id`, `english_proficiency`, `profile_picture_url`
+- Supabase Storage bucket `workforce-photos` (public, 5MB, JPEG/PNG/WebP/GIF)
+- People List View: grid of person cards with avatar, role, location, English, status, tier
+- Add Person modal: all fields + profile picture upload (direct to Supabase Storage)
+- Edit Person drawer: all fields + change photo + tenure/referred_by + explicit Save + delete confirm
+- Filter bar: search + multi-select Role/Location/Status/Tier/English
+- View toggle: List (default) | Board (existing kanban preserved at /board)
+- API routes: locations (GET/POST), roles (GET/POST), people PATCH allowlist extended
+
 ## ✅ Done (Workforce Board Phase 1)
 
 - New `workforce_columns`, `workforce_statuses`, `workforce_tiers`, `workforce_people` tables with triggers, indexes, RLS
@@ -162,14 +178,13 @@ The "Now" section is what the current session is working on. The "Next" section 
 - All changes persist to Supabase via API routes
 - API routes: board GET, columns CRUD + reorder, people CRUD + reorder
 
-## 🔧 Now — Workforce Board Phase 2
+## 🔜 Dispatch next steps
 
-- Search / filter (by status, tier, role) + sort
-- Detail drawer for optional fields (notes, tenure, referred_by)
-- Settings page to edit/add/delete statuses and tiers
-- "Unassigned" virtual column for people with column_id = null
-- Multi-select / bulk actions
-- Activity log of moves
+- Settings page for editing/adding/deleting locations, roles, statuses, tiers taxonomies
+- Dispatch Calendar (crew schedules and job assignments)
+- Bulk select / bulk actions on people list
+- "Unassigned" virtual column on kanban board for people with column_id = null
+- Person performance metrics (jobs completed, hours, etc.)
 
 ## 🔧 Next
 

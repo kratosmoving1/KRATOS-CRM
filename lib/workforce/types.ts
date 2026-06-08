@@ -21,10 +21,31 @@ export interface WorkforceColumn {
   color: string | null
 }
 
+export interface WorkforceRole {
+  id: string
+  key: string
+  label: string
+  color: string
+  position: number
+}
+
+export interface WorkforceLocation {
+  id: string
+  key: string
+  label: string
+  color: string
+  position: number
+}
+
 export interface WorkforcePerson {
   id: string
   name: string
+  /** Legacy free-text role field — used by the kanban inline editor */
   role: string | null
+  role_id: string | null
+  location_id: string | null
+  english_proficiency: string | null
+  profile_picture_url: string | null
   status_id: string | null
   tier_id: string | null
   tenure_started_at: string | null
@@ -34,6 +55,8 @@ export interface WorkforcePerson {
   notes: string | null
   status?: WorkforceStatus | null
   tier?: WorkforceTier | null
+  role_data?: WorkforceRole | null
+  location?: WorkforceLocation | null
 }
 
 export interface BoardState {
@@ -41,4 +64,6 @@ export interface BoardState {
   people: WorkforcePerson[]
   statuses: WorkforceStatus[]
   tiers: WorkforceTier[]
+  roles: WorkforceRole[]
+  locations: WorkforceLocation[]
 }

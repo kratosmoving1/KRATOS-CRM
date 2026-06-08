@@ -420,6 +420,59 @@ Generated document instances for a specific opportunity. Each row is a rendered 
 
 ---
 
+## Table: `workforce_locations`
+
+Configurable location taxonomy for workforce members (e.g. GTA, Kitchener-Waterloo, London, Manitoba).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `key` | `text` | Unique stable identifier (e.g. `gta`, `kitchener_waterloo`) |
+| `label` | `text` | Display label |
+| `color` | `text` | Hex color string (default `#64748b`) |
+| `position` | `integer` | Display order |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+
+**Seeded defaults:** GTA (blue), Kitchener-Waterloo (violet), London (emerald), Manitoba (amber), Other (slate)
+
+---
+
+## Table: `workforce_roles`
+
+Configurable role taxonomy for workforce members (e.g. Driver, Helper, Crew Lead, Foreman, Packer).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `key` | `text` | Unique stable identifier (e.g. `driver`, `crew_lead`) |
+| `label` | `text` | Display label |
+| `color` | `text` | Hex color string (default `#64748b`) |
+| `position` | `integer` | Display order |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+
+**Seeded defaults:** Driver (blue), Helper (emerald), Crew Lead (amber), Foreman (violet), Packer (slate)
+
+---
+
+## New columns on `workforce_people` (added in Dispatch restructure session)
+
+| Column | Type | Description |
+|---|---|---|
+| `role_id` | `uuid \| null` | FK to `workforce_roles.id` (SET NULL on delete) |
+| `location_id` | `uuid \| null` | FK to `workforce_locations.id` (SET NULL on delete) |
+| `english_proficiency` | `text \| null` | One of: `basic`, `intermediate`, `advanced`, `fluent`, `native` |
+| `profile_picture_url` | `text \| null` | Public URL to Supabase Storage profile picture |
+
+The original `role` text column is retained for backward compatibility with the kanban inline editor.
+
+---
+
 ## Table: `workforce_columns`
 
 Freeform grouping columns on the Workforce Kanban board.
