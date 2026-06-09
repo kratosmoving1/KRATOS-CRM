@@ -165,13 +165,22 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 **AJ action required:** Add `GOOGLE_MAPS_SERVER_API_KEY` env var in Vercel (see Step 1 of the prompt for Google Cloud setup).
 
+## ✅ Done (Dispatch Day-Detail Bridge View — 3-column layout)
+
+- `components/admin/dispatch/DispatchDayDetail.tsx` restructured to three-column SmartMoving layout
+- LEFT (240px): Resources panel — Trucks/Crew tabs (disabled), "No trucks yet" empty state, disabled "+ Add truck (coming soon)" button
+- MIDDLE (flex): Schedule panel — hours axis 8a–6p, vertical gridlines via CSS background pattern, empty state with explanatory copy (Phase B2)
+- RIGHT (300px): Jobs panel — real booked/completed events, job cards with customer name, total, move size, route, `⏱ TBD` time placeholder
+- Mobile: columns stack vertically (`grid-cols-1` → `md:grid-cols-[240px_1fr_300px]`)
+- Stats strip (Booked / Completed / Revenue) preserved above the grid
+- Header (Back to month + prev/next day) preserved
+
 ## ✅ Done (Dispatch Calendar Rebuild)
 
 - Removed react-big-calendar (CSS conflict with Tailwind)
 - Custom MonthGrid: clean 7-column grid, today highlighted orange, event bars with status colors, "+N more" overflow
 - Month navigation: prev/next/today buttons, URL query-param driven (?year=&month=)
 - Click any day → drill into `/admin/dispatch/calendar/[date]`
-- Day detail page: stats strip (booked count, completed count, revenue), job list with customer/route/total, resource panel placeholder
 - `lib/dispatch/calendar.ts` extended with `total_amount` field
 
 ## ✅ Done (People Form Bug Fixes + Dispatch Calendar)
@@ -211,8 +220,10 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ## 🔜 Dispatch next steps
 
+- **Phase B1:** Trucks data model + Resources panel populates with real truck list
+- **Phase B2:** `move_time_start` column on opportunities + crew/truck assignment table → Schedule grid rows + Jobs panel shows actual start time
+- **Phase B3:** Drag-and-drop in the Schedule grid (drag jobs from Jobs panel onto truck rows at specific times)
 - Settings page for editing/adding/deleting locations, roles, statuses, tiers taxonomies
-- Dispatch Calendar (crew schedules and job assignments)
 - Bulk select / bulk actions on people list
 - "Unassigned" virtual column on kanban board for people with column_id = null
 - Person performance metrics (jobs completed, hours, etc.)

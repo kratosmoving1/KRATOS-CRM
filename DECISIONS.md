@@ -398,4 +398,16 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Auto-recompute always wins:** No manual override flag on the Trip & Travel charge yet. Phase 2 will add `is_overridden` support so dispatchers can lock a custom value.
 
+## 2026-06 — Dispatch day-detail uses a three-column layout matching SmartMoving
+
+**Decision:** `/admin/dispatch/calendar/[date]` uses a three-column layout: Resources panel (240px fixed left), Schedule grid (flexible middle), Jobs panel (300px fixed right). Implemented in `components/admin/dispatch/DispatchDayDetail.tsx`.
+
+- **Resources (left):** Trucks/Crew tabs (visually present, disabled). "No trucks yet" empty state with disabled "+ Add truck (coming soon)" button. Wired in Phase B1.
+- **Schedule (middle):** Hours axis 8a–6p across the top. Vertical gridlines implied via CSS background-image pattern. Empty state with explanatory copy. Wired in Phase B2.
+- **Jobs (right):** Real data from existing `fetchDispatchCalendarEvents`. Job cards show customer name, total, move size, route, and a `⏱ TBD` time placeholder (until `move_time_start` lands in Phase B2).
+
+**Reasoning:** Matches SmartMoving's Scheduling tab structure — the visual scaffold is in place before the data layer (trucks + assignments) exists, so Phase B1/B2/B3 can drop into a working layout without a re-layout session.
+
+**Column layout:** `grid grid-cols-1 md:grid-cols-[240px_1fr_300px]` — stacks vertically on mobile.
+
 ## (Append new decisions below as they happen)
