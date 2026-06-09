@@ -161,7 +161,6 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
   // Labour breakdown
   const [loadH, setLoadH] = useState(String(cfg.load_hours ?? ''))
   const [unloadH, setUnloadH] = useState(String(cfg.unload_hours ?? ''))
-  const [bufferH, setBufferH] = useState(String(cfg.handling_buffer_hours ?? ''))
 
   // Access challenge handicaps
   const [hOrigin, setHOrigin] = useState(String(cfg.handicap_origin ?? 0))
@@ -175,7 +174,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
   )
   const [discountValue, setDiscountValue] = useState(String(initial?.discount_value ?? ''))
 
-  const laborHours = numVal(loadH) + numVal(unloadH) + numVal(bufferH)
+  const laborHours = numVal(loadH) + numVal(unloadH)
 
   const calcResult = useCallback(() => {
     const c = {
@@ -199,7 +198,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       billable_hours,
       load_hours: numVal(loadH),
       unload_hours: numVal(unloadH),
-      handling_buffer_hours: numVal(bufferH),
+      handling_buffer_hours: 0,
       package_name: pkgName.trim() || null,
       distance_km: cfg.distance_km ?? null,
       drive_time_minutes: cfg.drive_time_minutes ?? null,
@@ -218,7 +217,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       is_overridden: Boolean(overrideReason.trim()),
     })
     return { total_hours, billable_hours, subtotal }
-  }, [trucks, crew, rate, laborHours, loadH, unloadH, bufferH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
+  }, [trucks, crew, rate, laborHours, loadH, unloadH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
 
   useEffect(() => { calcResult() }, [calcResult])
 
@@ -249,15 +248,9 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estimated Time</p>
 
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Labour</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <FInput label="Loading (h)" type="number" min={0} step="0.25" value={loadH} onChange={e => setLoadH(e.target.value)} placeholder="0" />
           <FInput label="Unloading (h)" type="number" min={0} step="0.25" value={unloadH} onChange={e => setUnloadH(e.target.value)} placeholder="0" />
-          <FInput label="Buffer (h)" type="number" min={0} step="0.25" value={bufferH} onChange={e => setBufferH(e.target.value)} placeholder="0" />
-        </div>
-        <div className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
-          <span className="text-xs text-slate-500">Labour subtotal</span>
-          <span className="text-sm font-semibold text-slate-800">{laborHours}h</span>
         </div>
 
         {/* Access challenges (secondary) */}

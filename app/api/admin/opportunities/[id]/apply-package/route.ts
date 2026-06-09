@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { PACKAGE_TIERS, getRateForDate } from '@/lib/packages/tiers'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import { syncTravelCharge } from '@/lib/charges/syncTravelCharge'
+import { getDefaultLaborHours } from '@/lib/charges/laborDefaults'
 import type { Json } from '@/types/database'
 
 const MINIMUM_HOURS = 3
@@ -18,10 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: `Unknown tier: ${tier_id}` }, { status: 400 })
   }
 
-  // Fetch opportunity — include dest address fields for travel charge sync
+  // Fetch opportunity — include move_size and dest address for labor defaults + travel sync
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
-    .select('id, service_date, dest_address_line1, dest_city, dest_province, dest_postal_code')
+    .select('id, service_date, move_size, dest_address_line1, dest_city, dest_province, dest_postal_code')
     .eq('id', params.id)
     .neq('is_deleted', true)
     .maybeSingle()
@@ -31,17 +32,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const { rate, isWeekend } = getRateForDate(tier, opp.service_date)
-
-  console.log('[apply-package]', {
-    opportunity_id: params.id,
-    tier_id: tier.id,
-    move_date: opp.service_date,
-    resolved_rate: rate,
-    is_weekend: isWeekend,
-  })
-
-  const labor_hours = MINIMUM_HOURS
-  const billable_hours = MINIMUM_HOURS
+  const laborDef = getDefaultLaborHours(opp.move_size)
+  const labor_hours = laborDef.load_hours + laborDef.unload_hours
+  const billable_hours = Math.max(labor_hours, MINIMUM_HOURS)
   const subtotal = +(billable_hours * rate).toFixed(2)
   const description = `${billable_hours}h @ $${rate.toFixed(2)}/hr (${tier.num_trucks} truck, ${tier.num_crew} crew)${isWeekend ? ' — Weekend rate' : ''}`
 
@@ -52,14 +45,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     num_crew: tier.num_crew,
     hourly_rate: rate,
     is_weekend_rate: isWeekend,
+    load_hours: laborDef.load_hours,
+    unload_hours: laborDef.unload_hours,
+    handling_buffer_hours: 0,
     labor_hours,
     travel_hours: 0,
     billable_hours,
     minimum_hours: MINIMUM_HOURS,
     total_hours: labor_hours,
-    load_hours: 0,
-    unload_hours: 0,
-    handling_buffer_hours: 0,
     distance_km: null,
     drive_time_minutes: null,
     handicap_origin: 0,
