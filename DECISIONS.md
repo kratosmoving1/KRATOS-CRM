@@ -410,4 +410,28 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Column layout:** `grid grid-cols-1 md:grid-cols-[240px_1fr_300px]` — stacks vertically on mobile.
 
+## 2026-06 — Dispatch B1: trucks split into 3 categories; provider field rental-only
+
+**Decision:** `dispatch_trucks.category` is one of `owned`, `rental`, `contractor`. The `provider` field (Penske, Ryder, U-Haul, Home Depot, Other) is only populated when `category = 'rental'` — it is set to null on save for owned and contractor trucks.
+
+**Size enum:** `cargo_van`, `10ft`, `15ft`, `16ft`, `20ft`, `26ft`. Fixed list, not free-text. Validated at the API layer.
+
+**Seeded default:** One owned 16ft truck ("Kratos 16ft Box") is inserted by the migration SQL. AJ adds the rest via the "+ Add Truck" inline form in the Resources panel.
+
+## 2026-06 — Dispatch B1: Crew tab pulls live from workforce_people
+
+**Decision:** The Crew tab in the dispatch Resources panel reads directly from `workforce_people` with role/status/tier joins. No separate "dispatch crew" concept. Adding a person in Workforce automatically makes them visible in the Crew tab. The Crew tab is read-only in B1 — crew assignment within a drag is Phase B2.
+
+## 2026-06 — Dispatch B1: drag-drop creates dispatch_job_assignments; no time-of-day in B1
+
+**Decision:** Dragging a job card from the Jobs panel onto a truck row in the Schedule grid creates a `dispatch_job_assignments` row. Clicking X on an assigned job card soft-deletes the assignment (is_deleted=true).
+
+**Assignment constraints:** One row per drag. Multiple assignments per truck on the same date are allowed (truck can do multiple moves). Multiple trucks per opportunity are allowed at the schema level (multi-truck moves) but require multiple drags via the UI.
+
+**No time-of-day positioning in B1.** All assignments default to `start_time = '08:00'` and `duration_hours = 3`. Jobs appear full-width in their truck row. Time-of-day axis rendering and per-assignment time editing land in Phase B2 alongside `move_time_start` on opportunities.
+
+**Optimistic updates:** Drag-drop uses an optimistic temp assignment (client-side temp ID) → POST to API → replace temp with real row on success → rollback on failure. This prevents the UI feeling laggy on slow connections.
+
+**DragOverlay:** Uses `@dnd-kit/core`'s `DragOverlay` so a floating clone follows the cursor during drag, while the original card dims (opacity-30) in place. This is better UX than moving the original element.
+
 ## (Append new decisions below as they happen)

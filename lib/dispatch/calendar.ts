@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
+import type { DayDetailData, DispatchJobAssignment, DispatchTruck, DispatchCrewMember } from './types'
 
 export interface DispatchCalendarEvent {
   id: string
@@ -60,4 +61,52 @@ export async function fetchDispatchCalendarEvents(
       total: opp.total_amount != null ? Number(opp.total_amount) : null,
     }
   })
+}
+
+function parseDateStr(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export async function fetchDayDetailData(date: string): Promise<DayDetailData> {
+  const supabase = createClient()
+  const dayDate = parseDateStr(date)
+
+  const [trucksRes, peopleRes, eventsResult, assignmentsRes] = await Promise.all([
+    supabase
+      .from('dispatch_trucks')
+      .select('*')
+      .neq('is_deleted', true)
+      .order('category')
+      .order('position'),
+    supabase
+      .from('workforce_people')
+      .select(`
+        id, name, role, profile_picture_url,
+        role_data:workforce_roles(id, key, label, color),
+        status:workforce_statuses(id, key, label, color),
+        tier:workforce_tiers(id, key, label, color)
+      `)
+      .neq('is_deleted', true)
+      .order('position'),
+    fetchDispatchCalendarEvents(dayDate, dayDate),
+    supabase
+      .from('dispatch_job_assignments')
+      .select(`
+        *,
+        opportunity:opportunities(
+          id, move_size, origin_city, dest_city, total_amount,
+          customer:customers(id, full_name)
+        )
+      `)
+      .eq('scheduled_date', date)
+      .neq('is_deleted', true),
+  ])
+
+  return {
+    trucks: (trucksRes.data ?? []) as DispatchTruck[],
+    crew: (peopleRes.data ?? []) as unknown as DispatchCrewMember[],
+    events: eventsResult,
+    assignments: (assignmentsRes.data ?? []) as unknown as DispatchJobAssignment[],
+  }
 }

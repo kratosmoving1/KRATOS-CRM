@@ -600,6 +600,50 @@ Any AI tool that writes code using a column name from the left column is wrong. 
 
 ---
 
+## Table: `dispatch_trucks`
+
+Fleet/vehicle registry. Three categories: owned trucks, rental trucks (Penske/Ryder/etc.), and contractor-supplied trucks.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `name` | `text` | Display name (e.g. "Kratos 16ft Box", "Penske 26ft #1") |
+| `category` | `'owned' \| 'rental' \| 'contractor'` | Truck category |
+| `provider` | `text \| null` | Rental company name — only for `category = 'rental'` (e.g. "Penske", "Ryder", "U-Haul", "Home Depot", "Other") |
+| `size` | `text` | Truck size — one of: `cargo_van`, `10ft`, `15ft`, `16ft`, `20ft`, `26ft` |
+| `notes` | `text \| null` | Internal notes |
+| `position` | `integer` | Sort order within category |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+**Seeded default:** 1 owned 16ft truck ("Kratos 16ft Box") inserted with the migration.
+
+---
+
+## Table: `dispatch_job_assignments`
+
+Links an opportunity (job) to a truck for a specific date. One row = one truck assigned to one job. Multiple rows per truck on the same date (truck can do multiple jobs in a day) and multiple rows per opportunity (multi-truck job) are allowed at the schema level, but the UI only creates one assignment per drag in Phase B1.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `opportunity_id` | `uuid` | FK to `opportunities.id` (cascade delete) |
+| `truck_id` | `uuid \| null` | FK to `dispatch_trucks.id` (SET NULL on delete) |
+| `scheduled_date` | `date` | The work date for this assignment |
+| `start_time` | `time` | Default `08:00` — Phase B2 will allow editing |
+| `duration_hours` | `numeric(4,1)` | Default `3.0` — Phase B2 will use actual labor hours |
+| `notes` | `text \| null` | Dispatcher notes |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `is_deleted` | `boolean` | Soft delete flag (unassign = soft-delete, not hard-delete) |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+---
+
 ## Table: `office_calendar_events`
 
 Office/team scheduling events — IPCs, surveys, follow-ups, meetings, admin tasks. Separate from booked moving jobs.

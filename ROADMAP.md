@@ -165,6 +165,25 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 **AJ action required:** Add `GOOGLE_MAPS_SERVER_API_KEY` env var in Vercel (see Step 1 of the prompt for Google Cloud setup).
 
+## ✅ Done (Dispatch B1 — Trucks + Crew Sync + Drag-Drop Assignment)
+
+- `dispatch_trucks` table: name, category (owned/rental/contractor), provider (rental-only), size enum, position, soft-delete
+- `dispatch_job_assignments` table: links opportunity+truck+date, start_time/duration_hours defaults, soft-delete
+- Seeded: 1 owned 16ft truck ("Kratos 16ft Box")
+- Trigger: `update_workforce_updated_at()` reused for both new tables
+- API: `GET/POST /api/admin/dispatch/trucks`, `PATCH/DELETE /api/admin/dispatch/trucks/[id]`
+- API: `GET/POST /api/admin/dispatch/assignments`, `DELETE /api/admin/dispatch/assignments/[id]`
+- `fetchDayDetailData(date)` — parallel fetch of trucks + crew + events + assignments in one server call
+- Resources panel: real Trucks tab (grouped by Owned/Rentals/Contractor + inline Add Truck form) + real Crew tab (live from workforce_people)
+- Trucks tab "+ Add truck" inline form: name, category pill picker, conditional provider dropdown, size select
+- Crew tab: avatar + name + role + status + tier badge; links to Workforce if empty
+- Schedule grid: empty state (no trucks) OR truck rows (one droppable row per truck with truck label + schedule area)
+- Jobs panel renamed to "Unscheduled"; filters to events with no assignment; shows checkmark "All jobs scheduled" when all assigned
+- Drag from Jobs panel → truck row → creates assignment (optimistic + committed), job moves to Schedule grid
+- Click X on assigned job card → unassigns (optimistic + committed), job returns to Jobs panel
+- `DragOverlay` from @dnd-kit/core: floating card clone follows cursor; original dims to opacity-30
+- `lib/dispatch/types.ts` added: DispatchTruck, DispatchJobAssignment, DispatchCrewMember, DayDetailData
+
 ## ✅ Done (Dispatch Day-Detail Bridge View — 3-column layout)
 
 - `components/admin/dispatch/DispatchDayDetail.tsx` restructured to three-column SmartMoving layout
@@ -220,9 +239,9 @@ The "Now" section is what the current session is working on. The "Next" section 
 
 ## 🔜 Dispatch next steps
 
-- **Phase B1:** Trucks data model + Resources panel populates with real truck list
-- **Phase B2:** `move_time_start` column on opportunities + crew/truck assignment table → Schedule grid rows + Jobs panel shows actual start time
-- **Phase B3:** Drag-and-drop in the Schedule grid (drag jobs from Jobs panel onto truck rows at specific times)
+- **Phase B2:** `move_time_start` column on opportunities + position-on-time-axis rendering in Schedule grid + crew assignment within the drag
+- **Phase B3:** Publish workflow + crew notifications (depends on crew mobile app)
+- **Settings:** Trucks management UI (edit name/size, delete, reorder within category)
 - Settings page for editing/adding/deleting locations, roles, statuses, tiers taxonomies
 - Bulk select / bulk actions on people list
 - "Unassigned" virtual column on kanban board for people with column_id = null

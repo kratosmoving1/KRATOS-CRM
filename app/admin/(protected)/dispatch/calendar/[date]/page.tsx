@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { DispatchDayDetail } from '@/components/admin/dispatch/DispatchDayDetail'
-import { fetchDispatchCalendarEvents } from '@/lib/dispatch/calendar'
+import { fetchDayDetailData } from '@/lib/dispatch/calendar'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,10 +16,7 @@ export default async function DayDetailPage({ params }: PageProps) {
   const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
   if (isNaN(date.getTime())) notFound()
 
-  const start = new Date(date); start.setHours(0, 0, 0, 0)
-  const end   = new Date(date); end.setHours(23, 59, 59, 999)
+  const initialData = await fetchDayDetailData(params.date)
 
-  const events = await fetchDispatchCalendarEvents(start, end)
-
-  return <DispatchDayDetail date={date} events={events} />
+  return <DispatchDayDetail date={date} initialData={initialData} />
 }
