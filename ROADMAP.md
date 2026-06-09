@@ -150,6 +150,15 @@ The "Now" section is what the current session is working on. The "Next" section 
 - Charges table and sidebar totals refresh automatically after apply
 - Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
 
+## ✅ Done (Dispatch Calendar Rebuild)
+
+- Removed react-big-calendar (CSS conflict with Tailwind)
+- Custom MonthGrid: clean 7-column grid, today highlighted orange, event bars with status colors, "+N more" overflow
+- Month navigation: prev/next/today buttons, URL query-param driven (?year=&month=)
+- Click any day → drill into `/admin/dispatch/calendar/[date]`
+- Day detail page: stats strip (booked count, completed count, revenue), job list with customer/route/total, resource panel placeholder
+- `lib/dispatch/calendar.ts` extended with `total_amount` field
+
 ## ✅ Done (People Form Bug Fixes + Dispatch Calendar)
 
 - **Bug fix (POST route):** `people/route.ts` now uses an ALLOWED-array + coercePayload pattern. All new columns (role_id, location_id, english_proficiency, profile_picture_url, tenure_started_at) now save correctly on person creation.

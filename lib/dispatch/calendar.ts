@@ -12,6 +12,7 @@ export interface DispatchCalendarEvent {
   origin_city: string | null
   dest_city: string | null
   opportunity_number: string | null
+  total: number | null
 }
 
 export async function fetchDispatchCalendarEvents(
@@ -24,7 +25,7 @@ export async function fetchDispatchCalendarEvents(
     .from('opportunities')
     .select(`
       id, opportunity_number, status, service_date, move_size,
-      origin_city, dest_city,
+      origin_city, dest_city, total_amount,
       customer:customers!customer_id(id, full_name)
     `)
     .in('status', ['booked', 'completed'])
@@ -56,6 +57,7 @@ export async function fetchDispatchCalendarEvents(
       origin_city: opp.origin_city as string | null,
       dest_city: opp.dest_city as string | null,
       opportunity_number: opp.opportunity_number as string | null,
+      total: opp.total_amount != null ? Number(opp.total_amount) : null,
     }
   })
 }

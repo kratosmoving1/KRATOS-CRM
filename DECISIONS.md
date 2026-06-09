@@ -363,4 +363,16 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Rule:** Any new column on a workforce table that agents can write must be added to BOTH the POST allowlist AND the PATCH allowlist. The column must also be in `NULLABLE_KEYS` if it can be null/empty-string.
 
+## 2026-06 — Dispatch Calendar uses custom MonthGrid, not react-big-calendar
+
+**Decision:** `react-big-calendar` was removed. The Dispatch Calendar uses a custom `MonthGrid` component (~120 lines of Tailwind, zero third-party CSS). react-big-calendar's grid CSS was conflicting with our Tailwind setup, rendering days as a vertical list instead of a 7-column grid. The custom component gives full control over styling and eliminates the class conflict risk.
+
+**Grid logic:** 42 cells (6 weeks × 7 days), padded with previous/next-month days marked `inMonth: false` (greyed out). Month navigation uses URL query params (`?year=&month=`) so the server re-fetches the correct date window on each navigation.
+
+## 2026-06 — Day detail view is a skeleton placeholder for Phase D
+
+**Decision:** `/admin/dispatch/calendar/[date]` shows booked/completed jobs for that date with stats (count, revenue) and a job list. A "Resource assignment coming soon" placeholder sits at the bottom where the drag-to-assign Resource panel will eventually land.
+
+**Phase D prerequisites:** Trucks/vehicles data model + a crew-assignment table linking `workforce_people` and trucks to specific opportunities. Until those tables exist, the full Resource Calendar (trucks as rows, time grid, drag-to-assign) cannot be built.
+
 ## (Append new decisions below as they happen)
