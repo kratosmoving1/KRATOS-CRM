@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasPermission, isActiveUser, normalizeRole } from '@/lib/auth/permissions'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import { syncTravelCharge } from '@/lib/charges/syncTravelCharge'
 import type { Json } from '@/types/database'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -90,6 +91,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     ipAddress: req.headers.get('x-forwarded-for'),
     userAgent: req.headers.get('user-agent'),
   })
+
+  // When the destination address changes, recompute the return-leg travel charge
+  if (prefix === 'dest' && updated) {
+    void syncTravelCharge(supabase, updated as Record<string, unknown>)
+  }
 
   return NextResponse.json({ ok: true, opportunity: updated })
 }

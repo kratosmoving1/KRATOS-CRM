@@ -150,6 +150,21 @@ The "Now" section is what the current session is working on. The "Next" section 
 - Charges table and sidebar totals refresh automatically after apply
 - Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
 
+## ✅ Done (Travel Time Logic + Trip & Travel Auto-Charge)
+
+- `lib/charges/travel.ts` — threshold constants (30 min), `computeBillableTravelHours()` (floor to 0.5h), `fetchReturnDriveMinutes()` (direct Google Maps call, checks `GOOGLE_MAPS_SERVER_API_KEY` → `GOOGLE_MAPS_SERVER_KEY` → `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)
+- `lib/charges/syncTravelCharge.ts` — server-side sync: reads Moving Labor rate, calls Distance Matrix, creates/updates/deletes `trip_and_travel` charge
+- `/api/admin/maps/distance` — server-side Distance Matrix proxy (key never reaches browser)
+- `/api/admin/opportunities/[id]/rerate` — POST endpoint that triggers travel sync
+- `apply-package` extended: after Moving Labor saved, calls `syncTravelCharge` with current rate
+- `trip-info` PATCH extended: when `prefix === 'dest'`, calls `syncTravelCharge` after save
+- Quote page `EditAddressModal.onSaved` now also calls `fetchCharges()` to pick up the new charge
+- ChargeSidePanel.tsx: Travel section removed from Moving Labor form; `travel_hours` always 0 for new saves
+- `lib/charges/format.ts`: `trip_and_travel` rate column shows `1.0h @ $229.99/hr (Return: 70 min)` for auto-computed charges
+- ChargesSection.tsx: "Auto-computed" blue badge on auto trip_and_travel rows
+
+**AJ action required:** Add `GOOGLE_MAPS_SERVER_API_KEY` env var in Vercel (see Step 1 of the prompt for Google Cloud setup).
+
 ## ✅ Done (Dispatch Calendar Rebuild)
 
 - Removed react-big-calendar (CSS conflict with Tailwind)

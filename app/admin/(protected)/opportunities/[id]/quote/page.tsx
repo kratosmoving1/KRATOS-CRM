@@ -2890,7 +2890,7 @@ export default function OpportunityDetailPage() {
         <EditAddressModal
           data={addressEditData}
           onClose={() => setAddressEditData(null)}
-          onSaved={load}
+          onSaved={() => { load(); fetchCharges() }}
         />
       )}
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { PACKAGE_TIERS, getRateForDate } from '@/lib/packages/tiers'
 import { logAuditEvent } from '@/lib/audit/logAuditEvent'
+import { syncTravelCharge } from '@/lib/charges/syncTravelCharge'
 import type { Json } from '@/types/database'
 
 const MINIMUM_HOURS = 3
@@ -17,11 +18,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: `Unknown tier: ${tier_id}` }, { status: 400 })
   }
 
-  // Fetch opportunity — use service_date (the actual column name per SCHEMA.md)
-  // Use .neq('is_deleted', true) to correctly include rows where is_deleted IS NULL
+  // Fetch opportunity — include dest address fields for travel charge sync
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
-    .select('id, service_date')
+    .select('id, service_date, dest_address_line1, dest_city, dest_province, dest_postal_code')
     .eq('id', params.id)
     .neq('is_deleted', true)
     .maybeSingle()
@@ -122,6 +122,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       userAgent: req.headers.get('user-agent'),
     })
 
+    // Sync travel charge with the new labor rate
+    void syncTravelCharge(supabase, opp, rate)
+
     return NextResponse.json({ updated: existing.id, tier_id: tier.id }, { status: 200 })
   }
 
@@ -182,6 +185,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ipAddress: req.headers.get('x-forwarded-for'),
     userAgent: req.headers.get('user-agent'),
   })
+
+  // Sync travel charge with the new labor rate
+  void syncTravelCharge(supabase, opp, rate)
 
   return NextResponse.json({ created: created.id, tier_id: tier.id }, { status: 201 })
 }

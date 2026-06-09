@@ -163,10 +163,6 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
   const [unloadH, setUnloadH] = useState(String(cfg.unload_hours ?? ''))
   const [bufferH, setBufferH] = useState(String(cfg.handling_buffer_hours ?? ''))
 
-  // Travel (prefilled from Google Maps via TariffApplyConfig)
-  const [travelH, setTravelH] = useState(String(cfg.travel_hours ?? 0))
-  const travelFromMaps = cfg.travel_provider === 'google_maps'
-
   // Access challenge handicaps
   const [hOrigin, setHOrigin] = useState(String(cfg.handicap_origin ?? 0))
   const [hStops, setHStops] = useState(String(cfg.handicap_stops ?? 0))
@@ -187,7 +183,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       num_crew: numVal(crew),
       hourly_rate: numVal(rate),
       labor_hours: laborHours,
-      travel_hours: numVal(travelH),
+      travel_hours: 0,
       handicap_origin: numVal(hOrigin),
       handicap_stops: numVal(hStops),
       handicap_dest: numVal(hDest),
@@ -207,7 +203,6 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       package_name: pkgName.trim() || null,
       distance_km: cfg.distance_km ?? null,
       drive_time_minutes: cfg.drive_time_minutes ?? null,
-      travel_provider: cfg.travel_provider ?? null,
       override_reason: overrideReason.trim() || null,
     }
 
@@ -223,14 +218,14 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       is_overridden: Boolean(overrideReason.trim()),
     })
     return { total_hours, billable_hours, subtotal }
-  }, [trucks, crew, rate, laborHours, loadH, unloadH, bufferH, travelH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
+  }, [trucks, crew, rate, laborHours, loadH, unloadH, bufferH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
 
   useEffect(() => { calcResult() }, [calcResult])
 
   const { total_hours, billable_hours, subtotal } = (() => {
     const c = {
       num_trucks: numVal(trucks), num_crew: numVal(crew), hourly_rate: numVal(rate),
-      labor_hours: laborHours, travel_hours: numVal(travelH),
+      labor_hours: laborHours, travel_hours: 0,
       handicap_origin: numVal(hOrigin), handicap_stops: numVal(hStops), handicap_dest: numVal(hDest),
       minimum_hours: numVal(minH),
     }
@@ -263,41 +258,6 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
         <div className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
           <span className="text-xs text-slate-500">Labour subtotal</span>
           <span className="text-sm font-semibold text-slate-800">{laborHours}h</span>
-        </div>
-
-        {/* Travel */}
-        <div className="pt-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Travel</p>
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <FLabel>Travel hours</FLabel>
-                {travelFromMaps && (
-                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
-                    Google Maps
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-kratos focus-within:bg-white focus-within:ring-2 focus-within:ring-kratos/20">
-                <input
-                  type="number" min={0} step="0.25"
-                  value={travelH}
-                  onChange={e => setTravelH(e.target.value)}
-                  className="w-full flex-1 rounded-lg bg-transparent px-3 py-2.5 text-sm text-slate-900 outline-none"
-                />
-                <span className="pr-3 text-sm text-slate-500">h</span>
-              </div>
-            </div>
-            {travelFromMaps && cfg.drive_time_minutes != null && (
-              <div className="mt-6 rounded-lg bg-blue-50 px-3 py-2.5 text-xs text-blue-700 shrink-0">
-                <p className="font-semibold">{String(cfg.drive_time_minutes)} min drive</p>
-                {cfg.distance_km != null && <p className="text-blue-500">{String(cfg.distance_km)} km</p>}
-              </div>
-            )}
-          </div>
-          {travelFromMaps && (
-            <p className="mt-1 text-[10px] text-slate-400">Prefilled from Google Maps. You can override this value.</p>
-          )}
         </div>
 
         {/* Access challenges (secondary) */}

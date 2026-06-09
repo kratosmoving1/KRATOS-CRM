@@ -184,6 +184,11 @@ export default function ChargesSection({
                             Agent override
                           </span>
                         )}
+                        {charge.charge_type === 'trip_and_travel' && (charge.config as Record<string, unknown>)?.source === 'auto_distance_matrix' && (
+                          <span className="mt-0.5 inline-block rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+                            Auto-computed
+                          </span>
+                        )}
                       </td>
 
                       {/* Rate */}

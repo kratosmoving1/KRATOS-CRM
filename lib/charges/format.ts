@@ -25,6 +25,13 @@ export function formatRate(charge: OpportunityCharge): string {
     }
 
     case 'trip_and_travel': {
+      if (c.source === 'auto_distance_matrix') {
+        const hours = Number(c.billable_hours ?? 0)
+        const rate = Number(c.hourly_rate ?? 0)
+        const returnMin = Number(c.return_drive_minutes ?? 0)
+        if (hours && rate)
+          return `${hours}h @ $${rate.toFixed(2)}/hr (Return: ${returnMin} min)`
+      }
       if (c.distance_km && c.rate_per_km)
         return `${c.distance_km} km @ $${Number(c.rate_per_km).toFixed(2)}/km`
       return String(charge.description ?? '')

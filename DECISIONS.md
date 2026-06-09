@@ -375,4 +375,27 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Phase D prerequisites:** Trucks/vehicles data model + a crew-assignment table linking `workforce_people` and trucks to specific opportunities. Until those tables exist, the full Resource Calendar (trucks as rows, time grid, drag-to-assign) cannot be built.
 
+## 2026-06 — Distance Matrix called server-side; new env var GOOGLE_MAPS_SERVER_API_KEY
+
+**Decision:** Google Maps Distance Matrix calls run server-side only via `/api/admin/maps/distance` and the sync helpers in `lib/charges/travel.ts`. The existing `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is restricted to `vercel.app` referrers and fails for server-to-server calls. The separate env var `GOOGLE_MAPS_SERVER_API_KEY` (or `GOOGLE_MAPS_SERVER_KEY`) carries the unrestricted key.
+
+**Key lookup order:** `GOOGLE_MAPS_SERVER_API_KEY` → `GOOGLE_MAPS_SERVER_KEY` → `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (fallback, may fail server-side).
+
+## 2026-06 — Trip & Travel auto-computed from return leg; threshold 30 min; floor to 0.5h
+
+**Decision:** The Trip & Travel charge is automatically created/updated/deleted by `lib/charges/syncTravelCharge.ts` based on the destination → dispatch return-leg drive time.
+
+- Threshold: 30 minutes. Below threshold → no charge (door-to-door labor absorbs it).
+- Rounding: floor to nearest 0.5h (rounded DOWN, not up).
+- Rate: same hourly rate as the applied Moving Labor package.
+- Trigger: on `apply-package` and on destination address change (`trip-info` PATCH with `prefix: 'dest'`).
+- Failure mode: if Distance Matrix call fails, existing charge is preserved and a warning is returned. Charge is never deleted on API failure.
+- Config shape: `{ source: 'auto_distance_matrix', return_drive_minutes, billable_hours, hourly_rate, computed_at }`
+
+## 2026-06 — Travel hours removed from Moving Labor edit drawer
+
+**Decision:** The "Travel" section (travel_hours input, Google Maps badge) has been removed from the Moving Labor edit drawer (`ChargeSidePanel.tsx`). Travel is now its own `trip_and_travel` charge line — it is no longer a sub-field of Moving Labor. New Moving Labor saves always write `travel_hours: 0` to the config.
+
+**Auto-recompute always wins:** No manual override flag on the Trip & Travel charge yet. Phase 2 will add `is_overridden` support so dispatchers can lock a custom value.
+
 ## (Append new decisions below as they happen)

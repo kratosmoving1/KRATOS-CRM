@@ -555,6 +555,24 @@ Individual workforce members (cards) on the Workforce board.
 
 ---
 
+### `opportunity_charges.config` shape for `charge_type = 'trip_and_travel'` (auto-computed)
+
+When created by `lib/charges/syncTravelCharge.ts`, the `config` column contains:
+
+```json
+{
+  "source": "auto_distance_matrix",
+  "return_drive_minutes": 70,
+  "billable_hours": 1.0,
+  "hourly_rate": 229.99,
+  "computed_at": "2026-06-08T12:00:00.000Z"
+}
+```
+
+Manually-created Trip & Travel charges (via the ChargeSidePanel) use the old shape `{ distance_km, rate_per_km }` and will not have `source: 'auto_distance_matrix'`.
+
+---
+
 ## Common Mistakes to Avoid
 
 These column name mistakes have appeared repeatedly in past sessions and broken saves:
