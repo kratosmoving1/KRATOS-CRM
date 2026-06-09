@@ -343,4 +343,24 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **Rationale:** Hardcoding locations in the UI would prevent AJ from adding new cities (e.g. when expanding) without a code change. The DB-driven approach scales to any configurable taxonomy.
 
+## 2026-06 — Profile pictures auto-resize client-side before upload
+
+**Decision:** Profile pictures are resized to 800px max dimension, re-encoded as JPEG at 0.85 quality in the browser before upload. Typical phone photos compress 10MB → ~150KB. Bucket size limit raised to 10MB as a safety margin, not the primary defense.
+
+**Implementation:** `lib/workforce/resize-image.ts → resizeImage()` — canvas-based, runs entirely in the browser. Called in both `AddPersonModal` and `EditPersonDrawer` before `supabase.storage.upload()`.
+
+## 2026-06 — Dispatch Calendar reads directly from opportunities table
+
+**Decision:** The Dispatch Calendar at `/admin/dispatch/calendar` reads from `opportunities` filtered by `status IN ('booked', 'completed')` on `service_date`. No separate `dispatch_jobs` table. The general Calendar at `/admin/calendar` uses the same source — the difference is only which statuses are surfaced and which additional data (office events) is shown.
+
+**Calendar library:** `react-big-calendar` + `date-fns` (v4). Provides Month/Week/Day/Agenda views. The general calendar at `/admin/calendar` is a custom build; the Dispatch Calendar uses react-big-calendar for richer multi-view support.
+
+## 2026-06 — Recurring allowlist bug on people POST route
+
+**Decision:** The `people/route.ts` POST handler had a hardcoded `insert()` that listed only legacy fields (`name, role, status_id, tier_id, column_id, position, notes`). All new columns from the previous session (`role_id, location_id, english_proficiency, profile_picture_url, tenure_started_at`) were silently dropped.
+
+**Fix:** POST now uses the same ALLOWED array + `coercePayload()` pattern as PATCH. Empty strings are coerced to `null` before insert — Postgres rejects `""` for UUID FK columns and date columns.
+
+**Rule:** Any new column on a workforce table that agents can write must be added to BOTH the POST allowlist AND the PATCH allowlist. The column must also be in `NULLABLE_KEYS` if it can be null/empty-string.
+
 ## (Append new decisions below as they happen)

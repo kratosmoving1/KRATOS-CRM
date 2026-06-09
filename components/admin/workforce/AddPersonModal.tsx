@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { X, Camera, Upload, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { resizeImage } from '@/lib/workforce/resize-image'
 import type { WorkforceRole, WorkforceLocation, WorkforceStatus, WorkforceTier, WorkforcePerson } from '@/lib/workforce/types'
 import { ENGLISH_LEVELS } from './PeopleFilterBar'
 
@@ -15,20 +16,14 @@ interface Props {
   onClose: () => void
 }
 
-async function uploadProfilePicture(file: File): Promise<string | null> {
+async function uploadProfilePicture(file: File): Promise<string> {
+  const resized = await resizeImage(file, 800, 0.85)
   const supabase = createClient()
-  const ext = file.name.split('.').pop() ?? 'jpg'
-  const fileName = `${crypto.randomUUID()}.${ext}`
-
+  const fileName = `${crypto.randomUUID()}.jpg`
   const { error } = await supabase.storage
     .from('workforce-photos')
-    .upload(fileName, file, { upsert: false, cacheControl: '3600' })
-
-  if (error) {
-    console.error('Upload failed:', error)
-    return null
-  }
-
+    .upload(fileName, resized, { upsert: false, cacheControl: '3600', contentType: 'image/jpeg' })
+  if (error) throw new Error(error.message || 'Upload failed')
   const { data: { publicUrl } } = supabase.storage.from('workforce-photos').getPublicUrl(fileName)
   return publicUrl
 }
@@ -56,9 +51,10 @@ export function AddPersonModal({ roles, locations, statuses, tiers, onCreated, o
 
     let profile_picture_url: string | null = null
     if (pendingFile) {
-      profile_picture_url = await uploadProfilePicture(pendingFile)
-      if (!profile_picture_url) {
-        setError('Photo upload failed. Try a smaller image (under 5MB).')
+      try {
+        profile_picture_url = await uploadProfilePicture(pendingFile)
+      } catch (err) {
+        setError(`Photo upload failed: ${err instanceof Error ? err.message : 'Unknown error'}. Try a different image.`)
         setSubmitting(false)
         return
       }

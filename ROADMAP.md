@@ -150,6 +150,13 @@ The "Now" section is what the current session is working on. The "Next" section 
 - Charges table and sidebar totals refresh automatically after apply
 - Tier definitions live in `lib/packages/tiers.ts`; component at `components/admin/charges/PackageTierCards.tsx`
 
+## ✅ Done (People Form Bug Fixes + Dispatch Calendar)
+
+- **Bug fix (POST route):** `people/route.ts` now uses an ALLOWED-array + coercePayload pattern. All new columns (role_id, location_id, english_proficiency, profile_picture_url, tenure_started_at) now save correctly on person creation.
+- **Bug fix (PATCH route):** Added empty-string-to-null coercion for nullable UUID/date columns.
+- **Profile picture resize:** `lib/workforce/resize-image.ts` — canvas-based client-side compression to 800px/0.85q JPEG before upload. Bucket limit raised to 10MB.
+- **Dispatch Calendar:** `/admin/dispatch/calendar` — real Month/Week/Day/Agenda calendar using react-big-calendar + date-fns. Reads from `opportunities` where `status IN ('booked', 'completed')`. Orange = booked, green = completed. Click event → opportunity detail.
+
 ## ✅ Done (Dispatch Restructure + People Database)
 
 - Sidebar: replaced top-level "Workforce" with "Dispatch" (Truck icon)

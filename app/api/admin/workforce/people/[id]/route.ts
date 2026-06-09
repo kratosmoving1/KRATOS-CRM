@@ -8,6 +8,12 @@ const ALLOWED = [
   'column_id', 'position', 'notes',
 ]
 
+const NULLABLE_KEYS = [
+  'role', 'role_id', 'location_id', 'status_id', 'tier_id',
+  'english_proficiency', 'profile_picture_url',
+  'tenure_started_at', 'referred_by', 'column_id', 'notes',
+]
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -16,6 +22,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json()
   const payload = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
   if (Object.keys(payload).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
+
+  // Coerce empty strings to null so Postgres doesn't reject them for UUID/date columns
+  for (const key of NULLABLE_KEYS) {
+    if (payload[key] === '') payload[key] = null
+  }
 
   const { data, error } = await supabase
     .from('workforce_people')

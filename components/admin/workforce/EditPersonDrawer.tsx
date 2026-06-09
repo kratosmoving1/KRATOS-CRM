@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, Trash2, Loader2, Camera } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { resizeImage } from '@/lib/workforce/resize-image'
 import { Avatar } from './Avatar'
 import { ENGLISH_LEVELS } from './PeopleFilterBar'
 import type { WorkforceRole, WorkforceLocation, WorkforceStatus, WorkforceTier, WorkforcePerson } from '@/lib/workforce/types'
@@ -18,12 +19,12 @@ interface Props {
   onClose: () => void
 }
 
-async function uploadProfilePicture(file: File): Promise<string | null> {
+async function uploadProfilePicture(file: File): Promise<string> {
+  const resized = await resizeImage(file, 800, 0.85)
   const supabase = createClient()
-  const ext = file.name.split('.').pop() ?? 'jpg'
-  const fileName = `${crypto.randomUUID()}.${ext}`
-  const { error } = await supabase.storage.from('workforce-photos').upload(fileName, file, { upsert: false, cacheControl: '3600' })
-  if (error) { console.error('Upload failed:', error); return null }
+  const fileName = `${crypto.randomUUID()}.jpg`
+  const { error } = await supabase.storage.from('workforce-photos').upload(fileName, resized, { upsert: false, cacheControl: '3600', contentType: 'image/jpeg' })
+  if (error) throw new Error(error.message || 'Upload failed')
   const { data: { publicUrl } } = supabase.storage.from('workforce-photos').getPublicUrl(fileName)
   return publicUrl
 }
@@ -73,9 +74,13 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
 
     let finalPictureUrl = pictureUrl
     if (pendingFile) {
-      const uploaded = await uploadProfilePicture(pendingFile)
-      if (!uploaded) { setError('Photo upload failed. Try a smaller image (under 5MB).'); setSaving(false); return }
-      finalPictureUrl = uploaded
+      try {
+        finalPictureUrl = await uploadProfilePicture(pendingFile)
+      } catch (err) {
+        setError(`Photo upload failed: ${err instanceof Error ? err.message : 'Unknown error'}. Try a different image.`)
+        setSaving(false)
+        return
+      }
     }
 
     const res = await fetch(`/api/admin/workforce/people/${person.id}`, {
