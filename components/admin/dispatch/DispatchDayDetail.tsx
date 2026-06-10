@@ -17,7 +17,8 @@ import {
 import {
   ArrowLeft, ChevronLeft, ChevronRight,
   Truck, CalendarDays, Inbox, Package, MapPin, Plus, X, Users,
-  CheckCircle, UserRound, ChevronDown, Trash2,
+  CheckCircle, UserRound, ChevronDown, Trash2, Hash, Send,
+  Printer, BarChart2, AlertCircle,
 } from 'lucide-react'
 import { Avatar } from '@/components/admin/workforce/Avatar'
 import { formatCurrency } from '@/lib/format'
@@ -27,24 +28,50 @@ import type {
   DispatchCrew, DispatchCrewAssignment, DispatchCrewPerson, DispatchCrewTruck,
 } from '@/lib/dispatch/types'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Timeline constants ───────────────────────────────────────────────────────
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const TL_START = 7    // 7 AM
+const TL_END   = 19   // 7 PM
+const TL_HOURS = TL_END - TL_START  // 12
 
+function parseTimeToHours(t: string): number {
+  const parts = t.split(':').map(Number)
+  return (parts[0] ?? 0) + (parts[1] ?? 0) / 60
+}
+
+function pixelToStartTime(pointerX: number, rect: { left: number; width: number }): string {
+  const fraction = Math.max(0, Math.min(0.99, (pointerX - rect.left) / rect.width))
+  const rawHour = TL_START + fraction * TL_HOURS
+  const rounded = Math.round(rawHour * 4) / 4  // snap to 15-min
+  const clamped = Math.max(TL_START, Math.min(TL_END - 0.25, rounded))
+  const h = Math.floor(clamped)
+  const m = Math.round((clamped - h) * 60)
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
+}
+
+function hourLabel(h: number): string {
+  if (h === 0 || h === 24) return '12 AM'
+  if (h === 12) return '12 PM'
+  return h < 12 ? `${h} AM` : `${h - 12} PM`
+}
+
+// ─── Other constants ──────────────────────────────────────────────────────────
+
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CATEGORY_LABELS: Record<string, string> = { owned: 'Owned', rental: 'Rentals', contractor: 'Contractor' }
 const CATEGORY_ORDER = ['owned', 'rental', 'contractor']
 const PROVIDERS = ['Penske', 'Ryder', 'U-Haul', 'Home Depot', 'Other']
 const SIZES = [
   { key: 'cargo_van', label: 'Cargo Van' },
-  { key: '10ft', label: '10 ft' },
-  { key: '15ft', label: '15 ft' },
-  { key: '16ft', label: '16 ft' },
-  { key: '20ft', label: '20 ft' },
-  { key: '26ft', label: '26 ft' },
+  { key: '10ft',  label: '10 ft' },
+  { key: '15ft',  label: '15 ft' },
+  { key: '16ft',  label: '16 ft' },
+  { key: '20ft',  label: '20 ft' },
+  { key: '26ft',  label: '26 ft' },
 ]
 
-function formatDateForApi(date: Date): string {
+function fmtDate(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
@@ -94,25 +121,33 @@ export function DispatchDayDetail({ date, initialData }: Props) {
   const [trucks, setTrucks] = useState<DispatchTruck[]>(initialData.trucks)
   const [crewPeople] = useState<DispatchCrewMember[]>(initialData.crew_people)
   const [events] = useState<DispatchCalendarEvent[]>(initialData.events)
+  const [cancelledEvents] = useState<DispatchCalendarEvent[]>(initialData.cancelled_events ?? [])
   const [crews, setCrews] = useState<DispatchCrew[]>(initialData.crews)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
+
+  // Track live pointer X for timeline time calculation on drop
+  const ptrX = useRef(0)
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { ptrX.current = e.clientX }
+    window.addEventListener('mousemove', fn)
+    return () => window.removeEventListener('mousemove', fn)
+  }, [])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const activeEvent = events.find(e => e.id === activeJobId) ?? null
 
-  const totalRevenue = events.reduce((sum, e) => sum + (e.total ?? 0), 0)
-  const bookedCount = events.filter(e => e.status === 'booked').length
+  const bookedCount    = events.filter(e => e.status === 'booked').length
   const completedCount = events.filter(e => e.status === 'completed').length
+  const totalRevenue   = events.reduce((s, e) => s + (e.total ?? 0), 0)
 
   function navigateByDays(delta: number) {
-    const newDate = new Date(date)
-    newDate.setDate(date.getDate() + delta)
-    router.push(`/admin/dispatch/calendar/${formatDateForApi(newDate)}`)
+    const d = new Date(date)
+    d.setDate(date.getDate() + delta)
+    router.push(`/admin/dispatch/calendar/${fmtDate(d)}`)
   }
 
   const refreshCrews = useCallback(async () => {
-    const dateStr = formatDateForApi(date)
-    const res = await fetch(`/api/admin/dispatch/crews?date=${dateStr}`)
+    const res = await fetch(`/api/admin/dispatch/crews?date=${fmtDate(date)}`)
     if (res.ok) setCrews(await res.json() as DispatchCrew[])
   }, [date])
 
@@ -132,109 +167,142 @@ export function DispatchDayDetail({ date, initialData }: Props) {
   async function handleDragEnd(e: DragEndEvent) {
     setActiveJobId(null)
     const { active, over } = e
-    if (!over) return
-    if (active.data.current?.type !== 'job') return
-    if (over.data.current?.type !== 'crew') return
+    if (!over || over.data.current?.type !== 'crew') return
 
-    const opportunityId = active.data.current.opportunityId as string
-    const crewId = over.data.current.crewId as string
-    const dateStr = formatDateForApi(date)
-    const event = events.find(ev => ev.id === opportunityId)
+    const crewId    = over.data.current.crewId as string
+    const dateStr   = fmtDate(date)
+    const startTime = pixelToStartTime(ptrX.current, over.rect)
 
-    // Prevent double-assign
-    const alreadyAssigned = crews.some(c => c.assignments.some(a => a.opportunity_id === opportunityId))
-    if (alreadyAssigned) return
+    // ── Unscheduled job dropped on crew timeline ──────────────────────────────
+    if (active.data.current?.type === 'job') {
+      const opportunityId = active.data.current.opportunityId as string
 
-    const tempId = `temp-${crypto.randomUUID()}`
-    const optimistic: DispatchCrewAssignment = {
-      id: tempId,
-      opportunity_id: opportunityId,
-      crew_id: crewId,
-      scheduled_date: dateStr,
-      start_time: '08:00',
-      duration_hours: 3,
-      position: 99,
-      opportunity: {
-        id: opportunityId,
-        move_size: event?.move_size ?? null,
-        origin_city: event?.origin_city ?? null,
-        dest_city: event?.dest_city ?? null,
-        total_amount: event?.total ?? null,
-        customer: { id: '', full_name: event?.customer_name ?? 'Unknown' },
-      },
+      // Prevent double-assign
+      if (crews.some(c => c.assignments.some(a => a.opportunity_id === opportunityId))) return
+
+      const event = events.find(ev => ev.id === opportunityId)
+      const tempId = `temp-${crypto.randomUUID()}`
+      const optimistic: DispatchCrewAssignment = {
+        id: tempId,
+        opportunity_id: opportunityId,
+        crew_id: crewId,
+        scheduled_date: dateStr,
+        start_time: startTime,
+        duration_hours: 3,
+        position: 99,
+        opportunity: {
+          id: opportunityId,
+          opportunity_number: event?.opportunity_number ?? null,
+          move_size: event?.move_size ?? null,
+          origin_city: event?.origin_city ?? null,
+          dest_city: event?.dest_city ?? null,
+          total_amount: event?.total ?? null,
+          customer: { id: '', full_name: event?.customer_name ?? 'Unknown' },
+        },
+      }
+
+      setCrews(prev => prev.map(c =>
+        c.id === crewId ? { ...c, assignments: [...c.assignments, optimistic] } : c
+      ))
+
+      try {
+        const res = await fetch('/api/admin/dispatch/assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ opportunity_id: opportunityId, crew_id: crewId, scheduled_date: dateStr, start_time: startTime }),
+        })
+        if (!res.ok) throw new Error('Assignment failed')
+        const created = await res.json() as DispatchCrewAssignment
+        setCrews(prev => prev.map(c =>
+          c.id === crewId
+            ? { ...c, assignments: c.assignments.map(a => a.id === tempId ? created : a) }
+            : c
+        ))
+      } catch {
+        setCrews(prev => prev.map(c =>
+          c.id === crewId ? { ...c, assignments: c.assignments.filter(a => a.id !== tempId) } : c
+        ))
+      }
+      return
     }
 
-    setCrews(prev => prev.map(c =>
-      c.id === crewId ? { ...c, assignments: [...c.assignments, optimistic] } : c
-    ))
+    // ── Scheduled job block moved to new crew / time ──────────────────────────
+    if (active.data.current?.type === 'scheduled_job') {
+      const assignmentId = active.data.current.assignmentId as string
+      const fromCrewId   = active.data.current.crewId as string
 
-    try {
-      const res = await fetch('/api/admin/dispatch/assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ opportunity_id: opportunityId, crew_id: crewId, scheduled_date: dateStr }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(j.error ?? 'Assignment failed')
+      const fromCrew   = crews.find(c => c.id === fromCrewId)
+      const assignment = fromCrew?.assignments.find(a => a.id === assignmentId)
+      if (!assignment) return
+
+      // No-op: same crew + same start_time
+      if (fromCrewId === crewId && assignment.start_time.startsWith(startTime.slice(0, 5))) return
+
+      const updated = { ...assignment, start_time: startTime, crew_id: crewId }
+
+      setCrews(prev => prev.map(c => {
+        if (c.id === fromCrewId && fromCrewId !== crewId) {
+          return { ...c, assignments: c.assignments.filter(a => a.id !== assignmentId) }
+        }
+        if (c.id === crewId) {
+          return fromCrewId === crewId
+            ? { ...c, assignments: c.assignments.map(a => a.id === assignmentId ? updated : a) }
+            : { ...c, assignments: [...c.assignments, updated] }
+        }
+        return c
+      }))
+
+      try {
+        const res = await fetch(`/api/admin/dispatch/assignments/${assignmentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start_time: startTime, crew_id: crewId }),
+        })
+        if (!res.ok) throw new Error('Move failed')
+      } catch {
+        await refreshCrews()
       }
-      const created = await res.json() as DispatchCrewAssignment
-      setCrews(prev => prev.map(c =>
-        c.id === crewId
-          ? { ...c, assignments: c.assignments.map(a => a.id === tempId ? created : a) }
-          : c
-      ))
-    } catch (err) {
-      console.error('[dispatch] assign failed:', err)
-      setCrews(prev => prev.map(c =>
-        c.id === crewId ? { ...c, assignments: c.assignments.filter(a => a.id !== tempId) } : c
-      ))
     }
   }
 
-  // ─── Unassign ────────────────────────────────────────────────────────────────
+  // ─── Unassign ─────────────────────────────────────────────────────────────
 
   async function handleUnassign(crewId: string, assignmentId: string) {
-    const prevCrews = crews
-    setCrews(prev => prev.map(c =>
-      c.id === crewId ? { ...c, assignments: c.assignments.filter(a => a.id !== assignmentId) } : c
+    const prev = crews
+    setCrews(c => c.map(cr =>
+      cr.id === crewId ? { ...cr, assignments: cr.assignments.filter(a => a.id !== assignmentId) } : cr
     ))
     try {
       const res = await fetch(`/api/admin/dispatch/assignments/${assignmentId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Unassign failed')
-    } catch (err) {
-      console.error('[dispatch] unassign failed:', err)
-      setCrews(prevCrews)
+      if (!res.ok) throw new Error()
+    } catch {
+      setCrews(prev)
     }
   }
 
-  // ─── Crew management ─────────────────────────────────────────────────────────
+  // ─── Crew management ─────────────────────────────────────────────────────
 
   async function handleAddCrew() {
-    const dateStr = formatDateForApi(date)
     try {
       const res = await fetch('/api/admin/dispatch/crews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduled_date: dateStr }),
+        body: JSON.stringify({ scheduled_date: fmtDate(date) }),
       })
       if (!res.ok) return
       const created = await res.json() as DispatchCrew
       setCrews(prev => [...prev, created])
-    } catch (err) {
-      console.error('[dispatch] add crew failed:', err)
-    }
+    } catch { /* noop */ }
   }
 
   async function handleDeleteCrew(crewId: string) {
-    const prevCrews = crews
-    setCrews(prev => prev.filter(c => c.id !== crewId))
+    const prev = crews
+    setCrews(c => c.filter(cr => cr.id !== crewId))
     try {
       const res = await fetch(`/api/admin/dispatch/crews/${crewId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Delete crew failed')
-    } catch (err) {
-      console.error('[dispatch] delete crew failed:', err)
-      setCrews(prevCrews)
+      if (!res.ok) throw new Error()
+    } catch {
+      setCrews(prev)
     }
   }
 
@@ -263,9 +331,8 @@ export function DispatchDayDetail({ date, initialData }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       })
-      if (!res.ok) throw new Error('Update crew failed')
-    } catch (err) {
-      console.error('[dispatch] update crew failed:', err)
+      if (!res.ok) throw new Error()
+    } catch {
       await refreshCrews()
     }
   }
@@ -284,9 +351,8 @@ export function DispatchDayDetail({ date, initialData }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ person_id: personId }),
       })
-      if (!res.ok) throw new Error('Add helper failed')
-    } catch (err) {
-      console.error('[dispatch] add helper failed:', err)
+      if (!res.ok) throw new Error()
+    } catch {
       await refreshCrews()
     }
   }
@@ -301,56 +367,34 @@ export function DispatchDayDetail({ date, initialData }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ person_id: personId }),
       })
-      if (!res.ok) throw new Error('Remove helper failed')
-    } catch (err) {
-      console.error('[dispatch] remove helper failed:', err)
+      if (!res.ok) throw new Error()
+    } catch {
       await refreshCrews()
     }
   }
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <Link
-            href={`/admin/dispatch/calendar?year=${date.getFullYear()}&month=${date.getMonth()}`}
-            className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to month
-          </Link>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigateByDays(-1)}
-              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600"
-              aria-label="Previous day"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <h2 className="text-lg font-semibold text-slate-900 min-w-[280px] text-center">
-              {DAY_NAMES[date.getDay()]}, {MONTH_NAMES[date.getMonth()]} {date.getDate()}, {date.getFullYear()}
-            </h2>
-            <button
-              onClick={() => navigateByDays(1)}
-              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600"
-              aria-label="Next day"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+      <div className="flex flex-col gap-3">
+        {/* ── Top bar ── */}
+        <DayTopBar date={date} onNavigate={navigateByDays} />
 
-        {/* Stats strip */}
+        {/* ── Stats strip ── */}
         <div className="grid grid-cols-3 gap-3">
-          <StatCard label="Booked moves" value={bookedCount} />
-          <StatCard label="Completed" value={completedCount} />
-          <StatCard label="Revenue (day)" value={totalRevenue > 0 ? formatCurrency(totalRevenue) : '—'} />
+          <StatCard label="Booked moves"   value={bookedCount} />
+          <StatCard label="Completed"      value={completedCount} />
+          <StatCard label="Revenue (day)"  value={totalRevenue > 0 ? formatCurrency(totalRevenue) : '—'} />
         </div>
 
-        {/* Three-column layout */}
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr_300px] gap-3 min-h-[400px]">
+        {/* ── Main board ── */}
+        <div
+          className="flex border border-slate-200 rounded-lg overflow-hidden bg-white"
+          style={{ minHeight: 520 }}
+        >
+          {/* Left: resources */}
           <ResourcesPanel trucks={trucks} crew={crewPeople} onTrucksChanged={refreshTrucks} />
+
+          {/* Center: schedule timeline */}
           <ScheduleGrid
             crews={crews}
             trucks={trucks}
@@ -362,7 +406,9 @@ export function DispatchDayDetail({ date, initialData }: Props) {
             onRemoveHelper={handleRemoveHelper}
             onUnassign={handleUnassign}
           />
-          <JobsPanel events={events} crews={crews} />
+
+          {/* Right: jobs */}
+          <JobsPanel events={events} cancelledEvents={cancelledEvents} crews={crews} />
         </div>
       </div>
 
@@ -373,7 +419,71 @@ export function DispatchDayDetail({ date, initialData }: Props) {
   )
 }
 
-// ─── Stat card ─────────────────────────────────────────────────────────────────
+// ─── Day top bar ──────────────────────────────────────────────────────────────
+
+function DayTopBar({ date, onNavigate }: { date: Date; onNavigate: (delta: number) => void }) {
+  const today = new Date()
+  const isToday =
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+
+  const dateLabel = `${DAY_NAMES[date.getDay()]}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
+
+  return (
+    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-2.5 gap-3">
+      {/* Back + date nav */}
+      <div className="flex items-center gap-2">
+        <Link
+          href={`/admin/dispatch/calendar?year=${date.getFullYear()}&month=${date.getMonth()}`}
+          className="p-1 rounded hover:bg-slate-100 text-slate-500"
+          title="Back to calendar"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Link>
+        <button onClick={() => onNavigate(-1)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <h2 className="text-sm font-semibold text-slate-900 whitespace-nowrap">{dateLabel}</h2>
+        <button onClick={() => onNavigate(1)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+        {!isToday && (
+          <button
+            onClick={() => {
+              const now = new Date()
+              const y = now.getFullYear()
+              const m = String(now.getMonth() + 1).padStart(2, '0')
+              const d = String(now.getDate()).padStart(2, '0')
+              window.location.href = `/admin/dispatch/calendar/${y}-${m}-${d}`
+            }}
+            className="text-xs px-2 py-1 border border-slate-200 rounded text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            Today
+          </button>
+        )}
+      </div>
+
+      {/* Action controls */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-slate-400 border border-slate-200 rounded px-2 py-1 bg-slate-50">
+          Branch: All
+        </span>
+        <button className="text-[11px] px-2.5 py-1 border border-slate-200 rounded text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 transition-colors">
+          <Printer className="w-3.5 h-3.5" /> Print
+        </button>
+        <button className="text-[11px] px-2.5 py-1 border border-slate-200 rounded text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 transition-colors">
+          <BarChart2 className="w-3.5 h-3.5" /> Report
+        </button>
+        <button className="text-[11px] px-2.5 py-1 bg-kratos hover:bg-kratos/90 rounded text-white font-medium flex items-center gap-1.5 transition-colors">
+          <Send className="w-3.5 h-3.5" /> Publish
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -396,24 +506,28 @@ function ResourcesPanel({ trucks, crew, onTrucksChanged }: ResourcesPanelProps) 
   const [tab, setTab] = useState<'trucks' | 'crew'>('trucks')
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 flex flex-col overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-slate-200 flex-shrink-0">
-        <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Resources</h3>
+    <div className="w-[240px] flex-shrink-0 border-r border-slate-200 flex flex-col">
+      {/* Section label */}
+      <div className="px-3 py-2 border-b border-slate-200 bg-slate-50 flex-shrink-0">
+        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Resources</p>
       </div>
+
+      {/* Tabs */}
       <div className="flex border-b border-slate-200 flex-shrink-0">
         <button
           onClick={() => setTab('trucks')}
-          className={`flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${tab === 'trucks' ? 'border-orange-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors ${tab === 'trucks' ? 'border-kratos text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Trucks ({trucks.length})
         </button>
         <button
           onClick={() => setTab('crew')}
-          className={`flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${tab === 'crew' ? 'border-orange-500 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors ${tab === 'crew' ? 'border-kratos text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Crew ({crew.length})
         </button>
       </div>
+
       {tab === 'trucks'
         ? <TrucksTab trucks={trucks} onAdded={onTrucksChanged} />
         : <CrewTab crew={crew} />}
@@ -421,16 +535,10 @@ function ResourcesPanel({ trucks, crew, onTrucksChanged }: ResourcesPanelProps) 
   )
 }
 
-// ─── Trucks tab ────────────────────────────────────────────────────────────────
+// ─── Trucks tab ───────────────────────────────────────────────────────────────
 
-interface TrucksTabProps {
-  trucks: DispatchTruck[]
-  onAdded: () => void
-}
-
-function TrucksTab({ trucks, onAdded }: TrucksTabProps) {
+function TrucksTab({ trucks, onAdded }: { trucks: DispatchTruck[]; onAdded: () => void }) {
   const [adding, setAdding] = useState(false)
-
   const grouped: Record<string, DispatchTruck[]> = {}
   for (const t of trucks) {
     if (!grouped[t.category]) grouped[t.category] = []
@@ -442,39 +550,45 @@ function TrucksTab({ trucks, onAdded }: TrucksTabProps) {
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
         {trucks.length === 0 && !adding && (
           <div className="p-4 text-center">
-            <Truck className="w-7 h-7 text-slate-300 mx-auto mb-2" />
-            <p className="text-xs text-slate-500">No trucks yet. Add your first one.</p>
+            <Truck className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs text-slate-500">No trucks yet.</p>
           </div>
         )}
         {CATEGORY_ORDER.map(cat => {
           const list = grouped[cat]
-          if (!list || list.length === 0) return null
+          if (!list?.length) return null
           return (
             <div key={cat}>
-              <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1 mb-1">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">
                 {CATEGORY_LABELS[cat]} ({list.length})
-              </div>
+              </p>
               <div className="space-y-0.5">
-                {list.map(t => <TruckRow key={t.id} truck={t} />)}
+                {list.map(t => (
+                  <div key={t.id} className="px-2 py-1.5 rounded hover:bg-slate-50 flex items-center gap-2 text-xs">
+                    <Truck className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-slate-900 truncate">{t.name}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {t.size.replace('_', ' ')}{t.provider ? ` · ${t.provider}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )
         })}
         {adding && (
-          <AddTruckForm
-            onClose={() => setAdding(false)}
-            onAdded={() => { setAdding(false); onAdded() }}
-          />
+          <AddTruckForm onClose={() => setAdding(false)} onAdded={() => { setAdding(false); onAdded() }} />
         )}
       </div>
       {!adding && (
         <div className="p-2 border-t border-slate-200 flex-shrink-0">
           <button
             onClick={() => setAdding(true)}
-            className="w-full px-3 py-1.5 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+            className="w-full px-3 py-1.5 rounded bg-kratos hover:bg-kratos/90 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add truck
+            <Plus className="w-3.5 h-3.5" /> Add truck
           </button>
         </div>
       )}
@@ -482,28 +596,7 @@ function TrucksTab({ trucks, onAdded }: TrucksTabProps) {
   )
 }
 
-function TruckRow({ truck }: { truck: DispatchTruck }) {
-  return (
-    <div className="px-2 py-1.5 rounded-md hover:bg-slate-50 flex items-center gap-2 text-xs">
-      <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center flex-shrink-0">
-        <Truck className="w-3 h-3 text-slate-500" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-slate-900 truncate">{truck.name}</div>
-        <div className="text-[10px] text-slate-500">
-          {truck.size.replace('_', ' ')}{truck.provider ? ` · ${truck.provider}` : ''}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface AddTruckFormProps {
-  onClose: () => void
-  onAdded: () => void
-}
-
-function AddTruckForm({ onClose, onAdded }: AddTruckFormProps) {
+function AddTruckForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState<'owned' | 'rental' | 'contractor'>('owned')
   const [provider, setProvider] = useState('')
@@ -511,24 +604,18 @@ function AddTruckForm({ onClose, onAdded }: AddTruckFormProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleSave() {
+  async function save() {
     if (!name.trim()) { setError('Name is required'); return }
-    setSaving(true)
-    setError(null)
+    setSaving(true); setError(null)
     try {
       const res = await fetch('/api/admin/dispatch/trucks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          category,
-          size,
-          provider: category === 'rental' ? (provider || null) : null,
-        }),
+        body: JSON.stringify({ name: name.trim(), category, size, provider: category === 'rental' ? (provider || null) : null }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(j.error ?? 'Failed to add truck')
+        throw new Error(j.error ?? 'Failed')
       }
       onAdded()
     } catch (err: unknown) {
@@ -539,55 +626,45 @@ function AddTruckForm({ onClose, onAdded }: AddTruckFormProps) {
   }
 
   return (
-    <div className="p-3 bg-orange-50 border border-orange-200 rounded-md space-y-2">
+    <div className="p-3 bg-kratos/5 border border-kratos/20 rounded space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-slate-900">New truck</p>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
       </div>
       <input
-        type="text"
         autoFocus
         placeholder="Name (e.g. Penske 26ft #1)"
         value={name}
         onChange={e => setName(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
-        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
+        onKeyDown={e => { if (e.key === 'Enter') save() }}
+        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-kratos"
       />
       <div className="flex gap-1">
-        {(['owned', 'rental', 'contractor'] as const).map(c => (
+        {(['owned','rental','contractor'] as const).map(c => (
           <button
             key={c}
             onClick={() => setCategory(c)}
-            className={`flex-1 px-2 py-1 text-[10px] rounded font-medium transition-colors ${category === c ? 'bg-orange-500 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+            className={`flex-1 px-1 py-1 text-[10px] rounded font-medium transition-colors ${category === c ? 'bg-kratos text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
           >
             {CATEGORY_LABELS[c]}
           </button>
         ))}
       </div>
       {category === 'rental' && (
-        <select
-          value={provider}
-          onChange={e => setProvider(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white"
-        >
-          <option value="">— Select provider —</option>
+        <select value={provider} onChange={e => setProvider(e.target.value)}
+          className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-kratos">
+          <option value="">— Provider —</option>
           {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       )}
-      <select
-        value={size}
-        onChange={e => setSize(e.target.value)}
-        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white"
-      >
+      <select value={size} onChange={e => setSize(e.target.value)}
+        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-kratos">
         {SIZES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
       </select>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full px-2 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium disabled:opacity-50 transition-colors"
+        onClick={save} disabled={saving}
+        className="w-full py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium disabled:opacity-50 transition-colors"
       >
         {saving ? 'Saving…' : 'Save truck'}
       </button>
@@ -595,38 +672,34 @@ function AddTruckForm({ onClose, onAdded }: AddTruckFormProps) {
   )
 }
 
-// ─── Crew tab ──────────────────────────────────────────────────────────────────
+// ─── Crew tab ─────────────────────────────────────────────────────────────────
 
 function CrewTab({ crew }: { crew: DispatchCrewMember[] }) {
-  if (crew.length === 0) {
+  if (!crew.length) {
     return (
       <div className="p-5 text-center flex-1 flex flex-col items-center justify-center">
-        <Users className="w-8 h-8 text-slate-300 mb-2" />
+        <Users className="w-7 h-7 text-slate-300 mb-2" />
         <p className="text-xs text-slate-500 mb-1">No crew members yet.</p>
-        <Link href="/admin/dispatch/workforce" className="text-xs text-orange-600 hover:text-orange-700 font-medium">
+        <Link href="/admin/dispatch/workforce" className="text-xs text-kratos hover:opacity-80 font-medium">
           Add people in Workforce
         </Link>
       </div>
     )
   }
-
   return (
     <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
       {crew.map(person => (
-        <div key={person.id} className="px-2 py-1.5 rounded-md hover:bg-slate-50 flex items-center gap-2 text-xs">
+        <div key={person.id} className="px-2 py-1.5 rounded hover:bg-slate-50 flex items-center gap-2 text-xs">
           <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
           <div className="flex-1 min-w-0">
             <div className="font-medium text-slate-900 truncate">{person.name}</div>
             <div className="text-[10px] text-slate-500 truncate">
               {person.role_data?.label ?? person.role ?? 'No role'}
-              {person.status ? ` · ${person.status.label}` : ''}
             </div>
           </div>
           {person.tier && (
-            <span
-              className="text-[10px] font-bold text-white rounded px-1 py-0.5 flex-shrink-0"
-              style={{ backgroundColor: person.tier.color }}
-            >
+            <span className="text-[10px] font-bold text-white rounded px-1 py-0.5 flex-shrink-0"
+              style={{ backgroundColor: person.tier.color }}>
               {person.tier.label}
             </span>
           )}
@@ -643,36 +716,65 @@ interface ScheduleGridProps {
   trucks: DispatchTruck[]
   crewPeople: DispatchCrewMember[]
   onAddCrew: () => void
-  onDeleteCrew: (crewId: string) => void
-  onUpdateCrew: (crewId: string, patch: Partial<DispatchCrew>) => void
+  onDeleteCrew: (id: string) => void
+  onUpdateCrew: (id: string, patch: Partial<DispatchCrew>) => void
   onAddHelper: (crewId: string, personId: string) => void
   onRemoveHelper: (crewId: string, personId: string) => void
   onUnassign: (crewId: string, assignmentId: string) => void
 }
+
+const CREW_PANEL_W = 220  // px — left info panel in each crew row
+const HOURS_ARR = Array.from({ length: TL_HOURS + 1 }, (_, i) => i)  // 0..12
 
 function ScheduleGrid({
   crews, trucks, crewPeople,
   onAddCrew, onDeleteCrew, onUpdateCrew, onAddHelper, onRemoveHelper, onUnassign,
 }: ScheduleGridProps) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 flex flex-col">
-      <div className="px-3 py-2.5 border-b border-slate-200 flex-shrink-0 flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Schedule</h3>
-        <button
-          onClick={onAddCrew}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-medium transition-colors"
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      {/* Grid header row */}
+      <div className="flex flex-shrink-0 border-b border-slate-200 bg-slate-50">
+        {/* Info panel header */}
+        <div
+          style={{ width: CREW_PANEL_W, minWidth: CREW_PANEL_W }}
+          className="border-r border-slate-200 px-3 py-2 flex items-center justify-between"
         >
-          <Plus className="w-3 h-3" />
-          Add crew
-        </button>
+          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Crew / Resources</span>
+          <button
+            onClick={onAddCrew}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-kratos hover:bg-kratos/90 text-white text-[10px] font-medium transition-colors"
+          >
+            <Plus className="w-3 h-3" /> Add
+          </button>
+        </div>
+
+        {/* Timeline hour marks */}
+        <div className="flex-1 relative h-8 overflow-hidden">
+          {HOURS_ARR.map(i => {
+            const hour = TL_START + i
+            return (
+              <div
+                key={i}
+                style={{ left: `${(i / TL_HOURS) * 100}%` }}
+                className="absolute top-0 bottom-0 flex flex-col items-start"
+              >
+                <div className="h-full border-l border-slate-200" />
+                <span className="absolute top-1 left-1 text-[9px] text-slate-400 font-medium whitespace-nowrap">
+                  {hourLabel(hour)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
+      {/* Crew rows */}
       {crews.length === 0 ? (
-        <div className="flex-1 min-h-[280px] flex flex-col items-center justify-center p-8">
-          <CalendarDays className="w-10 h-10 text-slate-300 mb-3" />
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-2">
+          <CalendarDays className="w-10 h-10 text-slate-300" />
           <p className="text-sm font-medium text-slate-700">No crews yet</p>
-          <p className="text-xs text-slate-500 mt-1 text-center leading-relaxed max-w-xs">
-            Add a crew row, then assign a truck, driver, and helpers. Drag jobs from the right onto a crew to schedule them.
+          <p className="text-xs text-slate-500 text-center max-w-xs leading-relaxed">
+            Click &quot;Add&quot; to create a crew row, then assign a truck, driver, and helpers. Drag jobs from the right onto a crew row to schedule them.
           </p>
         </div>
       ) : (
@@ -683,11 +785,11 @@ function ScheduleGrid({
               crew={crew}
               trucks={trucks}
               crewPeople={crewPeople}
-              onUpdate={patch => onUpdateCrew(crew.id, patch)}
+              onUpdate={p => onUpdateCrew(crew.id, p)}
               onDelete={() => onDeleteCrew(crew.id)}
-              onAddHelper={personId => onAddHelper(crew.id, personId)}
-              onRemoveHelper={personId => onRemoveHelper(crew.id, personId)}
-              onUnassign={assignmentId => onUnassign(crew.id, assignmentId)}
+              onAddHelper={pid => onAddHelper(crew.id, pid)}
+              onRemoveHelper={pid => onRemoveHelper(crew.id, pid)}
+              onUnassign={aid => onUnassign(crew.id, aid)}
             />
           ))}
         </div>
@@ -711,12 +813,10 @@ interface CrewRowProps {
 
 function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, onRemoveHelper, onUnassign }: CrewRowProps) {
   const [localName, setLocalName] = useState(crew.name)
-
-  // Keep local name in sync when parent updates it
   useEffect(() => { setLocalName(crew.name) }, [crew.name])
 
   const { setNodeRef, isOver } = useDroppable({
-    id: `crew-${crew.id}`,
+    id: `crew-timeline-${crew.id}`,
     data: { type: 'crew', crewId: crew.id },
   })
 
@@ -724,30 +824,29 @@ function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, on
     crew.driver_id ?? '',
     crew.dispatcher_id ?? '',
     ...crew.helpers.map(h => h.person.id),
-  ])
+  ].filter(Boolean))
 
   return (
-    <div className="flex min-h-[100px]">
-      {/* Left panel — slots */}
-      <div className="w-[220px] flex-shrink-0 border-r border-slate-200 p-2 space-y-1.5 bg-slate-50">
-        {/* Crew name */}
-        <div className="flex items-center gap-1 mb-1">
+    <div className="flex" style={{ minHeight: 88 }}>
+      {/* Left: crew slots */}
+      <div
+        style={{ width: CREW_PANEL_W, minWidth: CREW_PANEL_W }}
+        className="border-r border-slate-200 p-2 space-y-1 bg-slate-50/60 flex-shrink-0"
+      >
+        {/* Name + delete */}
+        <div className="flex items-center gap-1 mb-0.5">
           <input
-            className="flex-1 text-xs font-semibold text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-orange-400 rounded px-1 py-0.5 min-w-0"
+            className="flex-1 text-xs font-semibold text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-kratos/50 rounded px-1 py-0.5 min-w-0"
             value={localName}
             onChange={e => setLocalName(e.target.value)}
             onBlur={() => {
-              const trimmed = localName.trim()
-              if (trimmed && trimmed !== crew.name) onUpdate({ name: trimmed })
+              const t = localName.trim()
+              if (t && t !== crew.name) onUpdate({ name: t })
               else setLocalName(crew.name)
             }}
             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
           />
-          <button
-            onClick={onDelete}
-            className="text-slate-300 hover:text-red-500 flex-shrink-0 transition-colors p-0.5"
-            title="Remove crew row"
-          >
+          <button onClick={onDelete} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0 p-0.5">
             <Trash2 className="w-3 h-3" />
           </button>
         </div>
@@ -755,23 +854,21 @@ function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, on
         <TruckSlot
           current={crew.truck ?? null}
           trucks={trucks}
-          onSelect={truckId => onUpdate({ truck_id: truckId ?? null })}
+          onSelect={id => onUpdate({ truck_id: id ?? null })}
         />
         <PersonSlot
-          label="Driver"
           emptyLabel="No Kratos Driver"
           person={crew.driver ?? null}
           people={crewPeople}
           blockedIds={new Set([crew.dispatcher_id ?? ''].filter(Boolean))}
-          onSelect={personId => onUpdate({ driver_id: personId ?? null })}
+          onSelect={id => onUpdate({ driver_id: id ?? null })}
         />
         <PersonSlot
-          label="Dispatcher"
           emptyLabel="No Dispatcher"
           person={crew.dispatcher ?? null}
           people={crewPeople}
           blockedIds={new Set([crew.driver_id ?? ''].filter(Boolean))}
-          onSelect={personId => onUpdate({ dispatcher_id: personId ?? null })}
+          onSelect={id => onUpdate({ dispatcher_id: id ?? null })}
         />
         <HelpersSlot
           helpers={crew.helpers}
@@ -782,22 +879,105 @@ function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, on
         />
       </div>
 
-      {/* Right panel — droppable assignment area */}
+      {/* Right: timeline track (droppable) */}
       <div
         ref={setNodeRef}
-        className={`flex-1 p-2 min-h-[100px] transition-colors ${isOver ? 'bg-orange-50' : ''}`}
+        className={`relative flex-1 overflow-hidden transition-colors ${isOver ? 'bg-kratos/5' : 'bg-white'}`}
       >
-        {crew.assignments.length === 0 ? (
-          <div className={`h-full flex items-center justify-center text-[11px] ${isOver ? 'text-orange-400 font-medium' : 'text-slate-300'}`}>
-            {isOver ? 'Release to assign' : 'Drop a job here'}
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {crew.assignments.map(a => (
-              <AssignedJobCard key={a.id} assignment={a} onUnassign={onUnassign} />
-            ))}
+        {/* Hour grid lines */}
+        {HOURS_ARR.map(i => (
+          <div
+            key={i}
+            style={{ left: `${(i / TL_HOURS) * 100}%` }}
+            className="absolute top-0 bottom-0 border-l border-slate-100 pointer-events-none"
+          />
+        ))}
+
+        {/* Job blocks */}
+        {crew.assignments.map(a => (
+          <TimelineJobBlock
+            key={a.id}
+            assignment={a}
+            crewId={crew.id}
+            onUnassign={onUnassign}
+          />
+        ))}
+
+        {/* Empty / hover hints */}
+        {crew.assignments.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className={`text-xs ${isOver ? 'text-kratos font-medium' : 'text-slate-300'}`}>
+              {isOver ? 'Release to schedule' : 'Drag a job here'}
+            </span>
           </div>
         )}
+        {isOver && crew.assignments.length > 0 && (
+          <div className="absolute inset-0 border-2 border-dashed border-kratos/40 rounded-sm pointer-events-none" />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Timeline job block ───────────────────────────────────────────────────────
+
+function TimelineJobBlock({
+  assignment, crewId, onUnassign,
+}: {
+  assignment: DispatchCrewAssignment
+  crewId: string
+  onUnassign: (id: string) => void
+}) {
+  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({
+    id: `scheduled-${assignment.id}`,
+    data: { type: 'scheduled_job', assignmentId: assignment.id, crewId, opportunityId: assignment.opportunity_id },
+  })
+
+  const startH  = parseTimeToHours(assignment.start_time)
+  const duration = Math.max(0.25, assignment.duration_hours)
+  const leftPct  = Math.max(0, (startH - TL_START) / TL_HOURS * 100)
+  const widthPct = Math.min(100 - leftPct, duration / TL_HOURS * 100)
+
+  const opp          = assignment.opportunity
+  const customerName = opp?.customer?.full_name ?? 'Unknown'
+  const quoteNum     = opp?.opportunity_number
+
+  const endH   = startH + duration
+  const endStr = `${String(Math.floor(endH)).padStart(2, '0')}:${String(Math.round((endH % 1) * 60)).padStart(2, '0')}`
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{
+        position: 'absolute',
+        left: `${leftPct}%`,
+        width: `${Math.max(widthPct, 3)}%`,
+        top: 6,
+        bottom: 6,
+        transform: transform ? `translate3d(${transform.x}px,${transform.y}px,0)` : undefined,
+        zIndex: isDragging ? 20 : 2,
+        minWidth: 48,
+      }}
+      className={`rounded overflow-hidden group cursor-grab active:cursor-grabbing select-none transition-shadow
+        ${isDragging ? 'shadow-xl opacity-80' : 'shadow-sm hover:shadow-md'}
+        bg-blue-50 border border-blue-200 hover:border-blue-400`}
+    >
+      <div className="absolute inset-0 flex items-center px-1.5 gap-1 overflow-hidden">
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] font-semibold text-blue-900 leading-tight truncate">{customerName}</p>
+          <p className="text-[9px] text-blue-500 leading-tight truncate">
+            {quoteNum ? `${quoteNum} · ` : ''}{String(Math.floor(startH)).padStart(2,'0')}:{String(Math.round((startH%1)*60)).padStart(2,'0')}–{endStr}
+          </p>
+        </div>
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onUnassign(assignment.id) }}
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-blue-300 hover:text-red-500 transition-opacity"
+        >
+          <X className="w-3 h-3" />
+        </button>
       </div>
     </div>
   )
@@ -808,7 +988,7 @@ function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, on
 interface TruckSlotProps {
   current: DispatchCrewTruck | null
   trucks: DispatchTruck[]
-  onSelect: (truckId: string | null) => void
+  onSelect: (id: string | null) => void
 }
 
 function TruckSlot({ current, trucks, onSelect }: TruckSlotProps) {
@@ -826,26 +1006,21 @@ function TruckSlot({ current, trucks, onSelect }: TruckSlotProps) {
       <button
         ref={btnRef}
         onClick={() => btnRef.current && openAt(btnRef.current)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-slate-200 hover:border-slate-400 text-xs text-left transition-colors"
+        className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs text-left transition-colors"
       >
         <Truck className="w-3 h-3 text-slate-400 flex-shrink-0" />
         <span className={`flex-1 truncate ${current ? 'text-slate-900' : 'text-slate-400'}`}>
-          {current ? current.name : 'No Trucks'}
+          {current ? `${current.name} (${current.size.replace('_',' ')})` : 'No Trucks'}
         </span>
         <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
       </button>
 
       {open && (
-        <div
-          ref={popoverRef}
-          style={popStyle}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]"
-        >
+        <div ref={popoverRef} style={popStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]">
           {current && (
-            <button
-              onClick={() => { onSelect(null); close() }}
-              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100"
-            >
+            <button onClick={() => { onSelect(null); close() }}
+              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100">
               Clear truck
             </button>
           )}
@@ -858,13 +1033,11 @@ function TruckSlot({ current, trucks, onSelect }: TruckSlotProps) {
                   {CATEGORY_LABELS[cat]}
                 </div>
                 {list.map(t => (
-                  <button
-                    key={t.id}
+                  <button key={t.id}
                     onClick={() => { onSelect(t.id); close() }}
-                    className={`w-full px-3 py-2 text-left text-xs hover:bg-orange-50 flex items-center justify-between gap-2 ${current?.id === t.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-900'}`}
-                  >
+                    className={`w-full px-3 py-2 text-left text-xs hover:bg-kratos/5 flex items-center justify-between gap-2 ${current?.id === t.id ? 'bg-kratos/5 text-kratos font-medium' : 'text-slate-900'}`}>
                     <span className="truncate">{t.name}</span>
-                    <span className="text-[10px] text-slate-400 flex-shrink-0">{t.size.replace('_', ' ')}</span>
+                    <span className="text-[10px] text-slate-400 flex-shrink-0">{t.size.replace('_',' ')}</span>
                   </button>
                 ))}
               </div>
@@ -882,12 +1055,11 @@ function TruckSlot({ current, trucks, onSelect }: TruckSlotProps) {
 // ─── Person slot ──────────────────────────────────────────────────────────────
 
 interface PersonSlotProps {
-  label: string
   emptyLabel: string
   person: DispatchCrewPerson | null
   people: DispatchCrewMember[]
   blockedIds: Set<string>
-  onSelect: (personId: string | null) => void
+  onSelect: (id: string | null) => void
 }
 
 function PersonSlot({ emptyLabel, person, people, blockedIds, onSelect }: PersonSlotProps) {
@@ -899,13 +1071,11 @@ function PersonSlot({ emptyLabel, person, people, blockedIds, onSelect }: Person
       <button
         ref={btnRef}
         onClick={() => btnRef.current && openAt(btnRef.current)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-slate-200 hover:border-slate-400 text-xs text-left transition-colors"
+        className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs text-left transition-colors"
       >
-        {person ? (
-          <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
-        ) : (
-          <UserRound className="w-3 h-3 text-slate-400 flex-shrink-0" />
-        )}
+        {person
+          ? <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
+          : <UserRound className="w-3 h-3 text-slate-400 flex-shrink-0" />}
         <span className={`flex-1 truncate ${person ? 'text-slate-900' : 'text-slate-400'}`}>
           {person ? person.name : emptyLabel}
         </span>
@@ -913,16 +1083,11 @@ function PersonSlot({ emptyLabel, person, people, blockedIds, onSelect }: Person
       </button>
 
       {open && (
-        <div
-          ref={popoverRef}
-          style={popStyle}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]"
-        >
+        <div ref={popoverRef} style={popStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]">
           {person && (
-            <button
-              onClick={() => { onSelect(null); close() }}
-              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100"
-            >
+            <button onClick={() => { onSelect(null); close() }}
+              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100">
               Clear person
             </button>
           )}
@@ -930,22 +1095,17 @@ function PersonSlot({ emptyLabel, person, people, blockedIds, onSelect }: Person
             <p className="px-3 py-3 text-xs text-slate-400 text-center">No crew members</p>
           )}
           {people.map(p => {
-            const isBlocked = blockedIds.has(p.id)
+            const isBlocked  = blockedIds.has(p.id)
             const isSelected = person?.id === p.id
             return (
-              <button
-                key={p.id}
-                disabled={isBlocked}
+              <button key={p.id} disabled={isBlocked}
                 onClick={() => { onSelect(p.id); close() }}
                 className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors
-                  ${isBlocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-orange-50'}
-                  ${isSelected ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-900'}`}
-              >
+                  ${isBlocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-kratos/5'}
+                  ${isSelected ? 'bg-kratos/5 text-kratos font-medium' : 'text-slate-900'}`}>
                 <Avatar src={p.profile_picture_url} name={p.name} size="sm" />
                 <span className="truncate">{p.name}</span>
-                {p.role_data && (
-                  <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>
-                )}
+                {p.role_data && <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>}
               </button>
             )
           })}
@@ -961,8 +1121,8 @@ interface HelpersSlotProps {
   helpers: Array<{ person: DispatchCrewPerson }>
   people: DispatchCrewMember[]
   blockedIds: Set<string>
-  onAdd: (personId: string) => void
-  onRemove: (personId: string) => void
+  onAdd: (id: string) => void
+  onRemove: (id: string) => void
 }
 
 function HelpersSlot({ helpers, people, blockedIds, onAdd, onRemove }: HelpersSlotProps) {
@@ -974,31 +1134,23 @@ function HelpersSlot({ helpers, people, blockedIds, onAdd, onRemove }: HelpersSl
 
   return (
     <div className="space-y-1">
-      {/* Existing helper chips */}
       {helpers.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {helpers.map(h => (
-            <span
-              key={h.person.id}
-              className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium"
-            >
+            <span key={h.person.id}
+              className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium">
               {h.person.name.split(' ')[0]}
-              <button
-                onClick={() => onRemove(h.person.id)}
-                className="text-slate-400 hover:text-red-500 transition-colors"
-              >
+              <button onClick={() => onRemove(h.person.id)} className="text-slate-400 hover:text-red-500 transition-colors">
                 <X className="w-2.5 h-2.5" />
               </button>
             </span>
           ))}
         </div>
       )}
-
-      {/* Add helper button */}
       <button
         ref={btnRef}
         onClick={() => btnRef.current && openAt(btnRef.current)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-slate-200 hover:border-slate-400 text-xs text-left transition-colors"
+        className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs text-left transition-colors"
       >
         <Users className="w-3 h-3 text-slate-400 flex-shrink-0" />
         <span className="flex-1 text-slate-400">
@@ -1008,27 +1160,20 @@ function HelpersSlot({ helpers, people, blockedIds, onAdd, onRemove }: HelpersSl
       </button>
 
       {open && (
-        <div
-          ref={popoverRef}
-          style={popStyle}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]"
-        >
+        <div ref={popoverRef} style={popStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]">
           {available.length === 0 && (
             <p className="px-3 py-3 text-xs text-slate-400 text-center">
-              {people.length === 0 ? 'No crew members' : 'All crew members assigned'}
+              {people.length === 0 ? 'No crew members' : 'All assigned'}
             </p>
           )}
           {available.map(p => (
-            <button
-              key={p.id}
+            <button key={p.id}
               onClick={() => { onAdd(p.id); close() }}
-              className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-orange-50 text-slate-900 transition-colors"
-            >
+              className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-kratos/5 text-slate-900 transition-colors">
               <Avatar src={p.profile_picture_url} name={p.name} size="sm" />
               <span className="truncate">{p.name}</span>
-              {p.role_data && (
-                <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>
-              )}
+              {p.role_data && <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>}
             </button>
           ))}
         </div>
@@ -1037,86 +1182,101 @@ function HelpersSlot({ helpers, people, blockedIds, onAdd, onRemove }: HelpersSl
   )
 }
 
-// ─── Assigned job card ────────────────────────────────────────────────────────
-
-function AssignedJobCard({ assignment, onUnassign }: { assignment: DispatchCrewAssignment; onUnassign: (id: string) => void }) {
-  const opp = assignment.opportunity
-  const customerName = opp?.customer?.full_name ?? 'Unknown'
-
-  return (
-    <div
-      className="bg-white border border-slate-200 rounded-md px-2 py-1.5 flex items-center justify-between gap-2 shadow-sm"
-      style={{ borderLeftWidth: 3, borderLeftColor: '#ffad33' }}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-medium text-slate-900 truncate">{customerName}</div>
-        <div className="text-[10px] text-slate-500 truncate">
-          {opp?.move_size ? opp.move_size.replace(/_/g, ' ') : 'Move'}
-        </div>
-      </div>
-      <button
-        onClick={() => onUnassign(assignment.id)}
-        className="text-slate-400 hover:text-red-500 flex-shrink-0 transition-colors"
-        title="Unassign"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  )
-}
-
 // ─── Jobs panel ───────────────────────────────────────────────────────────────
 
 interface JobsPanelProps {
   events: DispatchCalendarEvent[]
+  cancelledEvents: DispatchCalendarEvent[]
   crews: DispatchCrew[]
 }
 
-function JobsPanel({ events, crews }: JobsPanelProps) {
-  const assignedIds = new Set(
-    crews.flatMap(c => c.assignments.map(a => a.opportunity_id))
-  )
-  const unassigned = events.filter(e => !assignedIds.has(e.id))
+function JobsPanel({ events, cancelledEvents, crews }: JobsPanelProps) {
+  const [tab, setTab] = useState<'unscheduled' | 'cancelled'>('unscheduled')
+
+  const assignedIds = new Set(crews.flatMap(c => c.assignments.map(a => a.opportunity_id)))
+  const unassigned  = events.filter(e => !assignedIds.has(e.id))
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 flex flex-col">
-      <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
-        <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Unscheduled</h3>
-        <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
-          {unassigned.length}
-        </span>
+    <div className="w-[280px] flex-shrink-0 border-l border-slate-200 flex flex-col">
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 flex-shrink-0">
+        <button
+          onClick={() => setTab('unscheduled')}
+          className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1.5 ${tab === 'unscheduled' ? 'border-kratos text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Unscheduled
+          {unassigned.length > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tab === 'unscheduled' ? 'bg-kratos/10 text-kratos' : 'bg-slate-100 text-slate-600'}`}>
+              {unassigned.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('cancelled')}
+          className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1.5 ${tab === 'cancelled' ? 'border-red-400 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Cancelled
+          {cancelledEvents.length > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${tab === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
+              {cancelledEvents.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {unassigned.length === 0 ? (
-        <div className="p-5 text-center flex-1 flex flex-col items-center justify-center">
-          {events.length === 0 ? (
-            <>
-              <Inbox className="w-8 h-8 text-slate-300 mb-2" />
-              <p className="text-xs text-slate-500">No jobs for this day</p>
-            </>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {tab === 'unscheduled' && (
+          unassigned.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+              {events.length === 0 ? (
+                <>
+                  <Inbox className="w-8 h-8 text-slate-300 mb-2" />
+                  <p className="text-xs text-slate-500">No jobs for this day</p>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-8 h-8 text-green-400 mb-2" />
+                  <p className="text-xs text-slate-600 font-medium">All jobs scheduled</p>
+                </>
+              )}
+            </div>
           ) : (
-            <>
-              <CheckCircle className="w-8 h-8 text-green-400 mb-2" />
-              <p className="text-xs text-slate-600 font-medium">All jobs scheduled</p>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[600px]">
-          {unassigned.map(event => <DraggableJobCard key={event.id} event={event} />)}
-        </div>
-      )}
+            unassigned.map(ev => <DraggableJobCard key={ev.id} event={ev} />)
+          )
+        )}
+
+        {tab === 'cancelled' && (
+          cancelledEvents.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+              <AlertCircle className="w-8 h-8 text-slate-300 mb-2" />
+              <p className="text-xs text-slate-500">No cancelled jobs for this date</p>
+            </div>
+          ) : (
+            cancelledEvents.map(ev => (
+              <div
+                key={ev.id}
+                className="bg-white rounded-md border border-slate-200 p-2.5 opacity-70"
+                style={{ borderLeftWidth: 3, borderLeftColor: '#ef4444' }}
+              >
+                <JobCardContent event={ev} />
+              </div>
+            ))
+          )
+        )}
+      </div>
     </div>
   )
 }
+
+// ─── Draggable job card ───────────────────────────────────────────────────────
 
 function DraggableJobCard({ event }: { event: DispatchCalendarEvent }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `job-${event.id}`,
     data: { type: 'job', opportunityId: event.id },
   })
-
-  const accentColor = event.status === 'booked' ? '#ffad33' : '#22c55e'
+  const accentColor = event.status === 'completed' ? '#22c55e' : '#ffad33'
 
   return (
     <div
@@ -1136,7 +1296,7 @@ function DraggableJobCard({ event }: { event: DispatchCalendarEvent }) {
 }
 
 function JobCardOverlay({ event }: { event: DispatchCalendarEvent }) {
-  const accentColor = event.status === 'booked' ? '#ffad33' : '#22c55e'
+  const accentColor = event.status === 'completed' ? '#22c55e' : '#ffad33'
   return (
     <div
       className="bg-white rounded-md border border-slate-400 p-2.5 shadow-xl w-[260px]"
@@ -1150,29 +1310,37 @@ function JobCardOverlay({ event }: { event: DispatchCalendarEvent }) {
 function JobCardContent({ event }: { event: DispatchCalendarEvent }) {
   return (
     <>
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <h4 className="text-sm font-medium text-slate-900 truncate flex-1 leading-tight">
-          {event.customer_name}
-        </h4>
+      {/* Quote # + value */}
+      <div className="flex items-center justify-between gap-2 mb-1">
+        {event.opportunity_number && (
+          <span className="text-[10px] font-mono text-slate-500 flex items-center gap-0.5">
+            <Hash className="w-2.5 h-2.5" />{event.opportunity_number}
+          </span>
+        )}
         {event.total != null && event.total > 0 && (
-          <span className="text-xs font-semibold text-slate-900 whitespace-nowrap">
+          <span className="text-xs font-bold text-slate-900 whitespace-nowrap ml-auto">
             {formatCurrency(event.total)}
           </span>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 mb-1">
-        {event.move_size && (
-          <span className="flex items-center gap-1">
-            <Package className="w-3 h-3" />
-            {event.move_size.replace(/_/g, ' ')}
-          </span>
-        )}
-      </div>
+
+      {/* Customer */}
+      <h4 className="text-sm font-semibold text-slate-900 leading-tight mb-1 truncate">{event.customer_name}</h4>
+
+      {/* Move size */}
+      {event.move_size && (
+        <div className="flex items-center gap-1 text-[11px] text-slate-600 mb-1">
+          <Package className="w-3 h-3 flex-shrink-0" />
+          {event.move_size.replace(/_/g, ' ')}
+        </div>
+      )}
+
+      {/* Route */}
       {event.origin_city && event.dest_city && (
-        <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
-          <MapPin className="w-3 h-3 shrink-0" />
+        <div className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
+          <MapPin className="w-3 h-3 flex-shrink-0" />
           <span className="truncate">{event.origin_city} → {event.dest_city}</span>
-        </p>
+        </div>
       )}
     </>
   )

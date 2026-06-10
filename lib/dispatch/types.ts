@@ -59,6 +59,7 @@ export interface DispatchCrewAssignment {
   is_deleted?: boolean
   opportunity?: {
     id: string
+    opportunity_number?: string | null
     move_size: string | null
     origin_city: string | null
     dest_city: string | null
@@ -92,5 +93,6 @@ export interface DayDetailData {
   trucks: DispatchTruck[]
   crew_people: DispatchCrewMember[]
   events: DispatchCalendarEvent[]
+  cancelled_events: DispatchCalendarEvent[]
   crews: DispatchCrew[]
 }

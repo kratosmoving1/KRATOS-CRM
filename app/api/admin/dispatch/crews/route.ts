@@ -12,7 +12,7 @@ const CREW_SELECT = `
   assignments:dispatch_job_assignments(
     id, opportunity_id, crew_id, scheduled_date, start_time, duration_hours, position, is_deleted,
     opportunity:opportunities(
-      id, move_size, origin_city, dest_city, total_amount,
+      id, opportunity_number, move_size, origin_city, dest_city, total_amount,
       customer:customers(id, full_name)
     )
   )

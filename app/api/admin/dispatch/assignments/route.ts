@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 const ASSIGNMENT_SELECT = `
   id, opportunity_id, crew_id, scheduled_date, start_time, duration_hours, position, is_deleted,
   opportunity:opportunities(
-    id, move_size, origin_city, dest_city, total_amount,
+    id, opportunity_number, move_size, origin_city, dest_city, total_amount,
     customer:customers(id, full_name)
   )
 `
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as Record<string, string>
-  const { opportunity_id, crew_id, scheduled_date } = body
+  const { opportunity_id, crew_id, scheduled_date, start_time, duration_hours } = body
 
   if (!opportunity_id || !crew_id || !scheduled_date) {
     return NextResponse.json(
@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
       opportunity_id,
       crew_id,
       scheduled_date,
-      start_time: '08:00',
-      duration_hours: 3,
+      start_time: start_time || '08:00',
+      duration_hours: duration_hours ? parseFloat(duration_hours) : 3,
       position: nextPosition,
       created_by: user.id,
     })
