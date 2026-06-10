@@ -32,9 +32,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Comms & Docs',
     items: [
-      { label: 'Templates',     href: '/admin/settings/templates',     icon: FileText },
-      { label: 'Documents',     href: '/admin/settings/documents',     icon: BookOpen },
-      { label: 'Integrations',  href: '/admin/settings/integrations',  icon: PlugZap },
+      { label: 'Templates',        href: '/admin/settings/templates',  icon: FileText },
+      { label: 'Documents',        href: '/admin/settings/documents',  icon: BookOpen },
+      { label: 'Integrations',     href: '/admin/settings/integrations', icon: PlugZap },
+      { label: 'Customer Portal',  href: '/admin/settings/portal',     icon: Users2 },
     ],
   },
   {
@@ -43,7 +44,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Company',          icon: Building2,      soon: true },
       { label: 'Estimates',        icon: CalendarCog,    soon: true },
       { label: 'Sales',            icon: BadgeDollarSign, soon: true },
-      { label: 'Customer Portal',  icon: Users2,         soon: true },
       { label: 'Marketing',        icon: Megaphone,      soon: true },
       { label: 'Forms & Docs',     icon: ClipboardList,  soon: true },
       { label: 'Dispatch',         icon: Truck,          soon: true },

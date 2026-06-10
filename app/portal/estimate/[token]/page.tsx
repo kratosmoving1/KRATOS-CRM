@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
-import EstimatePortalContent, { type PortalCharge, type PortalPageData } from '@/components/portal/EstimatePortalContent'
+import EstimatePortalContent, { type PortalCharge, type PortalPageData, type PortalSettings } from '@/components/portal/EstimatePortalContent'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -91,12 +91,24 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     ? (MOVE_SIZE_LABELS[opp.move_size] ?? String(opp.move_size).replace(/_/g, ' '))
     : 'To be confirmed'
 
-  // Check if already signed
-  const { data: signature } = await supabase
-    .from('estimate_signatures')
-    .select('id')
-    .eq('opportunity_id', link.opportunity_id)
-    .maybeSingle()
+  // Fetch portal settings + check if already signed in parallel
+  const [signatureResult, settingsResult] = await Promise.all([
+    supabase
+      .from('estimate_signatures')
+      .select('id')
+      .eq('opportunity_id', link.opportunity_id)
+      .maybeSingle(),
+    supabase
+      .from('customer_portal_settings')
+      .select(`
+        *,
+        attachments:customer_portal_attachments(id, name, file_url, position, is_deleted),
+        badges:customer_portal_badges(id, name, image_url, position, is_deleted)
+      `)
+      .maybeSingle(),
+  ])
+
+  const signature = signatureResult.data
 
   const data: PortalPageData = {
     opp: {
@@ -124,6 +136,35 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     moveSize,
   }
 
+  type AttachRow = { id: string; name: string; file_url: string; position: number; is_deleted: boolean }
+  type BadgeRow  = { id: string; name: string; image_url: string | null; position: number; is_deleted: boolean }
+
+  let portalSettings: PortalSettings | null = null
+  if (settingsResult.data) {
+    const raw = settingsResult.data
+    portalSettings = {
+      company_name:                 String(raw.company_name ?? 'Kratos Moving Inc.'),
+      company_phone:                String(raw.company_phone ?? '(800) 321-3222'),
+      logo_url:                     raw.logo_url as string | null,
+      header_notes:                 raw.header_notes as string | null,
+      footer_notes:                 raw.footer_notes as string | null,
+      show_inventory_button:        Boolean(raw.show_inventory_button ?? true),
+      show_download_button:         Boolean(raw.show_download_button ?? true),
+      show_materials_section:       Boolean(raw.show_materials_section ?? true),
+      show_protection_section:      Boolean(raw.show_protection_section ?? true),
+      require_deposit:              Boolean(raw.require_deposit ?? true),
+      allow_accept_without_deposit: Boolean(raw.allow_accept_without_deposit ?? false),
+      attachments: ((raw.attachments as unknown as AttachRow[]) ?? [])
+        .filter(a => !a.is_deleted)
+        .sort((a, b) => a.position - b.position)
+        .map(({ id, name, file_url }) => ({ id, name, file_url })),
+      badges: ((raw.badges as unknown as BadgeRow[]) ?? [])
+        .filter(b => !b.is_deleted)
+        .sort((a, b) => a.position - b.position)
+        .map(({ id, name, image_url }) => ({ id, name, image_url })),
+    }
+  }
+
   return (
     <EstimatePortalContent
       data={data}
@@ -131,6 +172,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       isPreview={Boolean(searchParams.preview)}
       alreadySigned={Boolean(signature)}
       paymentSucceeded={searchParams.payment === 'success'}
+      portalSettings={portalSettings}
     />
   )
 }
