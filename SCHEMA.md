@@ -612,6 +612,10 @@ Fleet/vehicle registry. Three categories: owned trucks, rental trucks (Penske/Ry
 | `provider` | `text \| null` | Rental company name — only for `category = 'rental'` (e.g. "Penske", "Ryder", "U-Haul", "Home Depot", "Other") |
 | `size` | `text` | Truck size — one of: `cargo_van`, `10ft`, `15ft`, `16ft`, `20ft`, `26ft` |
 | `notes` | `text \| null` | Internal notes |
+| `license_plate` | `text \| null` | Vehicle licence plate number |
+| `liftgate` | `boolean` | Whether the truck has a liftgate (default `false`) |
+| `ramp` | `boolean` | Whether the truck has a ramp (default `false`) |
+| `status` | `text` | `'active'` \| `'inactive'` \| `'maintenance'` — only `active` trucks appear in Dispatch calendar |
 | `position` | `integer` | Sort order within category |
 | `created_by` | `uuid \| null` | FK to `profiles.id` |
 | `created_at` | `timestamptz` | |
@@ -704,3 +708,60 @@ Office/team scheduling events — IPCs, surveys, follow-ups, meetings, admin tas
 | `created_by` | `uuid \| null` | FK to `profiles.id` |
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
+
+---
+
+## Table: `customer_portal_settings`
+
+Single-row config for the customer estimate portal (one row, always present after seed).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `company_name` | `text` | Displayed in portal header (default `'Kratos Moving Inc.'`) |
+| `company_phone` | `text` | Displayed in portal header |
+| `logo_url` | `text \| null` | URL to custom logo; falls back to `/logo.png` |
+| `header_notes` | `text \| null` | Rich text shown below the hero — supports merge tags `{{customer_name}}`, `{{quote_number}}`, `{{service_date}}`, `{{total}}` |
+| `footer_notes` | `text \| null` | Rich text shown at bottom of portal |
+| `show_inventory_button` | `boolean` | Show "View Inventory" button |
+| `show_download_button` | `boolean` | Show "Download PDF" button |
+| `show_materials_section` | `boolean` | Show the Materials section |
+| `show_protection_section` | `boolean` | Show the Protection section |
+| `require_deposit` | `boolean` | Whether to require deposit after acceptance |
+| `allow_accept_without_deposit` | `boolean` | If `require_deposit` is true, whether "I'll pay later" is shown |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | |
+
+---
+
+## Table: `customer_portal_attachments`
+
+Documents/PDFs attached to the customer portal (e.g. Terms of Service, Rate Card).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `settings_id` | `uuid` | FK to `customer_portal_settings.id` (CASCADE delete) |
+| `name` | `text` | Display label shown on the portal |
+| `file_url` | `text` | Public file URL (Supabase Storage) |
+| `position` | `integer` | Display order |
+| `is_deleted` | `boolean` | Soft delete |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_at` | `timestamptz` | |
+
+---
+
+## Table: `customer_portal_badges`
+
+Award/trust badges shown on the customer portal (e.g. "BBB Accredited", "HomeStars 10 Best").
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `settings_id` | `uuid` | FK to `customer_portal_settings.id` (CASCADE delete) |
+| `name` | `text` | Badge name / alt text |
+| `image_url` | `text \| null` | URL to badge image |
+| `position` | `integer` | Display order |
+| `is_deleted` | `boolean` | Soft delete |
+| `deleted_at` | `timestamptz \| null` | |
+| `created_at` | `timestamptz` | |

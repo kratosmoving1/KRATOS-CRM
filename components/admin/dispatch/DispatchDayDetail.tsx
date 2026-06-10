@@ -123,6 +123,13 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
   const [cancelledEvents] = useState<DispatchCalendarEvent[]>(initialData.cancelled_events ?? [])
   const [crews, setCrews] = useState<DispatchCrew[]>(initialData.crews)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 4_000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   // Track the pointer X at drag-start so we can compute drop time via delta.
   // dnd-kit captures the pointer during drag, which prevents mousemove from
@@ -165,13 +172,50 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
   async function handleDragEnd(e: DragEndEvent) {
     setActiveJobId(null)
     const { active, over } = e
-    if (!over || over.data.current?.type !== 'crew') return
+    if (!over) return
 
-    const crewId    = over.data.current.crewId as string
+    // ── Drop on empty grid → auto-create crew row + assign ───────────────────
+    if (over.data.current?.type === 'empty_grid' && active.data.current?.type === 'job') {
+      const opportunityId = active.data.current.opportunityId as string
+      const currentDateStr = fmtDate(date)
+      try {
+        const crewRes = await fetch('/api/admin/dispatch/crews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheduled_date: currentDateStr }),
+        })
+        if (!crewRes.ok) {
+          const j = await crewRes.json() as { error?: string }
+          setToast({ msg: j.error ?? 'Failed to create schedule row', isError: true })
+          return
+        }
+        const newCrew = await crewRes.json() as DispatchCrew
+        const assignRes = await fetch('/api/admin/dispatch/assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ opportunity_id: opportunityId, crew_id: newCrew.id, scheduled_date: currentDateStr, start_time: '08:00' }),
+        })
+        if (!assignRes.ok) {
+          const j = await assignRes.json() as { error?: string }
+          setToast({ msg: j.error ?? 'Failed to assign job', isError: true })
+          setCrews(prev => [...prev, newCrew])
+          return
+        }
+        const created = await assignRes.json() as DispatchCrewAssignment
+        setCrews(prev => [...prev, { ...newCrew, assignments: [created] }])
+      } catch {
+        setToast({ msg: 'Network error — please try again', isError: true })
+      }
+      return
+    }
+
+    if (over.data.current?.type !== 'crew') return
+
+    const crewId         = over.data.current.crewId as string
     const currentDateStr = fmtDate(date)
     // activatorX + delta gives us the absolute pointer X at time of drop
-    const dropX     = activatorX.current + e.delta.x
-    const startTime = pixelToStartTime(dropX, over.rect)
+    const dropX          = activatorX.current + e.delta.x
+    const startTime      = pixelToStartTime(dropX, over.rect)
 
     // ── Unscheduled job dropped on crew timeline ──────────────────────────────
     if (active.data.current?.type === 'job') {
@@ -211,17 +255,21 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ opportunity_id: opportunityId, crew_id: crewId, scheduled_date: currentDateStr, start_time: startTime }),
         })
-        if (!res.ok) throw new Error('Assignment failed')
+        if (!res.ok) {
+          const j = await res.json() as { error?: string }
+          throw new Error(j.error ?? 'Assignment failed')
+        }
         const created = await res.json() as DispatchCrewAssignment
         setCrews(prev => prev.map(c =>
           c.id === crewId
             ? { ...c, assignments: c.assignments.map(a => a.id === tempId ? created : a) }
             : c
         ))
-      } catch {
+      } catch (err) {
         setCrews(prev => prev.map(c =>
           c.id === crewId ? { ...c, assignments: c.assignments.filter(a => a.id !== tempId) } : c
         ))
+        setToast({ msg: err instanceof Error ? err.message : 'Failed to assign job', isError: true })
       }
       return
     }
@@ -258,9 +306,13 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ start_time: startTime, crew_id: crewId }),
         })
-        if (!res.ok) throw new Error('Move failed')
-      } catch {
+        if (!res.ok) {
+          const j = await res.json() as { error?: string }
+          throw new Error(j.error ?? 'Move failed')
+        }
+      } catch (err) {
         await refreshCrews()
+        setToast({ msg: err instanceof Error ? err.message : 'Failed to move job', isError: true })
       }
     }
   }
@@ -274,9 +326,13 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
     ))
     try {
       const res = await fetch(`/api/admin/dispatch/assignments/${assignmentId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error()
-    } catch {
+      if (!res.ok) {
+        const j = await res.json() as { error?: string }
+        throw new Error(j.error ?? 'Unassign failed')
+      }
+    } catch (err) {
       setCrews(prev)
+      setToast({ msg: err instanceof Error ? err.message : 'Failed to unassign job', isError: true })
     }
   }
 
@@ -415,6 +471,16 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
       <DragOverlay>
         {activeEvent ? <JobCardOverlay event={activeEvent} /> : null}
       </DragOverlay>
+
+      {toast && (
+        <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium shadow-xl max-w-sm
+          ${toast.isError ? 'bg-red-600 text-white' : 'bg-slate-800 text-white'}`}>
+          <span className="flex-1">{toast.msg}</span>
+          <button onClick={() => setToast(null)} className="text-white/70 hover:text-white flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </DndContext>
   )
 }
@@ -647,6 +713,11 @@ function ScheduleGrid({
   crews, trucks, crewPeople,
   onAddCrew, onDeleteCrew, onUpdateCrew, onAddHelper, onRemoveHelper, onUnassign,
 }: ScheduleGridProps) {
+  const { setNodeRef: emptyRef, isOver: emptyIsOver } = useDroppable({
+    id: 'empty-schedule',
+    data: { type: 'empty_grid' },
+  })
+
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* Grid header row */}
@@ -681,18 +752,32 @@ function ScheduleGrid({
 
       {/* Crew rows */}
       {crews.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-3">
-          <CalendarDays className="w-10 h-10 text-slate-300" />
-          <p className="text-sm font-medium text-slate-700">No schedule rows for this date</p>
-          <p className="text-xs text-slate-500 text-center max-w-xs leading-relaxed">
-            Add a schedule row, assign a truck and crew, then drag jobs from the right panel to schedule them.
+        <div
+          ref={emptyRef}
+          className={`flex-1 flex flex-col items-center justify-center p-8 gap-3 transition-colors
+            ${emptyIsOver ? 'bg-kratos/5' : ''}`}
+        >
+          <CalendarDays className={`w-10 h-10 transition-colors ${emptyIsOver ? 'text-kratos/50' : 'text-slate-300'}`} />
+          <p className={`text-sm font-medium transition-colors ${emptyIsOver ? 'text-kratos' : 'text-slate-700'}`}>
+            {emptyIsOver ? 'Release to schedule' : 'No schedule rows for this date'}
           </p>
-          <button
-            onClick={onAddCrew}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-kratos hover:bg-kratos/90 text-white text-xs font-medium transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add schedule row
-          </button>
+          {emptyIsOver ? (
+            <div className="border-2 border-dashed border-kratos/40 rounded-lg px-8 py-4 text-xs text-kratos/60 font-medium">
+              A new crew row will be created
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-slate-500 text-center max-w-xs leading-relaxed">
+                Drag a job from the right panel to auto-create a crew row, or add one manually.
+              </p>
+              <button
+                onClick={onAddCrew}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-kratos hover:bg-kratos/90 text-white text-xs font-medium transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add schedule row
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
