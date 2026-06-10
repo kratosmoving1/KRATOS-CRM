@@ -237,6 +237,22 @@ The "Now" section is what the current session is working on. The "Next" section 
 - All changes persist to Supabase via API routes
 - API routes: board GET, columns CRUD + reorder, people CRUD + reorder
 
+## ✅ Done (Dispatch B1.5 — Crew-Row Schedule)
+
+- **Breaking change:** `dispatch_job_assignments` rebuilt — `truck_id` → `crew_id`; `position` column added; `dispatch_trucks` cascade removed
+- **New tables:** `dispatch_crews` (truck/driver/dispatcher slots + position), `dispatch_crew_helpers` (junction with UNIQUE)
+- **New API routes:** `GET/POST /api/admin/dispatch/crews`, `PATCH/DELETE /api/admin/dispatch/crews/[id]`, `POST/DELETE /api/admin/dispatch/crews/[id]/helpers`
+- **Updated:** `POST /api/admin/dispatch/assignments` now requires `crew_id` not `truck_id`
+- **ScheduleGrid** rebuilt: one droppable row per crew (not per truck). Each row has a 220px left panel with 4 slots + a right droppable area for assigned job cards.
+- **4 slots per crew row:** TruckSlot (grouped by category popover), PersonSlot×2 (driver + dispatcher, avatar popovers), HelpersSlot (chip display + add-from-popover)
+- **Popovers:** fixed-position (`getBoundingClientRect`), close on outside mousedown or scroll, z-index 1000
+- **Crew name:** inline editable input, save on blur/Enter
+- **"Add crew" button** in Schedule header; trash icon on each row to delete
+- **Optimistic updates** on all mutations: assign job, unassign job, update slot, add helper, remove helper, add crew, delete crew
+- **JobsPanel** updated to read assigned IDs from all crews (`crews.flatMap(c => c.assignments.map(a => a.opportunity_id))`)
+- **DayDetailData** updated: `assignments` → `crews`, `crew` → `crew_people`
+- `npm run build` passes with zero TypeScript errors
+
 ## 🔜 Dispatch next steps
 
 - **Phase B2:** `move_time_start` column on opportunities + position-on-time-axis rendering in Schedule grid + crew assignment within the drag

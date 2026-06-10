@@ -434,4 +434,29 @@ This means agents can change addresses, charges, etc. and the next preview will 
 
 **DragOverlay:** Uses `@dnd-kit/core`'s `DragOverlay` so a floating clone follows the cursor during drag, while the original card dims (opacity-30) in place. This is better UX than moving the original element.
 
+## 2026-06 — Dispatch B1.5: Schedule grid uses CREW rows, not truck rows
+
+**Decision:** The Schedule grid in `/admin/dispatch/calendar/[date]` shows one row per **crew**, not one row per truck. Each crew row has 4 configurable slots: Truck, Driver, Dispatcher, Helpers. A job is dragged onto a crew row (not a truck). The `dispatch_job_assignments` table now references `crew_id` (FK to `dispatch_crews`) instead of `truck_id`.
+
+**Reasoning:** B1 modeled rows as trucks, which is architecturally wrong. SmartMoving's Scheduling tab shows crew rows — a crew is the operational unit that does a job. A truck is just one of the crew's resources. AJ confirmed this after building B1. The correct mental model: "Crew 1 has Penske 26ft + John (driver) + Mike + Tom. Crew 1 is doing the Johnson move."
+
+**New tables:**
+- `dispatch_crews` — one row per crew per day; FK to truck, driver, dispatcher; `position` int
+- `dispatch_crew_helpers` — junction table (crew_id, person_id, UNIQUE); CASCADE delete when crew deleted
+- `dispatch_job_assignments` — rebuilt: `crew_id` replaces `truck_id`; added `position` int
+
+**Slot labels when empty:**
+- Truck slot: "No Trucks"
+- Driver slot: "No Kratos Driver"
+- Dispatcher slot: "No Dispatcher"
+- Helpers slot: "No Kratos Crew"
+
+**Slot popovers:** Fixed-position floating panels (`position: fixed` calculated from `getBoundingClientRect()`). Close on outside mousedown or scroll. Truck popover groups trucks by category (Owned/Rentals/Contractor). Person popovers show workforce_people with avatars.
+
+**Optimistic updates:** All crew mutations (add, delete, update slot, add/remove helper, assign/unassign job) use optimistic state + API commit + rollback-via-refresh on failure. No full page refresh needed.
+
+**Driver/Dispatcher can't also be a Helper:** Each person can only occupy one slot per crew row. The HelpersSlot and PersonSlot popover filter out already-assigned people.
+
+**Anti-patterns confirmed NOT in scope for B1.5:** time-of-day on assignments, multi-truck per crew, seeded crew rows, filtering workforce dropdowns by role.
+
 ## (Append new decisions below as they happen)

@@ -623,18 +623,56 @@ Fleet/vehicle registry. Three categories: owned trucks, rental trucks (Penske/Ry
 
 ---
 
+## Table: `dispatch_crews`
+
+A crew row on the Schedule grid for a specific day. Each crew has 4 assignable slots (truck, driver, dispatcher, helpers) and can hold multiple job assignments.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `scheduled_date` | `date` | The work date this crew row belongs to |
+| `position` | `integer` | Display order among crew rows for that day |
+| `name` | `text` | Crew label (e.g. "Crew 1", "Morning Run") |
+| `truck_id` | `uuid \| null` | FK to `dispatch_trucks.id` (SET NULL on delete) |
+| `driver_id` | `uuid \| null` | FK to `workforce_people.id` (SET NULL on delete) |
+| `dispatcher_id` | `uuid \| null` | FK to `workforce_people.id` (SET NULL on delete) |
+| `notes` | `text \| null` | Dispatcher notes |
+| `created_by` | `uuid \| null` | FK to `profiles.id` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | Auto-updated by trigger |
+| `is_deleted` | `boolean` | Soft delete flag |
+| `deleted_at` | `timestamptz \| null` | When soft-deleted |
+
+---
+
+## Table: `dispatch_crew_helpers`
+
+Junction table linking additional helpers to a crew row. One row per helper per crew per day (enforced by UNIQUE constraint).
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `crew_id` | `uuid` | FK to `dispatch_crews.id` (CASCADE delete) |
+| `person_id` | `uuid` | FK to `workforce_people.id` (CASCADE delete) |
+| `created_at` | `timestamptz` | |
+
+**Constraint:** `UNIQUE(crew_id, person_id)` — prevents duplicate helpers.
+
+---
+
 ## Table: `dispatch_job_assignments`
 
-Links an opportunity (job) to a truck for a specific date. One row = one truck assigned to one job. Multiple rows per truck on the same date (truck can do multiple jobs in a day) and multiple rows per opportunity (multi-truck job) are allowed at the schema level, but the UI only creates one assignment per drag in Phase B1.
+Links an opportunity (job) to a crew row for a specific date. Dragging a job onto a crew row creates one row here.
 
 | Column | Type | Description |
 |---|---|---|
 | `id` | `uuid` | Primary key |
 | `opportunity_id` | `uuid` | FK to `opportunities.id` (cascade delete) |
-| `truck_id` | `uuid \| null` | FK to `dispatch_trucks.id` (SET NULL on delete) |
+| `crew_id` | `uuid \| null` | FK to `dispatch_crews.id` (SET NULL on delete) |
 | `scheduled_date` | `date` | The work date for this assignment |
 | `start_time` | `time` | Default `08:00` — Phase B2 will allow editing |
-| `duration_hours` | `numeric(4,1)` | Default `3.0` — Phase B2 will use actual labor hours |
+| `duration_hours` | `numeric(4,2)` | Default `3.0` — Phase B2 will use actual labor hours |
+| `position` | `integer` | Sort order within the crew row (0 = first) |
 | `notes` | `text \| null` | Dispatcher notes |
 | `created_by` | `uuid \| null` | FK to `profiles.id` |
 | `created_at` | `timestamptz` | |

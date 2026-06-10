@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
-import type { DayDetailData, DispatchJobAssignment, DispatchTruck, DispatchCrewMember } from './types'
+import type { DayDetailData, DispatchTruck, DispatchCrew, DispatchCrewMember } from './types'
 
 export interface DispatchCalendarEvent {
   id: string
@@ -68,11 +68,28 @@ function parseDateStr(dateStr: string): Date {
   return new Date(y, m - 1, d)
 }
 
+const CREW_SELECT = `
+  *,
+  truck:dispatch_trucks(id, name, category, size, provider),
+  driver:workforce_people!driver_id(id, name, profile_picture_url),
+  dispatcher:workforce_people!dispatcher_id(id, name, profile_picture_url),
+  helpers:dispatch_crew_helpers(
+    person:workforce_people(id, name, profile_picture_url)
+  ),
+  assignments:dispatch_job_assignments(
+    id, opportunity_id, crew_id, scheduled_date, start_time, duration_hours, position, is_deleted,
+    opportunity:opportunities(
+      id, move_size, origin_city, dest_city, total_amount,
+      customer:customers(id, full_name)
+    )
+  )
+`
+
 export async function fetchDayDetailData(date: string): Promise<DayDetailData> {
   const supabase = createClient()
   const dayDate = parseDateStr(date)
 
-  const [trucksRes, peopleRes, eventsResult, assignmentsRes] = await Promise.all([
+  const [trucksRes, peopleRes, eventsResult, crewsRes] = await Promise.all([
     supabase
       .from('dispatch_trucks')
       .select('*')
@@ -91,22 +108,24 @@ export async function fetchDayDetailData(date: string): Promise<DayDetailData> {
       .order('position'),
     fetchDispatchCalendarEvents(dayDate, dayDate),
     supabase
-      .from('dispatch_job_assignments')
-      .select(`
-        *,
-        opportunity:opportunities(
-          id, move_size, origin_city, dest_city, total_amount,
-          customer:customers(id, full_name)
-        )
-      `)
+      .from('dispatch_crews')
+      .select(CREW_SELECT)
       .eq('scheduled_date', date)
-      .neq('is_deleted', true),
+      .neq('is_deleted', true)
+      .order('position', { ascending: true }),
   ])
+
+  const rawCrews = (crewsRes.data ?? []) as unknown as DispatchCrew[]
+  const crews = rawCrews.map(c => ({
+    ...c,
+    helpers: c.helpers ?? [],
+    assignments: (c.assignments ?? []).filter(a => !a.is_deleted),
+  }))
 
   return {
     trucks: (trucksRes.data ?? []) as DispatchTruck[],
-    crew: (peopleRes.data ?? []) as unknown as DispatchCrewMember[],
+    crew_people: (peopleRes.data ?? []) as unknown as DispatchCrewMember[],
     events: eventsResult,
-    assignments: (assignmentsRes.data ?? []) as unknown as DispatchJobAssignment[],
+    crews,
   }
 }

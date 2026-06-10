@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -16,20 +16,21 @@ import {
 } from '@dnd-kit/core'
 import {
   ArrowLeft, ChevronLeft, ChevronRight,
-  Truck, CalendarDays, Inbox, Package, MapPin, Plus, X, Users, CheckCircle,
+  Truck, CalendarDays, Inbox, Package, MapPin, Plus, X, Users,
+  CheckCircle, UserRound, ChevronDown, Trash2,
 } from 'lucide-react'
 import { Avatar } from '@/components/admin/workforce/Avatar'
 import { formatCurrency } from '@/lib/format'
 import type { DispatchCalendarEvent } from '@/lib/dispatch/calendar'
 import type {
-  DayDetailData, DispatchTruck, DispatchJobAssignment, DispatchCrewMember,
+  DayDetailData, DispatchTruck, DispatchCrewMember,
+  DispatchCrew, DispatchCrewAssignment, DispatchCrewPerson, DispatchCrewTruck,
 } from '@/lib/dispatch/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 const CATEGORY_LABELS: Record<string, string> = { owned: 'Owned', rental: 'Rentals', contractor: 'Contractor' }
 const CATEGORY_ORDER = ['owned', 'rental', 'contractor']
@@ -43,17 +44,42 @@ const SIZES = [
   { key: '26ft', label: '26 ft' },
 ]
 
-function formatHour(h: number) {
-  if (h === 12) return '12p'
-  if (h > 12) return `${h - 12}p`
-  return `${h}a`
-}
-
 function formatDateForApi(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+// ─── Fixed-position popover hook ─────────────────────────────────────────────
+
+function useFixedPopover() {
+  const [open, setOpen] = useState(false)
+  const [popStyle, setPopStyle] = useState<React.CSSProperties>({})
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  function openAt(trigger: HTMLElement) {
+    const rect = trigger.getBoundingClientRect()
+    const left = Math.min(rect.left, window.innerWidth - 240)
+    setPopStyle({ position: 'fixed', top: rect.bottom + 4, left, zIndex: 1000, width: 228 })
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (!popoverRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onScroll() { setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('scroll', onScroll, true)
+    }
+  }, [open])
+
+  return { open, openAt, close: () => setOpen(false), popStyle, popoverRef }
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -66,9 +92,9 @@ interface Props {
 export function DispatchDayDetail({ date, initialData }: Props) {
   const router = useRouter()
   const [trucks, setTrucks] = useState<DispatchTruck[]>(initialData.trucks)
-  const [crew] = useState<DispatchCrewMember[]>(initialData.crew)
+  const [crewPeople] = useState<DispatchCrewMember[]>(initialData.crew_people)
   const [events] = useState<DispatchCalendarEvent[]>(initialData.events)
-  const [assignments, setAssignments] = useState<DispatchJobAssignment[]>(initialData.assignments)
+  const [crews, setCrews] = useState<DispatchCrew[]>(initialData.crews)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -84,6 +110,19 @@ export function DispatchDayDetail({ date, initialData }: Props) {
     router.push(`/admin/dispatch/calendar/${formatDateForApi(newDate)}`)
   }
 
+  const refreshCrews = useCallback(async () => {
+    const dateStr = formatDateForApi(date)
+    const res = await fetch(`/api/admin/dispatch/crews?date=${dateStr}`)
+    if (res.ok) setCrews(await res.json() as DispatchCrew[])
+  }, [date])
+
+  async function refreshTrucks() {
+    const res = await fetch('/api/admin/dispatch/trucks')
+    if (res.ok) setTrucks(await res.json() as DispatchTruck[])
+  }
+
+  // ─── Drag-drop ───────────────────────────────────────────────────────────────
+
   function handleDragStart(e: DragStartEvent) {
     if (e.active.data.current?.type === 'job') {
       setActiveJobId(e.active.data.current.opportunityId as string)
@@ -95,27 +134,26 @@ export function DispatchDayDetail({ date, initialData }: Props) {
     const { active, over } = e
     if (!over) return
     if (active.data.current?.type !== 'job') return
-    if (over.data.current?.type !== 'truck') return
+    if (over.data.current?.type !== 'crew') return
 
     const opportunityId = active.data.current.opportunityId as string
-    const truckId = over.data.current.truckId as string
+    const crewId = over.data.current.crewId as string
     const dateStr = formatDateForApi(date)
     const event = events.find(ev => ev.id === opportunityId)
 
+    // Prevent double-assign
+    const alreadyAssigned = crews.some(c => c.assignments.some(a => a.opportunity_id === opportunityId))
+    if (alreadyAssigned) return
+
     const tempId = `temp-${crypto.randomUUID()}`
-    const optimistic: DispatchJobAssignment = {
+    const optimistic: DispatchCrewAssignment = {
       id: tempId,
       opportunity_id: opportunityId,
-      truck_id: truckId,
+      crew_id: crewId,
       scheduled_date: dateStr,
       start_time: '08:00',
       duration_hours: 3,
-      notes: null,
-      created_by: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      is_deleted: false,
-      deleted_at: null,
+      position: 99,
       opportunity: {
         id: opportunityId,
         move_size: event?.move_size ?? null,
@@ -126,41 +164,148 @@ export function DispatchDayDetail({ date, initialData }: Props) {
       },
     }
 
-    setAssignments(prev => [...prev, optimistic])
+    setCrews(prev => prev.map(c =>
+      c.id === crewId ? { ...c, assignments: [...c.assignments, optimistic] } : c
+    ))
 
     try {
       const res = await fetch('/api/admin/dispatch/assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ opportunity_id: opportunityId, truck_id: truckId, scheduled_date: dateStr }),
+        body: JSON.stringify({ opportunity_id: opportunityId, crew_id: crewId, scheduled_date: dateStr }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(j.error ?? 'Assignment failed')
       }
-      const created = await res.json() as DispatchJobAssignment
-      setAssignments(prev => prev.map(a => a.id === tempId ? created : a))
+      const created = await res.json() as DispatchCrewAssignment
+      setCrews(prev => prev.map(c =>
+        c.id === crewId
+          ? { ...c, assignments: c.assignments.map(a => a.id === tempId ? created : a) }
+          : c
+      ))
     } catch (err) {
       console.error('[dispatch] assign failed:', err)
-      setAssignments(prev => prev.filter(a => a.id !== tempId))
+      setCrews(prev => prev.map(c =>
+        c.id === crewId ? { ...c, assignments: c.assignments.filter(a => a.id !== tempId) } : c
+      ))
     }
   }
 
-  async function handleUnassign(assignmentId: string) {
-    const previous = assignments
-    setAssignments(prev => prev.filter(a => a.id !== assignmentId))
+  // ─── Unassign ────────────────────────────────────────────────────────────────
+
+  async function handleUnassign(crewId: string, assignmentId: string) {
+    const prevCrews = crews
+    setCrews(prev => prev.map(c =>
+      c.id === crewId ? { ...c, assignments: c.assignments.filter(a => a.id !== assignmentId) } : c
+    ))
     try {
       const res = await fetch(`/api/admin/dispatch/assignments/${assignmentId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Unassign failed')
     } catch (err) {
       console.error('[dispatch] unassign failed:', err)
-      setAssignments(previous)
+      setCrews(prevCrews)
     }
   }
 
-  async function refreshTrucks() {
-    const res = await fetch('/api/admin/dispatch/trucks')
-    if (res.ok) setTrucks(await res.json() as DispatchTruck[])
+  // ─── Crew management ─────────────────────────────────────────────────────────
+
+  async function handleAddCrew() {
+    const dateStr = formatDateForApi(date)
+    try {
+      const res = await fetch('/api/admin/dispatch/crews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_date: dateStr }),
+      })
+      if (!res.ok) return
+      const created = await res.json() as DispatchCrew
+      setCrews(prev => [...prev, created])
+    } catch (err) {
+      console.error('[dispatch] add crew failed:', err)
+    }
+  }
+
+  async function handleDeleteCrew(crewId: string) {
+    const prevCrews = crews
+    setCrews(prev => prev.filter(c => c.id !== crewId))
+    try {
+      const res = await fetch(`/api/admin/dispatch/crews/${crewId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete crew failed')
+    } catch (err) {
+      console.error('[dispatch] delete crew failed:', err)
+      setCrews(prevCrews)
+    }
+  }
+
+  async function handleUpdateCrew(crewId: string, patch: Partial<DispatchCrew>) {
+    setCrews(prev => prev.map(c => {
+      if (c.id !== crewId) return c
+      const updated = { ...c, ...patch }
+      if ('truck_id' in patch) {
+        updated.truck = patch.truck_id
+          ? (trucks.find(t => t.id === patch.truck_id) as unknown as DispatchCrewTruck ?? null)
+          : null
+      }
+      if ('driver_id' in patch) {
+        const p = crewPeople.find(p => p.id === patch.driver_id)
+        updated.driver = p ? { id: p.id, name: p.name, profile_picture_url: p.profile_picture_url } : null
+      }
+      if ('dispatcher_id' in patch) {
+        const p = crewPeople.find(p => p.id === patch.dispatcher_id)
+        updated.dispatcher = p ? { id: p.id, name: p.name, profile_picture_url: p.profile_picture_url } : null
+      }
+      return updated
+    }))
+    try {
+      const res = await fetch(`/api/admin/dispatch/crews/${crewId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) throw new Error('Update crew failed')
+    } catch (err) {
+      console.error('[dispatch] update crew failed:', err)
+      await refreshCrews()
+    }
+  }
+
+  async function handleAddHelper(crewId: string, personId: string) {
+    const person = crewPeople.find(p => p.id === personId)
+    if (!person) return
+    setCrews(prev => prev.map(c => {
+      if (c.id !== crewId) return c
+      if (c.helpers.some(h => h.person.id === personId)) return c
+      return { ...c, helpers: [...c.helpers, { person: { id: person.id, name: person.name, profile_picture_url: person.profile_picture_url } }] }
+    }))
+    try {
+      const res = await fetch(`/api/admin/dispatch/crews/${crewId}/helpers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ person_id: personId }),
+      })
+      if (!res.ok) throw new Error('Add helper failed')
+    } catch (err) {
+      console.error('[dispatch] add helper failed:', err)
+      await refreshCrews()
+    }
+  }
+
+  async function handleRemoveHelper(crewId: string, personId: string) {
+    setCrews(prev => prev.map(c =>
+      c.id === crewId ? { ...c, helpers: c.helpers.filter(h => h.person.id !== personId) } : c
+    ))
+    try {
+      const res = await fetch(`/api/admin/dispatch/crews/${crewId}/helpers`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ person_id: personId }),
+      })
+      if (!res.ok) throw new Error('Remove helper failed')
+    } catch (err) {
+      console.error('[dispatch] remove helper failed:', err)
+      await refreshCrews()
+    }
   }
 
   return (
@@ -205,13 +350,22 @@ export function DispatchDayDetail({ date, initialData }: Props) {
 
         {/* Three-column layout */}
         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr_300px] gap-3 min-h-[400px]">
-          <ResourcesPanel trucks={trucks} crew={crew} onTrucksChanged={refreshTrucks} />
-          <ScheduleGrid trucks={trucks} assignments={assignments} onUnassign={handleUnassign} />
-          <JobsPanel events={events} assignments={assignments} />
+          <ResourcesPanel trucks={trucks} crew={crewPeople} onTrucksChanged={refreshTrucks} />
+          <ScheduleGrid
+            crews={crews}
+            trucks={trucks}
+            crewPeople={crewPeople}
+            onAddCrew={handleAddCrew}
+            onDeleteCrew={handleDeleteCrew}
+            onUpdateCrew={handleUpdateCrew}
+            onAddHelper={handleAddHelper}
+            onRemoveHelper={handleRemoveHelper}
+            onUnassign={handleUnassign}
+          />
+          <JobsPanel events={events} crews={crews} />
         </div>
       </div>
 
-      {/* Drag overlay — follows cursor */}
       <DragOverlay>
         {activeEvent ? <JobCardOverlay event={activeEvent} /> : null}
       </DragOverlay>
@@ -485,127 +639,161 @@ function CrewTab({ crew }: { crew: DispatchCrewMember[] }) {
 // ─── Schedule grid ────────────────────────────────────────────────────────────
 
 interface ScheduleGridProps {
+  crews: DispatchCrew[]
   trucks: DispatchTruck[]
-  assignments: DispatchJobAssignment[]
-  onUnassign: (assignmentId: string) => void
+  crewPeople: DispatchCrewMember[]
+  onAddCrew: () => void
+  onDeleteCrew: (crewId: string) => void
+  onUpdateCrew: (crewId: string, patch: Partial<DispatchCrew>) => void
+  onAddHelper: (crewId: string, personId: string) => void
+  onRemoveHelper: (crewId: string, personId: string) => void
+  onUnassign: (crewId: string, assignmentId: string) => void
 }
 
-function ScheduleGrid({ trucks, assignments, onUnassign }: ScheduleGridProps) {
-  if (trucks.length === 0) {
-    return <EmptyScheduleGrid />
-  }
-
-  const gridCols = `140px repeat(${HOURS.length}, minmax(0, 1fr))`
-
+function ScheduleGrid({
+  crews, trucks, crewPeople,
+  onAddCrew, onDeleteCrew, onUpdateCrew, onAddHelper, onRemoveHelper, onUnassign,
+}: ScheduleGridProps) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col">
-      <div className="px-3 py-2.5 border-b border-slate-200 flex-shrink-0">
+    <div className="bg-white rounded-lg border border-slate-200 flex flex-col">
+      <div className="px-3 py-2.5 border-b border-slate-200 flex-shrink-0 flex items-center justify-between">
         <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Schedule</h3>
+        <button
+          onClick={onAddCrew}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-medium transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          Add crew
+        </button>
       </div>
 
-      {/* Hours header row */}
-      <div className="grid border-b border-slate-200 bg-slate-50 flex-shrink-0" style={{ gridTemplateColumns: gridCols }}>
-        <div className="border-r border-slate-200" />
-        {HOURS.map((h, i) => (
-          <div
-            key={h}
-            className={`px-1 py-1.5 text-[11px] font-medium text-slate-500 text-center ${i < HOURS.length - 1 ? 'border-r border-slate-100' : ''}`}
-          >
-            {formatHour(h)}
-          </div>
-        ))}
-      </div>
-
-      {/* Truck rows */}
-      <div className="flex-1 overflow-y-auto">
-        {trucks.map(truck => (
-          <TruckScheduleRow
-            key={truck.id}
-            truck={truck}
-            assignments={assignments.filter(a => a.truck_id === truck.id)}
-            onUnassign={onUnassign}
-            gridCols={gridCols}
-          />
-        ))}
-      </div>
+      {crews.length === 0 ? (
+        <div className="flex-1 min-h-[280px] flex flex-col items-center justify-center p-8">
+          <CalendarDays className="w-10 h-10 text-slate-300 mb-3" />
+          <p className="text-sm font-medium text-slate-700">No crews yet</p>
+          <p className="text-xs text-slate-500 mt-1 text-center leading-relaxed max-w-xs">
+            Add a crew row, then assign a truck, driver, and helpers. Drag jobs from the right onto a crew to schedule them.
+          </p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+          {crews.map(crew => (
+            <CrewRow
+              key={crew.id}
+              crew={crew}
+              trucks={trucks}
+              crewPeople={crewPeople}
+              onUpdate={patch => onUpdateCrew(crew.id, patch)}
+              onDelete={() => onDeleteCrew(crew.id)}
+              onAddHelper={personId => onAddHelper(crew.id, personId)}
+              onRemoveHelper={personId => onRemoveHelper(crew.id, personId)}
+              onUnassign={assignmentId => onUnassign(crew.id, assignmentId)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-function EmptyScheduleGrid() {
-  return (
-    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col">
-      <div className="px-3 py-2.5 border-b border-slate-200 flex-shrink-0">
-        <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Schedule</h3>
-      </div>
-      <div
-        className="grid border-b border-slate-200 bg-slate-50 flex-shrink-0"
-        style={{ gridTemplateColumns: `repeat(${HOURS.length}, minmax(0, 1fr))` }}
-      >
-        {HOURS.map((h, i) => (
-          <div
-            key={h}
-            className={`px-2 py-1.5 text-[11px] font-medium text-slate-500 text-center ${i < HOURS.length - 1 ? 'border-r border-slate-100' : ''}`}
-          >
-            {formatHour(h)}
-          </div>
-        ))}
-      </div>
-      <div
-        className="flex-1 min-h-[280px] flex flex-col items-center justify-center p-8"
-        style={{
-          backgroundImage: `linear-gradient(to right, rgb(248 250 252) 0, rgb(248 250 252) 1px, transparent 1px, transparent calc(100% / ${HOURS.length}))`,
-          backgroundSize: `calc(100% / ${HOURS.length}) 100%`,
-        }}
-      >
-        <CalendarDays className="w-10 h-10 text-slate-300 mb-3" />
-        <p className="text-sm font-medium text-slate-700">Schedule grid will appear here</p>
-        <p className="text-xs text-slate-500 mt-1 max-w-md text-center leading-relaxed">
-          Once trucks and crew are added, each truck gets a row across this grid.
-          Drag jobs from the right panel onto a truck row to schedule a move at that time.
-        </p>
-      </div>
-    </div>
-  )
-}
+// ─── Crew row ─────────────────────────────────────────────────────────────────
 
-interface TruckScheduleRowProps {
-  truck: DispatchTruck
-  assignments: DispatchJobAssignment[]
+interface CrewRowProps {
+  crew: DispatchCrew
+  trucks: DispatchTruck[]
+  crewPeople: DispatchCrewMember[]
+  onUpdate: (patch: Partial<DispatchCrew>) => void
+  onDelete: () => void
+  onAddHelper: (personId: string) => void
+  onRemoveHelper: (personId: string) => void
   onUnassign: (assignmentId: string) => void
-  gridCols: string
 }
 
-function TruckScheduleRow({ truck, assignments, onUnassign, gridCols }: TruckScheduleRowProps) {
+function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, onRemoveHelper, onUnassign }: CrewRowProps) {
+  const [localName, setLocalName] = useState(crew.name)
+
+  // Keep local name in sync when parent updates it
+  useEffect(() => { setLocalName(crew.name) }, [crew.name])
+
   const { setNodeRef, isOver } = useDroppable({
-    id: `truck-${truck.id}`,
-    data: { type: 'truck', truckId: truck.id },
+    id: `crew-${crew.id}`,
+    data: { type: 'crew', crewId: crew.id },
   })
 
+  const blockedIds = new Set([
+    crew.driver_id ?? '',
+    crew.dispatcher_id ?? '',
+    ...crew.helpers.map(h => h.person.id),
+  ])
+
   return (
-    <div
-      ref={setNodeRef}
-      className={`grid border-b border-slate-100 min-h-[68px] transition-colors ${isOver ? 'bg-orange-50' : 'hover:bg-slate-50/50'}`}
-      style={{ gridTemplateColumns: gridCols }}
-    >
-      {/* Truck label */}
-      <div className="px-2 py-2 border-r border-slate-200 flex items-start gap-1.5 flex-shrink-0">
-        <Truck className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
-        <div className="min-w-0">
-          <div className="text-xs font-medium text-slate-900 truncate leading-tight">{truck.name}</div>
-          <div className="text-[10px] text-slate-500 truncate">{truck.size.replace('_', ' ')}</div>
+    <div className="flex min-h-[100px]">
+      {/* Left panel — slots */}
+      <div className="w-[220px] flex-shrink-0 border-r border-slate-200 p-2 space-y-1.5 bg-slate-50">
+        {/* Crew name */}
+        <div className="flex items-center gap-1 mb-1">
+          <input
+            className="flex-1 text-xs font-semibold text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-orange-400 rounded px-1 py-0.5 min-w-0"
+            value={localName}
+            onChange={e => setLocalName(e.target.value)}
+            onBlur={() => {
+              const trimmed = localName.trim()
+              if (trimmed && trimmed !== crew.name) onUpdate({ name: trimmed })
+              else setLocalName(crew.name)
+            }}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          />
+          <button
+            onClick={onDelete}
+            className="text-slate-300 hover:text-red-500 flex-shrink-0 transition-colors p-0.5"
+            title="Remove crew row"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
         </div>
+
+        <TruckSlot
+          current={crew.truck ?? null}
+          trucks={trucks}
+          onSelect={truckId => onUpdate({ truck_id: truckId ?? null })}
+        />
+        <PersonSlot
+          label="Driver"
+          emptyLabel="No Kratos Driver"
+          person={crew.driver ?? null}
+          people={crewPeople}
+          blockedIds={new Set([crew.dispatcher_id ?? ''].filter(Boolean))}
+          onSelect={personId => onUpdate({ driver_id: personId ?? null })}
+        />
+        <PersonSlot
+          label="Dispatcher"
+          emptyLabel="No Dispatcher"
+          person={crew.dispatcher ?? null}
+          people={crewPeople}
+          blockedIds={new Set([crew.driver_id ?? ''].filter(Boolean))}
+          onSelect={personId => onUpdate({ dispatcher_id: personId ?? null })}
+        />
+        <HelpersSlot
+          helpers={crew.helpers}
+          people={crewPeople}
+          blockedIds={blockedIds}
+          onAdd={onAddHelper}
+          onRemove={onRemoveHelper}
+        />
       </div>
 
-      {/* Schedule area — spans all hour columns */}
-      <div className="p-1.5" style={{ gridColumn: '2 / -1' }}>
-        {assignments.length === 0 ? (
+      {/* Right panel — droppable assignment area */}
+      <div
+        ref={setNodeRef}
+        className={`flex-1 p-2 min-h-[100px] transition-colors ${isOver ? 'bg-orange-50' : ''}`}
+      >
+        {crew.assignments.length === 0 ? (
           <div className={`h-full flex items-center justify-center text-[11px] ${isOver ? 'text-orange-400 font-medium' : 'text-slate-300'}`}>
-            {isOver ? 'Release to schedule' : 'Drop a job here'}
+            {isOver ? 'Release to assign' : 'Drop a job here'}
           </div>
         ) : (
-          <div className="space-y-1">
-            {assignments.map(a => (
+          <div className="space-y-1.5">
+            {crew.assignments.map(a => (
               <AssignedJobCard key={a.id} assignment={a} onUnassign={onUnassign} />
             ))}
           </div>
@@ -615,20 +803,255 @@ function TruckScheduleRow({ truck, assignments, onUnassign, gridCols }: TruckSch
   )
 }
 
-function AssignedJobCard({ assignment, onUnassign }: { assignment: DispatchJobAssignment; onUnassign: (id: string) => void }) {
+// ─── Truck slot ───────────────────────────────────────────────────────────────
+
+interface TruckSlotProps {
+  current: DispatchCrewTruck | null
+  trucks: DispatchTruck[]
+  onSelect: (truckId: string | null) => void
+}
+
+function TruckSlot({ current, trucks, onSelect }: TruckSlotProps) {
+  const { open, openAt, close, popStyle, popoverRef } = useFixedPopover()
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const grouped: Record<string, DispatchTruck[]> = {}
+  for (const t of trucks) {
+    if (!grouped[t.category]) grouped[t.category] = []
+    grouped[t.category].push(t)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => btnRef.current && openAt(btnRef.current)}
+        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-slate-200 hover:border-slate-400 text-xs text-left transition-colors"
+      >
+        <Truck className="w-3 h-3 text-slate-400 flex-shrink-0" />
+        <span className={`flex-1 truncate ${current ? 'text-slate-900' : 'text-slate-400'}`}>
+          {current ? current.name : 'No Trucks'}
+        </span>
+        <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
+      </button>
+
+      {open && (
+        <div
+          ref={popoverRef}
+          style={popStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]"
+        >
+          {current && (
+            <button
+              onClick={() => { onSelect(null); close() }}
+              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100"
+            >
+              Clear truck
+            </button>
+          )}
+          {CATEGORY_ORDER.map(cat => {
+            const list = grouped[cat]
+            if (!list?.length) return null
+            return (
+              <div key={cat}>
+                <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide bg-slate-50">
+                  {CATEGORY_LABELS[cat]}
+                </div>
+                {list.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => { onSelect(t.id); close() }}
+                    className={`w-full px-3 py-2 text-left text-xs hover:bg-orange-50 flex items-center justify-between gap-2 ${current?.id === t.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-900'}`}
+                  >
+                    <span className="truncate">{t.name}</span>
+                    <span className="text-[10px] text-slate-400 flex-shrink-0">{t.size.replace('_', ' ')}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+          {trucks.length === 0 && (
+            <p className="px-3 py-3 text-xs text-slate-400 text-center">No trucks in inventory</p>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─── Person slot ──────────────────────────────────────────────────────────────
+
+interface PersonSlotProps {
+  label: string
+  emptyLabel: string
+  person: DispatchCrewPerson | null
+  people: DispatchCrewMember[]
+  blockedIds: Set<string>
+  onSelect: (personId: string | null) => void
+}
+
+function PersonSlot({ emptyLabel, person, people, blockedIds, onSelect }: PersonSlotProps) {
+  const { open, openAt, close, popStyle, popoverRef } = useFixedPopover()
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => btnRef.current && openAt(btnRef.current)}
+        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-slate-200 hover:border-slate-400 text-xs text-left transition-colors"
+      >
+        {person ? (
+          <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
+        ) : (
+          <UserRound className="w-3 h-3 text-slate-400 flex-shrink-0" />
+        )}
+        <span className={`flex-1 truncate ${person ? 'text-slate-900' : 'text-slate-400'}`}>
+          {person ? person.name : emptyLabel}
+        </span>
+        <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
+      </button>
+
+      {open && (
+        <div
+          ref={popoverRef}
+          style={popStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]"
+        >
+          {person && (
+            <button
+              onClick={() => { onSelect(null); close() }}
+              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100"
+            >
+              Clear person
+            </button>
+          )}
+          {people.length === 0 && (
+            <p className="px-3 py-3 text-xs text-slate-400 text-center">No crew members</p>
+          )}
+          {people.map(p => {
+            const isBlocked = blockedIds.has(p.id)
+            const isSelected = person?.id === p.id
+            return (
+              <button
+                key={p.id}
+                disabled={isBlocked}
+                onClick={() => { onSelect(p.id); close() }}
+                className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors
+                  ${isBlocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-orange-50'}
+                  ${isSelected ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-900'}`}
+              >
+                <Avatar src={p.profile_picture_url} name={p.name} size="sm" />
+                <span className="truncate">{p.name}</span>
+                {p.role_data && (
+                  <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─── Helpers slot ─────────────────────────────────────────────────────────────
+
+interface HelpersSlotProps {
+  helpers: Array<{ person: DispatchCrewPerson }>
+  people: DispatchCrewMember[]
+  blockedIds: Set<string>
+  onAdd: (personId: string) => void
+  onRemove: (personId: string) => void
+}
+
+function HelpersSlot({ helpers, people, blockedIds, onAdd, onRemove }: HelpersSlotProps) {
+  const { open, openAt, close, popStyle, popoverRef } = useFixedPopover()
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const helperIds = new Set(helpers.map(h => h.person.id))
+  const available = people.filter(p => !blockedIds.has(p.id) && !helperIds.has(p.id))
+
+  return (
+    <div className="space-y-1">
+      {/* Existing helper chips */}
+      {helpers.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {helpers.map(h => (
+            <span
+              key={h.person.id}
+              className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium"
+            >
+              {h.person.name.split(' ')[0]}
+              <button
+                onClick={() => onRemove(h.person.id)}
+                className="text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Add helper button */}
+      <button
+        ref={btnRef}
+        onClick={() => btnRef.current && openAt(btnRef.current)}
+        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-slate-200 hover:border-slate-400 text-xs text-left transition-colors"
+      >
+        <Users className="w-3 h-3 text-slate-400 flex-shrink-0" />
+        <span className="flex-1 text-slate-400">
+          {helpers.length === 0 ? 'No Kratos Crew' : 'Add helper'}
+        </span>
+        <Plus className="w-3 h-3 text-slate-400 flex-shrink-0" />
+      </button>
+
+      {open && (
+        <div
+          ref={popoverRef}
+          style={popStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]"
+        >
+          {available.length === 0 && (
+            <p className="px-3 py-3 text-xs text-slate-400 text-center">
+              {people.length === 0 ? 'No crew members' : 'All crew members assigned'}
+            </p>
+          )}
+          {available.map(p => (
+            <button
+              key={p.id}
+              onClick={() => { onAdd(p.id); close() }}
+              className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-orange-50 text-slate-900 transition-colors"
+            >
+              <Avatar src={p.profile_picture_url} name={p.name} size="sm" />
+              <span className="truncate">{p.name}</span>
+              {p.role_data && (
+                <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Assigned job card ────────────────────────────────────────────────────────
+
+function AssignedJobCard({ assignment, onUnassign }: { assignment: DispatchCrewAssignment; onUnassign: (id: string) => void }) {
   const opp = assignment.opportunity
   const customerName = opp?.customer?.full_name ?? 'Unknown'
-  const accentColor = '#ffad33'
 
   return (
     <div
       className="bg-white border border-slate-200 rounded-md px-2 py-1.5 flex items-center justify-between gap-2 shadow-sm"
-      style={{ borderLeftWidth: 3, borderLeftColor: accentColor }}
+      style={{ borderLeftWidth: 3, borderLeftColor: '#ffad33' }}
     >
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-slate-900 truncate">{customerName}</div>
         <div className="text-[10px] text-slate-500 truncate">
-          {opp?.move_size ? opp.move_size.replace(/_/g, ' ') : 'Move'} · ⏱ TBD
+          {opp?.move_size ? opp.move_size.replace(/_/g, ' ') : 'Move'}
         </div>
       </div>
       <button
@@ -646,11 +1069,13 @@ function AssignedJobCard({ assignment, onUnassign }: { assignment: DispatchJobAs
 
 interface JobsPanelProps {
   events: DispatchCalendarEvent[]
-  assignments: DispatchJobAssignment[]
+  crews: DispatchCrew[]
 }
 
-function JobsPanel({ events, assignments }: JobsPanelProps) {
-  const assignedIds = new Set(assignments.map(a => a.opportunity_id))
+function JobsPanel({ events, crews }: JobsPanelProps) {
+  const assignedIds = new Set(
+    crews.flatMap(c => c.assignments.map(a => a.opportunity_id))
+  )
   const unassigned = events.filter(e => !assignedIds.has(e.id))
 
   return (
@@ -742,7 +1167,6 @@ function JobCardContent({ event }: { event: DispatchCalendarEvent }) {
             {event.move_size.replace(/_/g, ' ')}
           </span>
         )}
-        <span className="text-slate-400">⏱ TBD</span>
       </div>
       {event.origin_city && event.dest_city && (
         <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate">

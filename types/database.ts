@@ -297,7 +297,7 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['documents']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['documents']['Insert']>
       }
-      // Manually added — regenerate with `supabase gen types typescript` after running the B1 SQL migration
+      // Manually added — regenerate with `supabase gen types typescript` after running the B1.5 SQL migration
       dispatch_trucks: {
         Row: {
           id: string
@@ -316,14 +316,44 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['dispatch_trucks']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['dispatch_trucks']['Insert']>
       }
+      dispatch_crews: {
+        Row: {
+          id: string
+          scheduled_date: string
+          position: number
+          name: string
+          truck_id: string | null
+          driver_id: string | null
+          dispatcher_id: string | null
+          notes: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          is_deleted: boolean
+          deleted_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['dispatch_crews']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['dispatch_crews']['Insert']>
+      }
+      dispatch_crew_helpers: {
+        Row: {
+          id: string
+          crew_id: string
+          person_id: string
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['dispatch_crew_helpers']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['dispatch_crew_helpers']['Insert']>
+      }
       dispatch_job_assignments: {
         Row: {
           id: string
           opportunity_id: string
-          truck_id: string | null
+          crew_id: string | null
           scheduled_date: string
           start_time: string
           duration_hours: number
+          position: number
           notes: string | null
           created_by: string | null
           created_at: string

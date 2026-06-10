@@ -18,34 +18,6 @@ export interface DispatchTruck {
   deleted_at: string | null
 }
 
-export interface AssignmentOpportunity {
-  id: string
-  move_size: string | null
-  origin_city: string | null
-  dest_city: string | null
-  total_amount: number | null
-  customer: {
-    id: string
-    full_name: string
-  } | null
-}
-
-export interface DispatchJobAssignment {
-  id: string
-  opportunity_id: string
-  truck_id: string | null
-  scheduled_date: string
-  start_time: string
-  duration_hours: number
-  notes: string | null
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  is_deleted: boolean
-  deleted_at: string | null
-  opportunity?: AssignmentOpportunity
-}
-
 export interface DispatchCrewMember {
   id: string
   name: string
@@ -56,9 +28,69 @@ export interface DispatchCrewMember {
   tier: { id: string; key: string; label: string; color: string } | null
 }
 
+// ─── Dispatch Crew types (B1.5) ───────────────────────────────────────────────
+
+export interface DispatchCrewPerson {
+  id: string
+  name: string
+  profile_picture_url: string | null
+}
+
+export interface DispatchCrewTruck {
+  id: string
+  name: string
+  category: string
+  size: string
+  provider: string | null
+}
+
+export interface DispatchCrewHelper {
+  person: DispatchCrewPerson
+}
+
+export interface DispatchCrewAssignment {
+  id: string
+  opportunity_id: string
+  crew_id: string
+  scheduled_date: string
+  start_time: string
+  duration_hours: number
+  position: number
+  is_deleted?: boolean
+  opportunity?: {
+    id: string
+    move_size: string | null
+    origin_city: string | null
+    dest_city: string | null
+    total_amount: number | null
+    customer: { id: string; full_name: string } | null
+  }
+}
+
+export interface DispatchCrew {
+  id: string
+  scheduled_date: string
+  position: number
+  name: string
+  truck_id: string | null
+  driver_id: string | null
+  dispatcher_id: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  is_deleted: boolean
+  deleted_at: string | null
+  truck: DispatchCrewTruck | null
+  driver: DispatchCrewPerson | null
+  dispatcher: DispatchCrewPerson | null
+  helpers: DispatchCrewHelper[]
+  assignments: DispatchCrewAssignment[]
+}
+
 export interface DayDetailData {
   trucks: DispatchTruck[]
-  crew: DispatchCrewMember[]
+  crew_people: DispatchCrewMember[]
   events: DispatchCalendarEvent[]
-  assignments: DispatchJobAssignment[]
+  crews: DispatchCrew[]
 }
