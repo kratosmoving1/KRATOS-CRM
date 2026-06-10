@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import {
   CheckCircle2, ChevronDown, ChevronUp, Download, Loader2,
-  Minus, PackageOpen, Phone, Plus, Shield, X,
+  Minus, Phone, Plus, Shield, X,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format'
 import { PORTAL_MATERIALS, type PortalMaterial } from '@/lib/portal/materials'
@@ -78,7 +78,7 @@ function dateLabel(value: string | null | undefined) {
   if (!value) return 'To be confirmed'
   const [y, m, d] = value.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-CA', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    month: 'short', day: 'numeric', year: 'numeric',
   })
 }
 
@@ -92,9 +92,42 @@ function packageDisplayName(value: string) {
   return /package$/i.test(trimmed) ? trimmed : `${trimmed} Package`
 }
 
-// Handles {{tag}} and {{ tag }} — spaces inside braces are tolerated
+// Handles {{tag}} and {{ tag }} — spaces inside braces tolerated
 function replaceMergeTags(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`)
+}
+
+// Render header notes with bold-orange customer name, orange "Accept Estimate", and styled dividers
+function renderRichNotes(text: string, vars: Record<string, string>): React.ReactNode {
+  // Mark customer_name before generic replacement so we can style it
+  const marked = text.replace(/\{\{\s*customer_name\s*\}\}/gi, '\x00CNAME\x00')
+  const replaced = replaceMergeTags(marked, vars)
+
+  return replaced.split('\n').map((line, lineIdx) => {
+    // Lines that look like a divider (——, --, or only dashes/unicode dashes)
+    if (/^[-—–\s]{3,}$/.test(line.trim())) {
+      return <div key={lineIdx} className="my-3 h-px bg-kratos opacity-60" />
+    }
+    if (line.trim() === '') {
+      return <div key={lineIdx} className="h-2" />
+    }
+
+    // Split line on customer name marker and "Accept Estimate"
+    const parts = line.split(/(\x00CNAME\x00|Accept Estimate)/g)
+    return (
+      <p key={lineIdx} className="leading-relaxed">
+        {parts.map((part, i) => {
+          if (part === '\x00CNAME\x00') {
+            return <strong key={i} className="font-bold text-kratos">{vars.customer_name || 'Customer'}</strong>
+          }
+          if (part === 'Accept Estimate') {
+            return <span key={i} className="font-semibold text-kratos">Accept Estimate</span>
+          }
+          return <span key={i}>{part}</span>
+        })}
+      </p>
+    )
+  })
 }
 
 const DEFAULT_PHONE   = '(800) 321-3222'
@@ -148,8 +181,8 @@ export default function EstimatePortalContent({
   }
 
   // Labor charge breakdown
-  const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
-  const lc = laborCharge?.config ?? {}
+  const laborCharge   = charges.find(c => c.charge_type === 'moving_labor')
+  const lc            = laborCharge?.config ?? {}
   const packageName   = packageDisplayName(String(lc.package_name ?? 'Moving Package'))
   const hourlyRate    = Number(lc.hourly_rate ?? 0)
   const laborHours    = Number(lc.labor_hours ?? 0)
@@ -157,8 +190,17 @@ export default function EstimatePortalContent({
   const travelHours   = Number(lc.travel_hours ?? 0)
   const numTrucks     = Number(lc.num_trucks ?? 1)
   const numCrew       = Number(lc.num_crew ?? 2)
-  const packageRateLabel = hourlyRate > 0 ? `${formatCurrency(hourlyRate)}/hr` : ''
   const supplementaryCharges = charges.filter(c => c.charge_type !== 'moving_labor')
+
+  // Hero right-side info lines
+  const heroInfoLines: string[] = []
+  if (moveSize)     heroInfoLines.push(moveSize)
+  if (laborHours > 0)  heroInfoLines.push(`${laborHours}h minimum`)
+  if (numTrucks > 0 && numCrew > 0) {
+    heroInfoLines.push(`Estimate for ${numTrucks} truck & ${numCrew} crew`)
+  }
+  heroInfoLines.push('Non-Binding Estimate')
+  heroInfoLines.push('Released Value Protection')
 
   // Materials state
   const [materialQty, setMaterialQty] = useState<Record<string, number>>({})
@@ -194,10 +236,7 @@ export default function EstimatePortalContent({
         body: JSON.stringify({ token }),
       })
       const json = await res.json() as { ok?: boolean; error?: string }
-      if (!res.ok) {
-        setAcceptError(json.error ?? 'Unable to accept. Please try again.')
-        return
-      }
+      if (!res.ok) { setAcceptError(json.error ?? 'Unable to accept. Please try again.'); return }
       setAccepted(true)
       setAcceptStep('deposit')
     } catch {
@@ -217,10 +256,7 @@ export default function EstimatePortalContent({
         body: JSON.stringify({ token, depositAmount: deposit }),
       })
       const json = await res.json() as { url?: string; error?: string }
-      if (!res.ok || !json.url) {
-        setCheckoutError(json.error ?? 'Unable to start payment. Please call us.')
-        return
-      }
+      if (!res.ok || !json.url) { setCheckoutError(json.error ?? 'Unable to start payment. Please call us.'); return }
       window.location.href = json.url
     } catch {
       setCheckoutError('Network error. Please try again.')
@@ -240,38 +276,43 @@ export default function EstimatePortalContent({
 
       {/* ── Top bar ──────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-          {/* Left: phone number */}
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-6 py-3">
+
+          {/* Left: phone with "Call us anytime" label */}
           <a
             href={`tel:${companyPhone.replace(/\D/g, '')}`}
-            className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-slate-600 transition-colors"
+            className="flex items-center gap-3 group"
           >
-            <Phone size={15} className="shrink-0 text-slate-500" />
-            {companyPhone}
+            <Phone size={18} className="text-slate-500 shrink-0" />
+            <div>
+              <p className="text-[10px] text-slate-400 leading-none mb-0.5">Call us anytime</p>
+              <p className="text-sm font-bold text-slate-900 leading-none group-hover:text-slate-700">
+                {companyPhone}
+              </p>
+            </div>
           </a>
 
           {/* Right: action buttons */}
           <div className="flex items-center gap-2">
             {showInventory && (
-              <button className="hidden sm:flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-slate-700 transition-colors">
-                <PackageOpen size={12} /> Manage Inventory
+              <button className="hidden sm:block rounded px-5 py-2.5 bg-slate-950 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors">
+                Manage Inventory
               </button>
             )}
             {showDownload && (
-              <button className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-slate-700 transition-colors">
-                <Download size={12} />
-                <span className="hidden sm:inline">Download Estimate</span>
+              <button className="hidden md:flex items-center gap-1.5 rounded px-5 py-2.5 bg-slate-950 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors">
+                <Download size={12} /> Download
               </button>
             )}
             {!accepted ? (
               <button
                 onClick={() => setAcceptStep('confirm')}
-                className="flex items-center gap-1.5 rounded-lg bg-kratos px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-950 hover:opacity-90 transition-opacity"
+                className="rounded px-5 py-2.5 bg-slate-950 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors"
               >
                 Accept Estimate
               </button>
             ) : (
-              <div className="flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-[11px] font-bold text-green-800">
+              <div className="flex items-center gap-1.5 rounded px-4 py-2.5 bg-green-700 text-white text-[11px] font-bold uppercase tracking-wider">
                 <CheckCircle2 size={13} /> Accepted
               </div>
             )}
@@ -281,7 +322,7 @@ export default function EstimatePortalContent({
 
       {/* ── Admin preview banner ─────────────────────────────────────────────── */}
       {isPreview && (
-        <div className="bg-amber-50 px-4 py-2 text-center text-xs font-semibold uppercase tracking-widest text-amber-800 border-b border-amber-100">
+        <div className="bg-amber-50 px-4 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-amber-700 border-b border-amber-100">
           Admin preview — not visible to customers
         </div>
       )}
@@ -296,92 +337,84 @@ export default function EstimatePortalContent({
 
       {/* ── Dark hero ────────────────────────────────────────────────────────── */}
       <div className="bg-[#0a0a0a] text-white">
-        <div className="mx-auto max-w-5xl px-5 py-10 sm:py-14">
+        <div className="mx-auto max-w-5xl px-6 py-10 sm:py-14">
+          <div className="flex items-start justify-between gap-8">
 
-          {/* Logo row + right stats */}
-          <div className="flex items-start justify-between gap-6">
-            <Image
-              src={cfg?.logo_url ?? '/logo.png'}
-              alt={companyName}
-              width={100}
-              height={100}
-              className="object-contain"
-            />
-            <div className="hidden sm:flex flex-col items-end gap-1.5 text-sm text-slate-400 text-right">
-              <span>{moveSize || 'Moving Service'}</span>
-              <span>Non-Binding Estimate</span>
-              <span>Released Value Protection</span>
-            </div>
-          </div>
+            {/* Left: logo + quote info */}
+            <div className="flex-1 min-w-0">
+              <Image
+                src={cfg?.logo_url ?? '/logo.png'}
+                alt={companyName}
+                width={120}
+                height={120}
+                className="object-contain mb-6"
+              />
 
-          {/* Quote # + status badge */}
-          <div className="mt-7 flex items-center gap-3 flex-wrap">
-            <span className="text-sm text-slate-400">
-              Estimate {formatQuoteNumber(opp.opportunity_number)}
-            </span>
-            <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-              accepted
-                ? 'bg-green-800/70 text-green-300'
-                : 'bg-amber-800/70 text-amber-200'
-            }`}>
-              {accepted ? 'Accepted' : 'Not Booked'}
-            </span>
-          </div>
+              <div className="flex items-center gap-3 mb-1.5">
+                <span className="text-sm text-slate-400">
+                  Estimate {formatQuoteNumber(opp.opportunity_number)}
+                </span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                  accepted ? 'bg-green-700 text-green-100' : 'bg-amber-700/80 text-amber-100'
+                }`}>
+                  {accepted ? 'Booked' : 'Not Booked'}
+                </span>
+              </div>
 
-          {/* Big title */}
-          <h1 className="mt-1.5 text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
-            Your Moving Estimate
-          </h1>
-          <div className="mt-2 space-y-0.5 text-sm text-slate-400">
-            <p>Starting on: {dateLabel(opp.service_date)}</p>
-            <p>Arrival window: TBD</p>
-          </div>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
+                Your Moving Estimate
+              </h1>
 
-          {/* Total + package */}
-          <div className="mt-7 flex flex-wrap items-end justify-between gap-5">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Estimated total</p>
-              <p className="mt-1 text-4xl font-bold text-kratos">{formatCurrency(grandTotal)}</p>
-              <p className="mt-1.5 text-sm text-slate-400">
-                Deposit: <span className="font-bold text-slate-200">{formatCurrency(deposit)}</span>
-              </p>
+              <p className="text-sm text-slate-400">Starting on: {dateLabel(opp.service_date)}</p>
+              <p className="text-sm text-slate-400">Arrival window: TBD</p>
             </div>
 
-            {laborCharge && hourlyRate > 0 && (
-              <div className="rounded-xl bg-white/[0.07] border border-white/10 px-5 py-4 min-w-[220px]">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <span className="text-sm font-semibold text-white">{packageName}</span>
-                  <span className="text-kratos font-bold text-2xl">{packageRateLabel}</span>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">{numTrucks} truck · {numCrew} movers</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 mt-2">
-                  {laborHours > 0   && <span>Labour: {laborHours}h</span>}
-                  {travelHours > 0  && <span>Travel: {travelHours}h</span>}
-                  {billableHours > 0 && (
-                    <span className="font-semibold text-slate-200">Billable: {billableHours}h</span>
-                  )}
+            {/* Right: hourly rate + info lines */}
+            {hourlyRate > 0 && (
+              <div className="flex-shrink-0 text-right hidden sm:block">
+                <p className="text-5xl font-bold text-white leading-none mb-3">
+                  {formatCurrency(hourlyRate)}<span className="text-2xl text-slate-400 font-normal">/hour</span>
+                </p>
+                <div className="space-y-1">
+                  {heroInfoLines.map((line, i) => (
+                    <p key={i} className="text-sm text-slate-400">{line}</p>
+                  ))}
                 </div>
               </div>
             )}
           </div>
+
+          {/* Mobile: hourly rate below logo/title */}
+          {hourlyRate > 0 && (
+            <div className="mt-6 sm:hidden">
+              <p className="text-4xl font-bold text-white">
+                {formatCurrency(hourlyRate)}<span className="text-xl text-slate-400 font-normal">/hour</span>
+              </p>
+              <div className="mt-2 space-y-0.5">
+                {heroInfoLines.map((line, i) => (
+                  <p key={i} className="text-sm text-slate-400">{line}</p>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl space-y-4 px-4 sm:px-5 pt-5">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-5 space-y-5 pb-6">
 
         {/* ── Info panel ───────────────────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg bg-white shadow-sm">
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
             <InfoPanel
-              title="Support"
+              title="Customer Support"
               lines={[companyName, companyPhone]}
             />
             <InfoPanel
-              title="Customer"
+              title="Your Info"
               lines={[
-                customer?.full_name ?? 'Customer',
-                customer?.phone ?? '',
+                customer?.full_name ?? '',
                 customer?.email ?? '',
+                customer?.phone ?? '',
               ]}
             />
             <InfoPanel
@@ -401,41 +434,45 @@ export default function EstimatePortalContent({
           </div>
         </div>
 
-        {/* ── Header notes ─────────────────────────────────────────────────── */}
+        {/* ── Header notes (rich rendered) ─────────────────────────────────── */}
         {cfg?.header_notes && (
-          <div className="rounded-xl bg-white px-5 py-5 shadow-sm">
-            <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
-              {replaceMergeTags(cfg.header_notes, mergeVars)}
-            </p>
+          <div className="rounded-lg bg-white px-6 py-6 shadow-sm text-sm text-slate-800">
+            {renderRichNotes(cfg.header_notes, mergeVars)}
           </div>
         )}
 
-        {/* ── Awards/badges ────────────────────────────────────────────────── */}
+        {/* ── Award/trust badges ───────────────────────────────────────────── */}
         {cfg?.badges && cfg.badges.length > 0 && (
-          <div className="overflow-x-auto">
-            <div className="flex items-center gap-3 py-1">
+          <div className="rounded-lg bg-white px-6 py-5 shadow-sm">
+            <div className="flex items-center justify-center flex-wrap gap-5">
               {cfg.badges.map(badge => (
-                <div key={badge.id} className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
-                  {badge.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={badge.image_url} alt={badge.name} className="h-5 w-5 rounded-full object-contain" />
-                  )}
-                  <span className="text-xs font-semibold text-slate-700">{badge.name}</span>
-                </div>
+                badge.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={badge.id}
+                    src={badge.image_url}
+                    alt={badge.name}
+                    className="h-16 w-auto object-contain"
+                  />
+                ) : (
+                  <div key={badge.id} className="flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2">
+                    <span className="text-xs font-semibold text-slate-700">{badge.name}</span>
+                  </div>
+                )
               ))}
             </div>
           </div>
         )}
 
         {/* ── Estimate breakdown ───────────────────────────────────────────── */}
-        <section className="rounded-2xl bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-900">Estimate Breakdown</h2>
-          <div className="mt-4 space-y-1.5 text-sm">
+        <section className="rounded-lg bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-bold text-slate-900 mb-4">Estimate Breakdown</h2>
+          <div className="space-y-1.5 text-sm">
             {laborCharge && hourlyRate > 0 ? (
               <>
-                {laborHours > 0 && <SummaryRow label="Estimated labour" value={`${laborHours}h`} />}
-                {travelHours > 0 && <SummaryRow label="Estimated travel" value={`${travelHours}h`} />}
-                {billableHours > 0 && <SummaryRow label="Total billable hours" value={`${billableHours}h`} bold />}
+                {laborHours > 0    && <SummaryRow label="Estimated labour"       value={`${laborHours}h`} />}
+                {travelHours > 0   && <SummaryRow label="Estimated travel"       value={`${travelHours}h`} />}
+                {billableHours > 0 && <SummaryRow label="Total billable hours"   value={`${billableHours}h`} bold />}
                 {supplementaryCharges.length > 0 && <div className="border-t border-slate-100 my-2" />}
               </>
             ) : null}
@@ -448,12 +485,12 @@ export default function EstimatePortalContent({
               </div>
             ))}
             <div className="border-t border-slate-100 mt-3 pt-3 space-y-1.5">
-              <SummaryRow label="Subtotal" value={formatCurrency(subtotal)} />
-              {discounts > 0 && <SummaryRow label="Discounts" value={`− ${formatCurrency(discounts)}`} />}
+              <SummaryRow label="Subtotal"             value={formatCurrency(subtotal)} />
+              {discounts > 0 && <SummaryRow label="Discounts"        value={`− ${formatCurrency(discounts)}`} />}
               {materialsSubtotal > 0 && <SummaryRow label="Moving materials" value={formatCurrency(materialsSubtotal)} />}
-              <SummaryRow label="HST (13%)" value={formatCurrency(grandHst)} />
+              <SummaryRow label="HST (13%)"            value={formatCurrency(grandHst)} />
               <div className="border-t border-slate-100 pt-2">
-                <SummaryRow label="Estimated total" value={formatCurrency(grandTotal)} bold />
+                <SummaryRow label="Estimated total"    value={formatCurrency(grandTotal)} bold />
               </div>
             </div>
           </div>
@@ -461,23 +498,25 @@ export default function EstimatePortalContent({
 
         {/* ── Moving materials ─────────────────────────────────────────────── */}
         {showMaterials && (
-          <section className="overflow-hidden rounded-2xl bg-white shadow-sm">
+          <section className="overflow-hidden rounded-lg bg-white shadow-sm">
             <button
-              className="flex w-full items-center justify-between px-5 py-4 text-left"
+              className="flex w-full items-center justify-between px-6 py-4 text-left"
               onClick={() => setMaterialsOpen(o => !o)}
             >
               <div>
                 <h2 className="text-sm font-bold text-slate-900">Moving Materials</h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   {materialsSubtotal > 0
                     ? `${formatCurrency(materialsSubtotal)} in selected materials`
                     : 'Optional boxes, tape, and packing supplies'}
                 </p>
               </div>
-              {materialsOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+              {materialsOpen
+                ? <ChevronUp size={18} className="text-slate-400" />
+                : <ChevronDown size={18} className="text-slate-400" />}
             </button>
             {materialsOpen && (
-              <div className="border-t border-slate-100 px-5 pb-4">
+              <div className="border-t border-slate-100 px-6 pb-5">
                 <div className="mt-4 space-y-4">
                   {PORTAL_MATERIALS.map(m => (
                     <MaterialRow
@@ -489,13 +528,13 @@ export default function EstimatePortalContent({
                   ))}
                 </div>
                 {materialsSubtotal > 0 && (
-                  <div className="mt-4 flex justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold">
+                  <div className="mt-4 flex justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm font-semibold">
                     <span>Materials subtotal</span>
                     <span>{formatCurrency(materialsSubtotal)}</span>
                   </div>
                 )}
                 <p className="mt-3 text-[10px] text-slate-400">
-                  Materials pricing does not include HST. Final invoice will reflect confirmed quantities.
+                  Materials pricing does not include HST. Final invoice reflects confirmed quantities.
                 </p>
               </div>
             )}
@@ -504,18 +543,18 @@ export default function EstimatePortalContent({
 
         {/* ── Protection options ───────────────────────────────────────────── */}
         {showProtection && (
-          <section className="rounded-2xl bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
+          <section className="rounded-lg bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
               <Shield size={16} className="text-slate-400" />
               <h2 className="text-sm font-bold text-slate-900">Protection Options</h2>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Select the level of protection for your belongings.</p>
-            <div className="mt-4 space-y-3">
+            <p className="text-xs text-slate-500 mb-4">Select the level of protection for your belongings.</p>
+            <div className="space-y-3">
               {PROTECTION_OPTIONS.map(opt => (
                 <button
                   key={opt.id}
                   onClick={() => setProtection(opt.id)}
-                  className={`w-full rounded-xl border p-4 text-left transition-all ${
+                  className={`w-full rounded-lg border p-4 text-left transition-all ${
                     protection === opt.id ? 'border-kratos bg-kratos/5 ring-1 ring-kratos' : opt.color
                   }`}
                 >
@@ -543,16 +582,16 @@ export default function EstimatePortalContent({
 
         {/* ── Attachments ──────────────────────────────────────────────────── */}
         {cfg?.attachments && cfg.attachments.length > 0 && (
-          <section className="rounded-2xl bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-bold text-slate-900">Documents</h2>
-            <div className="mt-3 space-y-2">
+          <section className="rounded-lg bg-white p-6 shadow-sm">
+            <h2 className="text-sm font-bold text-slate-900 mb-3">Documents</h2>
+            <div className="space-y-2">
               {cfg.attachments.map(a => (
                 <a
                   key={a.id}
                   href={a.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <Download size={14} className="text-slate-400 shrink-0" />
                   {a.name}
@@ -564,15 +603,13 @@ export default function EstimatePortalContent({
 
         {/* ── Footer notes ─────────────────────────────────────────────────── */}
         {cfg?.footer_notes && (
-          <div className="rounded-xl bg-white px-5 py-5 shadow-sm">
-            <p className="text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
-              {replaceMergeTags(cfg.footer_notes, mergeVars)}
-            </p>
+          <div className="rounded-lg bg-white px-6 py-5 shadow-sm text-sm text-slate-600">
+            {renderRichNotes(cfg.footer_notes, mergeVars)}
           </div>
         )}
 
         {/* ── Disclaimer ───────────────────────────────────────────────────── */}
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <p className="text-xs font-semibold text-slate-700">
             Final total may vary based on actual time, services, inventory, and access conditions.
           </p>
@@ -596,7 +633,7 @@ export default function EstimatePortalContent({
             </div>
             <button
               onClick={() => setAcceptStep('confirm')}
-              className="rounded-xl bg-kratos px-6 py-3 text-sm font-bold text-slate-950 shadow-sm hover:opacity-90 transition-opacity"
+              className="rounded px-6 py-3 bg-slate-950 text-white text-sm font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors"
             >
               Accept Estimate
             </button>
@@ -659,12 +696,12 @@ export default function EstimatePortalContent({
                   <button
                     onClick={handleAccept}
                     disabled={acceptLoading}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-kratos px-5 py-3 text-sm font-bold text-slate-950 hover:opacity-90 disabled:opacity-60"
+                    className="flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-bold uppercase tracking-wider text-white hover:bg-slate-800 disabled:opacity-60 transition-colors"
                   >
                     {acceptLoading && <Loader2 size={15} className="animate-spin" />}
                     Accept Estimate
                   </button>
-                  <button onClick={closeModal} className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50">
+                  <button onClick={closeModal} className="rounded-lg px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50">
                     Cancel
                   </button>
                 </div>
@@ -697,13 +734,13 @@ export default function EstimatePortalContent({
                   <button
                     onClick={handlePayDeposit}
                     disabled={checkoutLoading}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-kratos px-5 py-3 text-sm font-bold text-slate-950 hover:opacity-90 disabled:opacity-60"
+                    className="flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-bold uppercase tracking-wider text-white hover:bg-slate-800 disabled:opacity-60 transition-colors"
                   >
                     {checkoutLoading && <Loader2 size={15} className="animate-spin" />}
                     Pay Deposit — {formatCurrency(deposit)}
                   </button>
                   {allowSkipDeposit && (
-                    <button onClick={closeModal} className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50">
+                    <button onClick={closeModal} className="rounded-lg px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50">
                       I&apos;ll pay later
                     </button>
                   )}
@@ -737,8 +774,8 @@ function SummaryRow({ label, value, bold }: { label: string; value: string; bold
 function InfoPanel({ title, lines }: { title: string; lines: string[] }) {
   const nonEmpty = lines.filter(Boolean)
   return (
-    <div className="p-4 sm:p-5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{title}</p>
+    <div className="p-5">
+      <p className="text-xs font-bold text-slate-800 mb-2">{title}</p>
       {nonEmpty.map((line, i) => (
         <p
           key={i}
