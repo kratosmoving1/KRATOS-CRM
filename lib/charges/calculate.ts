@@ -16,7 +16,10 @@ export interface MovingLaborConfig {
   num_crew: number
   hourly_rate: number
   labor_hours: number
+  /** Door-to-door travel: origin → destination drive time (not return travel). */
   travel_hours: number
+  /** Buffer hours added to total time (dispatcher discretion). */
+  buffer_hours?: number
   handicap_origin: number
   handicap_stops: number
   handicap_dest: number
@@ -64,6 +67,7 @@ export function calculateMovingLabor(c: MovingLaborConfig): MovingLaborResult {
   const total =
     c.labor_hours +
     c.travel_hours +
+    (c.buffer_hours ?? 0) +
     c.handicap_origin +
     c.handicap_stops +
     c.handicap_dest

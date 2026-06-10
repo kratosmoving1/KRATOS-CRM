@@ -13,9 +13,11 @@ export function formatRate(charge: OpportunityCharge): string {
       const rate = Number(c.hourly_rate ?? 0)
       const trucks = Number(c.num_trucks ?? 0)
       const crew = Number(c.num_crew ?? 0)
+      const travelH = Number(c.travel_hours ?? 0)
       const truckText =
         trucks === 0 ? 'no truck' : `${trucks} truck${trucks > 1 ? 's' : ''}`
-      return `${hours}h @ $${rate.toFixed(2)}/hr (${truckText}, ${crew} crew)`
+      const travelNote = travelH > 0 ? `, ${travelH}h travel` : ''
+      return `${hours}h @ $${rate.toFixed(2)}/hr (${truckText}, ${crew} crew${travelNote})`
     }
 
     case 'transportation': {

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   X, ChevronLeft, Loader2,
   Users, Truck, Package, Box, Plus,
-  MapPin, Fuel, ShieldCheck, Move, Warehouse, Clock,
+  MapPin, Fuel, ShieldCheck, Move, Warehouse, Clock, Navigation, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -148,7 +148,16 @@ export interface ChargeFormResult {
 }
 
 // Moving Labor form — Package / Labour / Travel / Totals
-function MovingLaborForm({ initial, onResult }: FormProps) {
+interface MovingLaborFormProps extends FormProps {
+  originAddress?: string
+  destAddress?: string
+}
+
+function roundToQuarterHour(minutes: number): number {
+  return Math.round(minutes / 15) * 0.25
+}
+
+function MovingLaborForm({ initial, onResult, originAddress, destAddress }: MovingLaborFormProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const cfg = useMemo(() => (initial?.config as Record<string, unknown>) ?? {}, [initial?.config])
 
@@ -162,6 +171,15 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
   const [loadH, setLoadH] = useState(String(cfg.load_hours ?? ''))
   const [unloadH, setUnloadH] = useState(String(cfg.unload_hours ?? ''))
 
+  // Door-to-door travel (origin → destination, NOT return travel)
+  const [doorH, setDoorH] = useState(String(cfg.travel_hours ?? ''))
+  const [mapsLoading, setMapsLoading] = useState(false)
+  const [mapsWarning, setMapsWarning] = useState<string | null>(null)
+  const [doorHFromMaps, setDoorHFromMaps] = useState(false)
+
+  // Buffer
+  const [bufferH, setBufferH] = useState(String(cfg.buffer_hours ?? cfg.handling_buffer_hours ?? ''))
+
   // Access challenge handicaps
   const [hOrigin, setHOrigin] = useState(String(cfg.handicap_origin ?? 0))
   const [hStops, setHStops] = useState(String(cfg.handicap_stops ?? 0))
@@ -174,6 +192,34 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
   )
   const [discountValue, setDiscountValue] = useState(String(initial?.discount_value ?? ''))
 
+  // Auto-fetch door-to-door travel from Google Maps on open
+  useEffect(() => {
+    if (!originAddress || !destAddress) return
+    setMapsLoading(true)
+    setMapsWarning(null)
+    fetch('/api/admin/maps/distance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: originAddress, destination: destAddress }),
+    })
+      .then(r => r.json())
+      .then((d: { duration_seconds?: number; error?: string }) => {
+        if (d.error || !d.duration_seconds) {
+          setMapsWarning('Google Maps travel estimate unavailable. Enter travel time manually.')
+          return
+        }
+        const minutes = Math.round(d.duration_seconds / 60)
+        const rounded = roundToQuarterHour(minutes)
+        setDoorH(String(rounded))
+        setDoorHFromMaps(true)
+      })
+      .catch(() => {
+        setMapsWarning('Google Maps travel estimate unavailable. Enter travel time manually.')
+      })
+      .finally(() => setMapsLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])  // Run once on mount — addresses don't change while panel is open
+
   const laborHours = numVal(loadH) + numVal(unloadH)
 
   const calcResult = useCallback(() => {
@@ -182,7 +228,8 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       num_crew: numVal(crew),
       hourly_rate: numVal(rate),
       labor_hours: laborHours,
-      travel_hours: 0,
+      travel_hours: numVal(doorH),
+      buffer_hours: numVal(bufferH),
       handicap_origin: numVal(hOrigin),
       handicap_stops: numVal(hStops),
       handicap_dest: numVal(hDest),
@@ -192,13 +239,18 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
     const dv = numVal(discountValue)
     const { discount_amount, total } = applyDiscount(subtotal, discountType, dv > 0 ? dv : null)
 
+    const doorHVal = numVal(doorH)
+    const travelNote = doorHVal > 0 ? ` + ${doorHVal}h travel` : ''
+
     const config: Record<string, unknown> = {
       ...c,
       total_hours,
       billable_hours,
       load_hours: numVal(loadH),
       unload_hours: numVal(unloadH),
-      handling_buffer_hours: 0,
+      door_to_door_travel_hours: doorHVal,
+      buffer_hours: numVal(bufferH),
+      handling_buffer_hours: numVal(bufferH),
       package_name: pkgName.trim() || null,
       distance_km: cfg.distance_km ?? null,
       drive_time_minutes: cfg.drive_time_minutes ?? null,
@@ -207,7 +259,7 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
 
     onResult({
       name: pkgName ? `Moving Labor — ${pkgName}` : 'Moving Labor',
-      description: `${billable_hours}h @ ${fmt(numVal(rate))}/hr · ${numVal(trucks)} truck, ${numVal(crew)} crew`,
+      description: `${billable_hours}h @ ${fmt(numVal(rate))}/hr · ${numVal(trucks)} truck, ${numVal(crew)} crew${travelNote}`,
       config,
       subtotal,
       discount_type: discountType,
@@ -217,14 +269,14 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
       is_overridden: Boolean(overrideReason.trim()),
     })
     return { total_hours, billable_hours, subtotal }
-  }, [trucks, crew, rate, laborHours, loadH, unloadH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
+  }, [trucks, crew, rate, laborHours, doorH, bufferH, loadH, unloadH, hOrigin, hStops, hDest, minH, discountType, discountValue, pkgName, overrideReason, cfg, onResult])
 
   useEffect(() => { calcResult() }, [calcResult])
 
   const { total_hours, billable_hours, subtotal } = (() => {
     const c = {
       num_trucks: numVal(trucks), num_crew: numVal(crew), hourly_rate: numVal(rate),
-      labor_hours: laborHours, travel_hours: 0,
+      labor_hours: laborHours, travel_hours: numVal(doorH), buffer_hours: numVal(bufferH),
       handicap_origin: numVal(hOrigin), handicap_stops: numVal(hStops), handicap_dest: numVal(hDest),
       minimum_hours: numVal(minH),
     }
@@ -244,14 +296,97 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
         </div>
       </div>
 
-      {/* ── Estimated Time: Labour ────────────────────────────────── */}
+      {/* ── Estimated Time ────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estimated Time</p>
 
+        {/* Row 1: Loading + Unloading */}
         <div className="grid grid-cols-2 gap-3">
           <FInput label="Loading (h)" type="number" min={0} step="0.25" value={loadH} onChange={e => setLoadH(e.target.value)} placeholder="0" />
           <FInput label="Unloading (h)" type="number" min={0} step="0.25" value={unloadH} onChange={e => setUnloadH(e.target.value)} placeholder="0" />
         </div>
+
+        {/* Row 2: Door-to-Door Travel + Buffer */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Door-to-door travel field */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <FLabel>Door-to-Door Travel (h)</FLabel>
+              {mapsLoading && (
+                <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  Fetching…
+                </span>
+              )}
+              {!mapsLoading && doorHFromMaps && !mapsWarning && (
+                <span className="flex items-center gap-1 text-[10px] text-blue-500">
+                  <Navigation className="w-2.5 h-2.5" />
+                  Maps
+                </span>
+              )}
+            </div>
+            <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 focus-within:border-kratos focus-within:bg-white focus-within:ring-2 focus-within:ring-kratos/20">
+              <input
+                type="number"
+                min={0}
+                step="0.25"
+                value={doorH}
+                onChange={e => { setDoorH(e.target.value); setDoorHFromMaps(false) }}
+                placeholder="0"
+                className="w-full rounded-lg bg-transparent px-3 py-2.5 text-sm text-slate-900 outline-none"
+              />
+            </div>
+          </div>
+          <FInput label="Buffer (h)" type="number" min={0} step="0.25" value={bufferH} onChange={e => setBufferH(e.target.value)} placeholder="0" />
+        </div>
+
+        {/* Maps warning */}
+        {mapsWarning && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-700">{mapsWarning}</p>
+          </div>
+        )}
+
+        {/* No addresses available — show context */}
+        {!originAddress && !destAddress && !mapsWarning && (
+          <p className="text-[11px] text-slate-400 flex items-center gap-1">
+            <Navigation className="w-3 h-3" />
+            Add origin &amp; destination addresses to auto-fill travel time.
+          </p>
+        )}
+
+        {/* Refresh Maps button (shown when addresses available and not currently loading) */}
+        {originAddress && destAddress && !mapsLoading && (
+          <button
+            type="button"
+            onClick={() => {
+              setMapsLoading(true)
+              setMapsWarning(null)
+              fetch('/api/admin/maps/distance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ origin: originAddress, destination: destAddress }),
+              })
+                .then(r => r.json())
+                .then((d: { duration_seconds?: number; error?: string }) => {
+                  if (d.error || !d.duration_seconds) {
+                    setMapsWarning('Google Maps travel estimate unavailable. Enter travel time manually.')
+                    return
+                  }
+                  const minutes = Math.round(d.duration_seconds / 60)
+                  setDoorH(String(roundToQuarterHour(minutes)))
+                  setDoorHFromMaps(true)
+                })
+                .catch(() => setMapsWarning('Google Maps travel estimate unavailable. Enter travel time manually.'))
+                .finally(() => setMapsLoading(false))
+            }}
+            className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-blue-600 transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Refresh travel time from Maps
+          </button>
+        )}
 
         {/* Access challenges (secondary) */}
         {(numVal(hOrigin) > 0 || numVal(hStops) > 0 || numVal(hDest) > 0) ? (
@@ -272,6 +407,28 @@ function MovingLaborForm({ initial, onResult }: FormProps) {
           >
             + Add access challenge hours (stairs, elevator, long carry)
           </button>
+        )}
+
+        {/* Time breakdown summary */}
+        {(numVal(loadH) > 0 || numVal(unloadH) > 0 || numVal(doorH) > 0 || numVal(bufferH) > 0) && (
+          <div className="rounded-lg bg-white border border-slate-200 px-3 py-2 text-[11px] text-slate-500 space-y-0.5">
+            <div className="flex justify-between">
+              <span>Labour (load + unload)</span>
+              <span className="tabular-nums font-medium">{(numVal(loadH) + numVal(unloadH)).toFixed(2)}h</span>
+            </div>
+            {numVal(doorH) > 0 && (
+              <div className="flex justify-between">
+                <span>Door-to-Door Travel</span>
+                <span className="tabular-nums font-medium">{numVal(doorH).toFixed(2)}h</span>
+              </div>
+            )}
+            {numVal(bufferH) > 0 && (
+              <div className="flex justify-between">
+                <span>Buffer</span>
+                <span className="tabular-nums font-medium">{numVal(bufferH).toFixed(2)}h</span>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Totals */}
@@ -643,9 +800,13 @@ interface ChargeSidePanelProps {
   onSaved: () => void
   /** Pre-filled config for Moving Labor when opened from the tariff recommendation panel */
   defaultLaborConfig?: Record<string, unknown> | null
+  /** Origin address for auto-fetching door-to-door travel time in Moving Labor */
+  originAddress?: string
+  /** Destination address for auto-fetching door-to-door travel time in Moving Labor */
+  destAddress?: string
 }
 
-export default function ChargeSidePanel({ open, oppId, editingCharge, charges, onClose, onSaved, defaultLaborConfig }: ChargeSidePanelProps) {
+export default function ChargeSidePanel({ open, oppId, editingCharge, charges, onClose, onSaved, defaultLaborConfig, originAddress, destAddress }: ChargeSidePanelProps) {
   const [screen, setScreen] = useState<'categories' | 'form'>('categories')
   const [selectedType, setSelectedType] = useState<ChargeType | null>(null)
   const [formResult, setFormResult] = useState<Partial<ChargeFormResult> | null>(null)
@@ -730,7 +891,7 @@ export default function ChargeSidePanel({ open, oppId, editingCharge, charges, o
     if (!selectedType) return null
     switch (selectedType) {
       case 'moving_labor':
-        return <MovingLaborForm initial={editInitial} onResult={handleFormResult} />
+        return <MovingLaborForm initial={editInitial} onResult={handleFormResult} originAddress={originAddress} destAddress={destAddress} />
       case 'transportation':
         return <SimpleQuantityForm defaultName="Transportation" qtyLabel="Trips" rateLabel="Rate / Trip" initial={editInitial} onResult={handleFormResult} />
       case 'packing':

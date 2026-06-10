@@ -2900,6 +2900,8 @@ export default function OpportunityDetailPage() {
         editingCharge={editingCharge}
         charges={charges}
         defaultLaborConfig={tariffPreFill}
+        originAddress={[opp.origin_address_line1, opp.origin_city, opp.origin_province].filter(Boolean).join(', ') || undefined}
+        destAddress={[opp.dest_address_line1, opp.dest_city, opp.dest_province].filter(Boolean).join(', ') || undefined}
         onClose={() => { setChargePanelOpen(false); setEditingCharge(null); setTariffPreFill(null) }}
         onSaved={() => { fetchCharges(); setTariffPreFill(null) }}
       />
