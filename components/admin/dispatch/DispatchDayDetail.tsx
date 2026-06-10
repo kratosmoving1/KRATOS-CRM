@@ -17,7 +17,7 @@ import {
 import {
   ArrowLeft, ChevronLeft, ChevronRight,
   Truck, CalendarDays, Inbox, Package, MapPin, Plus, X, Users,
-  CheckCircle, UserRound, ChevronDown, Trash2, Hash, Send,
+  CheckCircle, UserRound, Trash2, Hash, Send, GripVertical,
   Printer, BarChart2, AlertCircle,
 } from 'lucide-react'
 import { Avatar } from '@/components/admin/workforce/Avatar'
@@ -69,35 +69,216 @@ function fmtDate(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-// ─── Fixed-position popover hook ─────────────────────────────────────────────
+// ─── Draggable resource items (left panel) ───────────────────────────────────
 
-function useFixedPopover() {
-  const [open, setOpen] = useState(false)
-  const [popStyle, setPopStyle] = useState<React.CSSProperties>({})
-  const popoverRef = useRef<HTMLDivElement>(null)
+function DraggableTruckItem({ truck }: { truck: DispatchTruck }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `resource-truck-${truck.id}`,
+    data: { type: 'resource_truck', truckId: truck.id },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{ transform: transform ? `translate3d(${transform.x}px,${transform.y}px,0)` : undefined }}
+      className={`px-2 py-1.5 rounded flex items-center gap-2 text-xs cursor-grab active:cursor-grabbing select-none
+        hover:bg-slate-100 transition-colors ${isDragging ? 'opacity-40' : ''}`}
+    >
+      <Truck className="w-3 h-3 text-slate-400 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-slate-900 truncate">{truck.name}</div>
+        <div className="text-[10px] text-slate-500">
+          {truck.size.replace('_', ' ')}{truck.provider ? ` · ${truck.provider}` : ''}
+          {truck.liftgate ? ' · LG' : ''}{truck.ramp ? ' · Ramp' : ''}
+        </div>
+      </div>
+      <GripVertical className="w-3 h-3 text-slate-300 flex-shrink-0" />
+    </div>
+  )
+}
 
-  function openAt(trigger: HTMLElement) {
-    const rect = trigger.getBoundingClientRect()
-    const left = Math.min(rect.left, window.innerWidth - 240)
-    setPopStyle({ position: 'fixed', top: rect.bottom + 4, left, zIndex: 1000, width: 228 })
-    setOpen(true)
-  }
+function DraggablePersonItem({ person }: { person: DispatchCrewMember }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `resource-person-${person.id}`,
+    data: { type: 'resource_person', personId: person.id },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{ transform: transform ? `translate3d(${transform.x}px,${transform.y}px,0)` : undefined }}
+      className={`px-2 py-1.5 rounded flex items-center gap-2 text-xs cursor-grab active:cursor-grabbing select-none
+        hover:bg-slate-100 transition-colors ${isDragging ? 'opacity-40' : ''}`}
+    >
+      <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-slate-900 truncate">{person.name}</div>
+        <div className="text-[10px] text-slate-500 truncate">
+          {person.role_data?.label ?? person.role ?? 'No role'}
+          {person.tier ? ` · ${person.tier.label}` : ''}
+        </div>
+      </div>
+      <GripVertical className="w-3 h-3 text-slate-300 flex-shrink-0" />
+    </div>
+  )
+}
 
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (!popoverRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    function onScroll() { setOpen(false) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('scroll', onScroll, true)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('scroll', onScroll, true)
-    }
-  }, [open])
+// ─── Drag overlay cards for resource drags ───────────────────────────────────
 
-  return { open, openAt, close: () => setOpen(false), popStyle, popoverRef }
+function TruckDragOverlay({ truck }: { truck: DispatchTruck }) {
+  return (
+    <div className="bg-white rounded-lg border border-slate-300 px-3 py-2 shadow-xl flex items-center gap-2 text-xs w-[180px] pointer-events-none">
+      <Truck className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-slate-900 truncate">{truck.name}</p>
+        <p className="text-slate-500">{truck.size.replace('_', ' ')}</p>
+      </div>
+    </div>
+  )
+}
+
+function PersonDragOverlay({ person }: { person: DispatchCrewMember }) {
+  return (
+    <div className="bg-white rounded-lg border border-slate-300 px-3 py-2 shadow-xl flex items-center gap-2 text-xs w-[180px] pointer-events-none">
+      <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-slate-900 truncate">{person.name}</p>
+        <p className="text-slate-500">{person.role_data?.label ?? 'Crew'}</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Droppable crew slot components ──────────────────────────────────────────
+
+function DroppableTruckSlot({
+  crewId, current, onClear,
+}: {
+  crewId: string
+  current: DispatchCrewTruck | null
+  onClear: () => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `truck-slot-${crewId}`,
+    data: { type: 'truck_slot', crewId },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex items-center gap-1.5 px-1.5 py-1 rounded border text-xs min-h-[26px] transition-colors select-none
+        ${isOver ? 'border-kratos bg-kratos/10' : current ? 'border-slate-200 bg-white' : 'border-dashed border-slate-300'}`}
+    >
+      <Truck className="w-3 h-3 flex-shrink-0 text-slate-400" />
+      {current ? (
+        <>
+          <span className="flex-1 truncate text-slate-800">{current.name} ({current.size.replace('_',' ')})</span>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={onClear}
+            className="flex-shrink-0 text-slate-300 hover:text-red-400 transition-colors"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </>
+      ) : (
+        <span className={`flex-1 text-xs ${isOver ? 'text-kratos font-medium' : 'text-slate-400'}`}>
+          {isOver ? 'Drop to assign' : 'Drag truck here'}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function DroppablePersonSlot({
+  crewId, slotType, emptyLabel, person, onClear,
+}: {
+  crewId: string
+  slotType: 'driver_slot' | 'dispatcher_slot'
+  emptyLabel: string
+  person: DispatchCrewPerson | null
+  onClear: () => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `${slotType}-${crewId}`,
+    data: { type: slotType, crewId },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex items-center gap-1.5 px-1.5 py-1 rounded border text-xs min-h-[26px] transition-colors select-none
+        ${isOver ? 'border-kratos bg-kratos/10' : person ? 'border-slate-200 bg-white' : 'border-dashed border-slate-300'}`}
+    >
+      {person
+        ? <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
+        : <UserRound className="w-3 h-3 flex-shrink-0 text-slate-400" />}
+      {person ? (
+        <>
+          <span className="flex-1 truncate text-slate-800">{person.name}</span>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={onClear}
+            className="flex-shrink-0 text-slate-300 hover:text-red-400 transition-colors"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </>
+      ) : (
+        <span className={`flex-1 text-xs ${isOver ? 'text-kratos font-medium' : 'text-slate-400'}`}>
+          {isOver ? 'Drop to assign' : emptyLabel}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function DroppableHelpersSlot({
+  crewId, helpers, onRemove,
+}: {
+  crewId: string
+  helpers: Array<{ person: DispatchCrewPerson }>
+  onRemove: (personId: string) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `helper-slot-${crewId}`,
+    data: { type: 'helper_slot', crewId },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`px-1.5 py-1 rounded border text-xs min-h-[26px] transition-colors select-none
+        ${isOver ? 'border-kratos bg-kratos/10' : helpers.length ? 'border-slate-200 bg-white' : 'border-dashed border-slate-300'}`}
+    >
+      {helpers.length === 0 ? (
+        <div className={`flex items-center gap-1.5 ${isOver ? 'text-kratos font-medium' : 'text-slate-400'}`}>
+          <Users className="w-3 h-3 flex-shrink-0" />
+          <span>{isOver ? 'Drop to add helper' : 'Drag crew here'}</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {helpers.map(h => (
+            <span key={h.person.id}
+              className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium">
+              {h.person.name.split(' ')[0]}
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={() => onRemove(h.person.id)}
+                className="text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+          {isOver && (
+            <span className="inline-flex items-center bg-kratos/10 text-kratos border border-dashed border-kratos/40 rounded-full px-2 py-0.5 text-[10px] font-medium">
+              + Add
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -122,7 +303,9 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
   const [events] = useState<DispatchCalendarEvent[]>(initialData.events)
   const [cancelledEvents] = useState<DispatchCalendarEvent[]>(initialData.cancelled_events ?? [])
   const [crews, setCrews] = useState<DispatchCrew[]>(initialData.crews)
-  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [activeJobId, setActiveJobId]     = useState<string | null>(null)
+  const [activeTruckId, setActiveTruckId] = useState<string | null>(null)
+  const [activePersonId, setActivePersonId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
 
   useEffect(() => {
@@ -137,7 +320,9 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
   const activatorX = useRef(0)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-  const activeEvent = events.find(e => e.id === activeJobId) ?? null
+  const activeEvent  = events.find(e => e.id === activeJobId) ?? null
+  const activeTruck  = trucks.find(t => t.id === activeTruckId) ?? null
+  const activePerson = crewPeople.find(p => p.id === activePersonId) ?? null
 
   const bookedCount    = events.filter(e => e.status === 'booked').length
   const completedCount = events.filter(e => e.status === 'completed').length
@@ -164,15 +349,34 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
   function handleDragStart(e: DragStartEvent) {
     const pointerEvent = e.activatorEvent as PointerEvent
     activatorX.current = pointerEvent.clientX ?? 0
-    if (e.active.data.current?.type === 'job') {
-      setActiveJobId(e.active.data.current.opportunityId as string)
-    }
+    const d = e.active.data.current
+    if (d?.type === 'job')             setActiveJobId(d.opportunityId as string)
+    else if (d?.type === 'resource_truck')  setActiveTruckId(d.truckId as string)
+    else if (d?.type === 'resource_person') setActivePersonId(d.personId as string)
   }
 
   async function handleDragEnd(e: DragEndEvent) {
     setActiveJobId(null)
+    setActiveTruckId(null)
+    setActivePersonId(null)
     const { active, over } = e
     if (!over) return
+
+    // ── Resource: truck dropped on a crew truck slot ──────────────────────────
+    if (active.data.current?.type === 'resource_truck' && over.data.current?.type === 'truck_slot') {
+      await handleUpdateCrew(over.data.current.crewId as string, { truck_id: active.data.current.truckId as string })
+      return
+    }
+
+    // ── Resource: person dropped on driver / dispatcher / helper slot ─────────
+    if (active.data.current?.type === 'resource_person' && over.data.current) {
+      const personId = active.data.current.personId as string
+      const slotType = over.data.current.type as string
+      const crewId   = over.data.current.crewId as string
+      if (slotType === 'driver_slot')     { await handleUpdateCrew(crewId, { driver_id: personId }); return }
+      if (slotType === 'dispatcher_slot') { await handleUpdateCrew(crewId, { dispatcher_id: personId }); return }
+      if (slotType === 'helper_slot')     { await handleAddHelper(crewId, personId); return }
+    }
 
     // ── Drop on empty grid → auto-create crew row + assign ───────────────────
     if (over.data.current?.type === 'empty_grid' && active.data.current?.type === 'job') {
@@ -469,7 +673,9 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
       </div>
 
       <DragOverlay>
-        {activeEvent ? <JobCardOverlay event={activeEvent} /> : null}
+        {activeEvent  ? <JobCardOverlay event={activeEvent} /> : null}
+        {activeTruck  ? <TruckDragOverlay truck={activeTruck} /> : null}
+        {activePerson ? <PersonDragOverlay person={activePerson} /> : null}
       </DragOverlay>
 
       {toast && (
@@ -626,18 +832,7 @@ function TrucksTab({ trucks }: { trucks: DispatchTruck[] }) {
                 {CATEGORY_LABELS[cat]} ({list.length})
               </p>
               <div className="space-y-0.5">
-                {list.map(t => (
-                  <div key={t.id} className="px-2 py-1.5 rounded hover:bg-slate-50 flex items-center gap-2 text-xs">
-                    <Truck className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-slate-900 truncate">{t.name}</div>
-                      <div className="text-[10px] text-slate-500">
-                        {t.size.replace('_', ' ')}{t.provider ? ` · ${t.provider}` : ''}
-                        {t.liftgate ? ' · Liftgate' : ''}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {list.map(t => <DraggableTruckItem key={t.id} truck={t} />)}
               </div>
             </div>
           )
@@ -671,23 +866,7 @@ function CrewTab({ crew }: { crew: DispatchCrewMember[] }) {
   }
   return (
     <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-      {crew.map(person => (
-        <div key={person.id} className="px-2 py-1.5 rounded hover:bg-slate-50 flex items-center gap-2 text-xs">
-          <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
-          <div className="flex-1 min-w-0">
-            <div className="font-medium text-slate-900 truncate">{person.name}</div>
-            <div className="text-[10px] text-slate-500 truncate">
-              {person.role_data?.label ?? person.role ?? 'No role'}
-            </div>
-          </div>
-          {person.tier && (
-            <span className="text-[10px] font-bold text-white rounded px-1 py-0.5 flex-shrink-0"
-              style={{ backgroundColor: person.tier.color }}>
-              {person.tier.label}
-            </span>
-          )}
-        </div>
-      ))}
+      {crew.map(person => <DraggablePersonItem key={person.id} person={person} />)}
     </div>
   )
 }
@@ -830,12 +1009,6 @@ function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, on
     data: { type: 'crew', crewId: crew.id },
   })
 
-  const blockedIds = new Set([
-    crew.driver_id ?? '',
-    crew.dispatcher_id ?? '',
-    ...crew.helpers.map(h => h.person.id),
-  ].filter(Boolean))
-
   return (
     <div className="flex" style={{ minHeight: 88 }}>
       {/* Left: crew slots */}
@@ -861,30 +1034,28 @@ function CrewRow({ crew, trucks, crewPeople, onUpdate, onDelete, onAddHelper, on
           </button>
         </div>
 
-        <TruckSlot
+        <DroppableTruckSlot
+          crewId={crew.id}
           current={crew.truck ?? null}
-          trucks={trucks}
-          onSelect={id => onUpdate({ truck_id: id ?? null })}
+          onClear={() => onUpdate({ truck_id: null })}
         />
-        <PersonSlot
-          emptyLabel="No Kratos Driver"
+        <DroppablePersonSlot
+          crewId={crew.id}
+          slotType="driver_slot"
+          emptyLabel="Drag driver here"
           person={crew.driver ?? null}
-          people={crewPeople}
-          blockedIds={new Set([crew.dispatcher_id ?? ''].filter(Boolean))}
-          onSelect={id => onUpdate({ driver_id: id ?? null })}
+          onClear={() => onUpdate({ driver_id: null })}
         />
-        <PersonSlot
-          emptyLabel="No Dispatcher"
+        <DroppablePersonSlot
+          crewId={crew.id}
+          slotType="dispatcher_slot"
+          emptyLabel="Drag dispatcher here"
           person={crew.dispatcher ?? null}
-          people={crewPeople}
-          blockedIds={new Set([crew.driver_id ?? ''].filter(Boolean))}
-          onSelect={id => onUpdate({ dispatcher_id: id ?? null })}
+          onClear={() => onUpdate({ dispatcher_id: null })}
         />
-        <HelpersSlot
+        <DroppableHelpersSlot
+          crewId={crew.id}
           helpers={crew.helpers}
-          people={crewPeople}
-          blockedIds={blockedIds}
-          onAdd={onAddHelper}
           onRemove={onRemoveHelper}
         />
       </div>
@@ -993,204 +1164,6 @@ function TimelineJobBlock({
   )
 }
 
-// ─── Truck slot ───────────────────────────────────────────────────────────────
-
-interface TruckSlotProps {
-  current: DispatchCrewTruck | null
-  trucks: DispatchTruck[]
-  onSelect: (id: string | null) => void
-}
-
-function TruckSlot({ current, trucks, onSelect }: TruckSlotProps) {
-  const { open, openAt, close, popStyle, popoverRef } = useFixedPopover()
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  const grouped: Record<string, DispatchTruck[]> = {}
-  for (const t of trucks) {
-    if (!grouped[t.category]) grouped[t.category] = []
-    grouped[t.category].push(t)
-  }
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={() => btnRef.current && openAt(btnRef.current)}
-        className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs text-left transition-colors"
-      >
-        <Truck className="w-3 h-3 text-slate-400 flex-shrink-0" />
-        <span className={`flex-1 truncate ${current ? 'text-slate-900' : 'text-slate-400'}`}>
-          {current ? `${current.name} (${current.size.replace('_',' ')})` : 'No Trucks'}
-        </span>
-        <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
-      </button>
-
-      {open && (
-        <div ref={popoverRef} style={popStyle}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]">
-          {current && (
-            <button onClick={() => { onSelect(null); close() }}
-              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100">
-              Clear truck
-            </button>
-          )}
-          {CATEGORY_ORDER.map(cat => {
-            const list = grouped[cat]
-            if (!list?.length) return null
-            return (
-              <div key={cat}>
-                <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide bg-slate-50">
-                  {CATEGORY_LABELS[cat]}
-                </div>
-                {list.map(t => (
-                  <button key={t.id}
-                    onClick={() => { onSelect(t.id); close() }}
-                    className={`w-full px-3 py-2 text-left text-xs hover:bg-kratos/5 flex items-center justify-between gap-2 ${current?.id === t.id ? 'bg-kratos/5 text-kratos font-medium' : 'text-slate-900'}`}>
-                    <span className="truncate">{t.name}</span>
-                    <span className="text-[10px] text-slate-400 flex-shrink-0">{t.size.replace('_',' ')}</span>
-                  </button>
-                ))}
-              </div>
-            )
-          })}
-          {trucks.length === 0 && (
-            <p className="px-3 py-3 text-xs text-slate-400 text-center">No trucks in inventory</p>
-          )}
-        </div>
-      )}
-    </>
-  )
-}
-
-// ─── Person slot ──────────────────────────────────────────────────────────────
-
-interface PersonSlotProps {
-  emptyLabel: string
-  person: DispatchCrewPerson | null
-  people: DispatchCrewMember[]
-  blockedIds: Set<string>
-  onSelect: (id: string | null) => void
-}
-
-function PersonSlot({ emptyLabel, person, people, blockedIds, onSelect }: PersonSlotProps) {
-  const { open, openAt, close, popStyle, popoverRef } = useFixedPopover()
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={() => btnRef.current && openAt(btnRef.current)}
-        className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs text-left transition-colors"
-      >
-        {person
-          ? <Avatar src={person.profile_picture_url} name={person.name} size="sm" />
-          : <UserRound className="w-3 h-3 text-slate-400 flex-shrink-0" />}
-        <span className={`flex-1 truncate ${person ? 'text-slate-900' : 'text-slate-400'}`}>
-          {person ? person.name : emptyLabel}
-        </span>
-        <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
-      </button>
-
-      {open && (
-        <div ref={popoverRef} style={popStyle}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]">
-          {person && (
-            <button onClick={() => { onSelect(null); close() }}
-              className="w-full px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 border-b border-slate-100">
-              Clear person
-            </button>
-          )}
-          {people.length === 0 && (
-            <p className="px-3 py-3 text-xs text-slate-400 text-center">No crew members</p>
-          )}
-          {people.map(p => {
-            const isBlocked  = blockedIds.has(p.id)
-            const isSelected = person?.id === p.id
-            return (
-              <button key={p.id} disabled={isBlocked}
-                onClick={() => { onSelect(p.id); close() }}
-                className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors
-                  ${isBlocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-kratos/5'}
-                  ${isSelected ? 'bg-kratos/5 text-kratos font-medium' : 'text-slate-900'}`}>
-                <Avatar src={p.profile_picture_url} name={p.name} size="sm" />
-                <span className="truncate">{p.name}</span>
-                {p.role_data && <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </>
-  )
-}
-
-// ─── Helpers slot ─────────────────────────────────────────────────────────────
-
-interface HelpersSlotProps {
-  helpers: Array<{ person: DispatchCrewPerson }>
-  people: DispatchCrewMember[]
-  blockedIds: Set<string>
-  onAdd: (id: string) => void
-  onRemove: (id: string) => void
-}
-
-function HelpersSlot({ helpers, people, blockedIds, onAdd, onRemove }: HelpersSlotProps) {
-  const { open, openAt, close, popStyle, popoverRef } = useFixedPopover()
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  const helperIds = new Set(helpers.map(h => h.person.id))
-  const available = people.filter(p => !blockedIds.has(p.id) && !helperIds.has(p.id))
-
-  return (
-    <div className="space-y-1">
-      {helpers.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {helpers.map(h => (
-            <span key={h.person.id}
-              className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium">
-              {h.person.name.split(' ')[0]}
-              <button onClick={() => onRemove(h.person.id)} className="text-slate-400 hover:text-red-500 transition-colors">
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <button
-        ref={btnRef}
-        onClick={() => btnRef.current && openAt(btnRef.current)}
-        className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded border border-slate-200 hover:border-slate-400 bg-white text-xs text-left transition-colors"
-      >
-        <Users className="w-3 h-3 text-slate-400 flex-shrink-0" />
-        <span className="flex-1 text-slate-400">
-          {helpers.length === 0 ? 'No Kratos Crew' : 'Add helper'}
-        </span>
-        <Plus className="w-3 h-3 text-slate-400 flex-shrink-0" />
-      </button>
-
-      {open && (
-        <div ref={popoverRef} style={popStyle}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-y-auto max-h-[260px]">
-          {available.length === 0 && (
-            <p className="px-3 py-3 text-xs text-slate-400 text-center">
-              {people.length === 0 ? 'No crew members' : 'All assigned'}
-            </p>
-          )}
-          {available.map(p => (
-            <button key={p.id}
-              onClick={() => { onAdd(p.id); close() }}
-              className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-kratos/5 text-slate-900 transition-colors">
-              <Avatar src={p.profile_picture_url} name={p.name} size="sm" />
-              <span className="truncate">{p.name}</span>
-              {p.role_data && <span className="text-[10px] text-slate-400 flex-shrink-0">{p.role_data.label}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ─── Jobs panel ───────────────────────────────────────────────────────────────
 
