@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const ALLOWED = ['name', 'category', 'provider', 'size', 'notes', 'position']
+const ALLOWED = ['name', 'category', 'provider', 'size', 'notes', 'position', 'license_plate', 'liftgate', 'ramp', 'status']
 const VALID_CATEGORIES = ['owned', 'rental', 'contractor']
 const VALID_SIZES = ['cargo_van', '10ft', '15ft', '16ft', '20ft', '26ft']
+const VALID_STATUSES = ['active', 'inactive', 'maintenance']
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabase
-    .from('dispatch_trucks')
-    .select('*')
-    .neq('is_deleted', true)
-    .order('category')
-    .order('position')
+  const { searchParams } = new URL(req.url)
+  const showAll = searchParams.get('all') === 'true'
+
+  let query = supabase.from('dispatch_trucks').select('*').neq('is_deleted', true)
+  if (!showAll) query = query.eq('status', 'active')
+
+  const { data, error } = await query.order('category').order('position')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
@@ -44,6 +46,10 @@ export async function POST(req: NextRequest) {
   if (!VALID_SIZES.includes(filtered.size as string)) {
     return NextResponse.json({ error: 'invalid size' }, { status: 400 })
   }
+  if (filtered.status && !VALID_STATUSES.includes(filtered.status as string)) {
+    return NextResponse.json({ error: 'invalid status' }, { status: 400 })
+  }
+  if (!filtered.status) filtered.status = 'active'
 
   const { data: maxRow } = await supabase
     .from('dispatch_trucks')

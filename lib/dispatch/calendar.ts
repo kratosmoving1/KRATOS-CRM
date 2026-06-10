@@ -96,6 +96,7 @@ export async function fetchDayDetailData(date: string): Promise<DayDetailData> {
       .from('dispatch_trucks')
       .select('*')
       .neq('is_deleted', true)
+      .eq('status', 'active')
       .order('category')
       .order('position'),
     supabase

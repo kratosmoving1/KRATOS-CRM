@@ -36,6 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Documents',        href: '/admin/settings/documents',  icon: BookOpen },
       { label: 'Integrations',     href: '/admin/settings/integrations', icon: PlugZap },
       { label: 'Customer Portal',  href: '/admin/settings/portal',     icon: Users2 },
+      { label: 'Dispatch',         href: '/admin/settings/dispatch',   icon: Truck },
     ],
   },
   {
@@ -46,7 +47,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Sales',            icon: BadgeDollarSign, soon: true },
       { label: 'Marketing',        icon: Megaphone,      soon: true },
       { label: 'Forms & Docs',     icon: ClipboardList,  soon: true },
-      { label: 'Dispatch',         icon: Truck,          soon: true },
       { label: 'Claims',           icon: ShieldAlert,    soon: true },
       { label: 'Crew App',         icon: BoxSelect,      soon: true },
       { label: 'Storage',          icon: Warehouse,      soon: true },

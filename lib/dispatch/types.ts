@@ -10,6 +10,10 @@ export interface DispatchTruck {
   provider: string | null
   size: string
   notes: string | null
+  license_plate: string | null
+  liftgate: boolean
+  ramp: boolean
+  status: string  // 'active' | 'inactive' | 'maintenance'
   position: number
   created_by: string | null
   created_at: string
