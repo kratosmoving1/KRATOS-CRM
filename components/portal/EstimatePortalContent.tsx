@@ -4,14 +4,13 @@ import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import {
   CheckCircle2, ChevronDown, ChevronUp, Download, Loader2,
-  Minus, PackageOpen, Plus, Shield, X,
+  Minus, PackageOpen, Phone, Plus, Shield, X,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format'
 import { PORTAL_MATERIALS, type PortalMaterial } from '@/lib/portal/materials'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
-import { TARIFF_PACKAGES } from '@/lib/tariff/packages'
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PortalCharge {
   name: string
@@ -73,7 +72,7 @@ interface Props {
   portalSettings: PortalSettings | null
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function dateLabel(value: string | null | undefined) {
   if (!value) return 'To be confirmed'
@@ -93,11 +92,12 @@ function packageDisplayName(value: string) {
   return /package$/i.test(trimmed) ? trimmed : `${trimmed} Package`
 }
 
+// Handles {{tag}} and {{ tag }} — spaces inside braces are tolerated
 function replaceMergeTags(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`)
+  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`)
 }
 
-const DEFAULT_PHONE = '(800) 321-3222'
+const DEFAULT_PHONE   = '(800) 321-3222'
 const DEFAULT_COMPANY = 'Kratos Moving Inc.'
 
 const PROTECTION_OPTIONS = [
@@ -129,13 +129,13 @@ export default function EstimatePortalContent({
 }: Props) {
   const { opp, customer, charges, subtotal, discounts, hst, total, deposit, moveSize } = data
 
-  const cfg = portalSettings ?? null
-  const companyName  = cfg?.company_name  ?? DEFAULT_COMPANY
-  const companyPhone = cfg?.company_phone ?? DEFAULT_PHONE
-  const showInventory   = cfg?.show_inventory_button  ?? true
-  const showDownload    = cfg?.show_download_button   ?? true
-  const showMaterials   = cfg?.show_materials_section ?? true
-  const showProtection  = cfg?.show_protection_section ?? true
+  const cfg           = portalSettings ?? null
+  const companyName   = cfg?.company_name  ?? DEFAULT_COMPANY
+  const companyPhone  = cfg?.company_phone ?? DEFAULT_PHONE
+  const showInventory  = cfg?.show_inventory_button   ?? true
+  const showDownload   = cfg?.show_download_button    ?? true
+  const showMaterials  = cfg?.show_materials_section  ?? true
+  const showProtection = cfg?.show_protection_section ?? true
   const allowSkipDeposit = cfg?.allow_accept_without_deposit ?? false
 
   const mergeVars: Record<string, string> = {
@@ -150,17 +150,14 @@ export default function EstimatePortalContent({
   // Labor charge breakdown
   const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
   const lc = laborCharge?.config ?? {}
-  const packageName    = packageDisplayName(String(lc.package_name ?? 'Moving Package'))
-  const hourlyRate     = Number(lc.hourly_rate ?? 0)
-  const laborHours     = Number(lc.labor_hours ?? 0)
-  const billableHours  = Number(lc.billable_hours ?? lc.labor_hours ?? 0)
-  const travelHours    = Number(lc.travel_hours ?? 0)
-  const numTrucks      = Number(lc.num_trucks ?? 1)
-  const numCrew        = Number(lc.num_crew ?? 2)
-  const isGold = packageName.toLowerCase().includes('gold')
-  const packageRateLabel = isGold
-    ? `${formatCurrency(hourlyRate)}/hr${hourlyRate >= TARIFF_PACKAGES.gold.weekendRate ? ' peak' : ' weekday'}`
-    : `${formatCurrency(hourlyRate)}/hr`
+  const packageName   = packageDisplayName(String(lc.package_name ?? 'Moving Package'))
+  const hourlyRate    = Number(lc.hourly_rate ?? 0)
+  const laborHours    = Number(lc.labor_hours ?? 0)
+  const billableHours = Number(lc.billable_hours ?? lc.labor_hours ?? 0)
+  const travelHours   = Number(lc.travel_hours ?? 0)
+  const numTrucks     = Number(lc.num_trucks ?? 1)
+  const numCrew       = Number(lc.num_crew ?? 2)
+  const packageRateLabel = hourlyRate > 0 ? `${formatCurrency(hourlyRate)}/hr` : ''
   const supplementaryCharges = charges.filter(c => c.charge_type !== 'moving_labor')
 
   // Materials state
@@ -239,49 +236,57 @@ export default function EstimatePortalContent({
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f4f4] pb-32 text-slate-950">
+    <div className="min-h-screen bg-[#f0f0f0] pb-32 text-slate-950">
 
-      {/* ── Top bar ───────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-100 shadow-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <Image
-              src={cfg?.logo_url ?? '/logo.png'}
-              alt={companyName}
-              width={30}
-              height={34}
-              className="object-contain"
-            />
-            <div>
-              <p className="text-xs font-bold leading-none text-slate-900">{companyName}</p>
-              <p className="mt-0.5 text-[10px] leading-none text-slate-400">{companyPhone}</p>
-            </div>
-          </div>
+      {/* ── Top bar ──────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+          {/* Left: phone number */}
+          <a
+            href={`tel:${companyPhone.replace(/\D/g, '')}`}
+            className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-slate-600 transition-colors"
+          >
+            <Phone size={15} className="shrink-0 text-slate-500" />
+            {companyPhone}
+          </a>
+
+          {/* Right: action buttons */}
           <div className="flex items-center gap-2">
             {showInventory && (
-              <button className="hidden sm:flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                <PackageOpen size={13} />
-                Manage Inventory
+              <button className="hidden sm:flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-slate-700 transition-colors">
+                <PackageOpen size={12} /> Manage Inventory
               </button>
             )}
             {showDownload && (
-              <button className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                <Download size={13} />
-                <span className="hidden sm:inline">Download</span>
+              <button className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-slate-700 transition-colors">
+                <Download size={12} />
+                <span className="hidden sm:inline">Download Estimate</span>
               </button>
+            )}
+            {!accepted ? (
+              <button
+                onClick={() => setAcceptStep('confirm')}
+                className="flex items-center gap-1.5 rounded-lg bg-kratos px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-950 hover:opacity-90 transition-opacity"
+              >
+                Accept Estimate
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-[11px] font-bold text-green-800">
+                <CheckCircle2 size={13} /> Accepted
+              </div>
             )}
           </div>
         </div>
       </header>
 
-      {/* ── Admin preview banner ─────────────────────────────────────────── */}
+      {/* ── Admin preview banner ─────────────────────────────────────────────── */}
       {isPreview && (
-        <div className="bg-amber-50 px-4 py-2 text-center text-xs font-semibold uppercase tracking-widest text-amber-800">
+        <div className="bg-amber-50 px-4 py-2 text-center text-xs font-semibold uppercase tracking-widest text-amber-800 border-b border-amber-100">
           Admin preview — not visible to customers
         </div>
       )}
 
-      {/* ── Payment success banner ───────────────────────────────────────── */}
+      {/* ── Payment success banner ───────────────────────────────────────────── */}
       {paymentSucceeded && (
         <div className="border-b border-green-200 bg-green-50 px-4 py-3 text-center">
           <p className="text-sm font-semibold text-green-800">Deposit received — your move date is secured!</p>
@@ -289,67 +294,117 @@ export default function EstimatePortalContent({
         </div>
       )}
 
-      {/* ── Dark hero ─────────────────────────────────────────────────────── */}
-      <div className="bg-slate-950 text-white">
-        <div className="mx-auto max-w-4xl px-4 py-8">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-kratos">Your Moving Estimate</p>
-          <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                Quote {formatQuoteNumber(opp.opportunity_number)}
-              </h1>
-              <p className="mt-1 text-sm text-slate-400">
-                {customer?.full_name ?? 'Customer'} &nbsp;·&nbsp; {dateLabel(opp.service_date)} &nbsp;·&nbsp; {moveSize}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  accepted
-                    ? 'bg-green-900/60 text-green-300'
-                    : 'bg-white/10 text-slate-300'
-                }`}>
-                  {accepted ? 'Accepted' : 'Awaiting acceptance'}
-                </span>
-              </div>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-xs text-slate-400 uppercase tracking-widest">Estimated total</p>
-              <p className="mt-0.5 text-3xl font-bold text-kratos">{formatCurrency(grandTotal)}</p>
-              <p className="mt-1 text-xs text-slate-400">Deposit: <span className="font-semibold text-slate-200">{formatCurrency(deposit)}</span></p>
+      {/* ── Dark hero ────────────────────────────────────────────────────────── */}
+      <div className="bg-[#0a0a0a] text-white">
+        <div className="mx-auto max-w-5xl px-5 py-10 sm:py-14">
+
+          {/* Logo row + right stats */}
+          <div className="flex items-start justify-between gap-6">
+            <Image
+              src={cfg?.logo_url ?? '/logo.png'}
+              alt={companyName}
+              width={100}
+              height={100}
+              className="object-contain"
+            />
+            <div className="hidden sm:flex flex-col items-end gap-1.5 text-sm text-slate-400 text-right">
+              <span>{moveSize || 'Moving Service'}</span>
+              <span>Non-Binding Estimate</span>
+              <span>Released Value Protection</span>
             </div>
           </div>
 
-          {/* Package summary inside hero */}
-          {laborCharge && hourlyRate > 0 && (
-            <div className="mt-5 rounded-xl bg-white/8 px-4 py-3 space-y-1.5 text-sm border border-white/10">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-white">{packageName}</span>
-                <span className="text-kratos font-bold">{packageRateLabel}</span>
-              </div>
-              <p className="text-xs text-slate-400">{numTrucks} truck · {numCrew} movers</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 mt-1">
-                {laborHours > 0 && <span>Labour: {laborHours}h</span>}
-                {travelHours > 0 && <span>Travel: {travelHours}h</span>}
-                {billableHours > 0 && <span className="font-semibold text-slate-200">Billable: {billableHours}h</span>}
-              </div>
+          {/* Quote # + status badge */}
+          <div className="mt-7 flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-slate-400">
+              Estimate {formatQuoteNumber(opp.opportunity_number)}
+            </span>
+            <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
+              accepted
+                ? 'bg-green-800/70 text-green-300'
+                : 'bg-amber-800/70 text-amber-200'
+            }`}>
+              {accepted ? 'Accepted' : 'Not Booked'}
+            </span>
+          </div>
+
+          {/* Big title */}
+          <h1 className="mt-1.5 text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
+            Your Moving Estimate
+          </h1>
+          <div className="mt-2 space-y-0.5 text-sm text-slate-400">
+            <p>Starting on: {dateLabel(opp.service_date)}</p>
+            <p>Arrival window: TBD</p>
+          </div>
+
+          {/* Total + package */}
+          <div className="mt-7 flex flex-wrap items-end justify-between gap-5">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Estimated total</p>
+              <p className="mt-1 text-4xl font-bold text-kratos">{formatCurrency(grandTotal)}</p>
+              <p className="mt-1.5 text-sm text-slate-400">
+                Deposit: <span className="font-bold text-slate-200">{formatCurrency(deposit)}</span>
+              </p>
             </div>
-          )}
+
+            {laborCharge && hourlyRate > 0 && (
+              <div className="rounded-xl bg-white/[0.07] border border-white/10 px-5 py-4 min-w-[220px]">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <span className="text-sm font-semibold text-white">{packageName}</span>
+                  <span className="text-kratos font-bold text-2xl">{packageRateLabel}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">{numTrucks} truck · {numCrew} movers</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 mt-2">
+                  {laborHours > 0   && <span>Labour: {laborHours}h</span>}
+                  {travelHours > 0  && <span>Travel: {travelHours}h</span>}
+                  {billableHours > 0 && (
+                    <span className="font-semibold text-slate-200">Billable: {billableHours}h</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl space-y-4 px-4 pt-5">
+      <div className="mx-auto max-w-5xl space-y-4 px-4 sm:px-5 pt-5">
 
-        {/* ── Info cards ───────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <InfoCard title="Support" body={companyName} detail={companyPhone} />
-          <InfoCard title="Customer" body={customer?.full_name ?? 'Customer'} detail={customer?.phone ?? customer?.email ?? ''} />
-          <InfoCard title="Origin" body={addr([opp.origin_address_line1, opp.origin_city, opp.origin_province])} />
-          <InfoCard title="Destination" body={addr([opp.dest_address_line1, opp.dest_city, opp.dest_province])} />
+        {/* ── Info panel ───────────────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
+            <InfoPanel
+              title="Support"
+              lines={[companyName, companyPhone]}
+            />
+            <InfoPanel
+              title="Customer"
+              lines={[
+                customer?.full_name ?? 'Customer',
+                customer?.phone ?? '',
+                customer?.email ?? '',
+              ]}
+            />
+            <InfoPanel
+              title="Origin"
+              lines={[
+                opp.origin_address_line1 ?? '',
+                addr([opp.origin_city, opp.origin_province]),
+              ]}
+            />
+            <InfoPanel
+              title="Destination"
+              lines={[
+                opp.dest_address_line1 ?? '',
+                addr([opp.dest_city, opp.dest_province]),
+              ]}
+            />
+          </div>
         </div>
 
         {/* ── Header notes ─────────────────────────────────────────────────── */}
         {cfg?.header_notes && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
-            <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+          <div className="rounded-xl bg-white px-5 py-5 shadow-sm">
+            <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
               {replaceMergeTags(cfg.header_notes, mergeVars)}
             </p>
           </div>
@@ -360,7 +415,7 @@ export default function EstimatePortalContent({
           <div className="overflow-x-auto">
             <div className="flex items-center gap-3 py-1">
               {cfg.badges.map(badge => (
-                <div key={badge.id} className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5">
+                <div key={badge.id} className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
                   {badge.image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={badge.image_url} alt={badge.name} className="h-5 w-5 rounded-full object-contain" />
@@ -439,7 +494,9 @@ export default function EstimatePortalContent({
                     <span>{formatCurrency(materialsSubtotal)}</span>
                   </div>
                 )}
-                <p className="mt-3 text-[10px] text-slate-400">Materials pricing does not include HST. Final invoice will reflect confirmed quantities.</p>
+                <p className="mt-3 text-[10px] text-slate-400">
+                  Materials pricing does not include HST. Final invoice will reflect confirmed quantities.
+                </p>
               </div>
             )}
           </section>
@@ -484,7 +541,7 @@ export default function EstimatePortalContent({
           </section>
         )}
 
-        {/* ── Attachments ─────────────────────────────────────────────────── */}
+        {/* ── Attachments ──────────────────────────────────────────────────── */}
         {cfg?.attachments && cfg.attachments.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="text-sm font-bold text-slate-900">Documents</h2>
@@ -495,7 +552,7 @@ export default function EstimatePortalContent({
                   href={a.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <Download size={14} className="text-slate-400 shrink-0" />
                   {a.name}
@@ -507,33 +564,39 @@ export default function EstimatePortalContent({
 
         {/* ── Footer notes ─────────────────────────────────────────────────── */}
         {cfg?.footer_notes && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+          <div className="rounded-xl bg-white px-5 py-5 shadow-sm">
             <p className="text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
               {replaceMergeTags(cfg.footer_notes, mergeVars)}
             </p>
           </div>
         )}
 
-        {/* ── Inventory note ───────────────────────────────────────────────── */}
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-xs font-semibold text-slate-700">Final total may vary based on actual time, services, inventory, and access conditions.</p>
-          <p className="mt-0.5 text-xs text-slate-500">Contact {companyName} if your inventory has changed significantly since this estimate was prepared.</p>
+        {/* ── Disclaimer ───────────────────────────────────────────────────── */}
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <p className="text-xs font-semibold text-slate-700">
+            Final total may vary based on actual time, services, inventory, and access conditions.
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Contact {companyName} if your inventory has changed significantly since this estimate was prepared.
+          </p>
         </div>
 
       </div>
 
-      {/* ── Sticky footer ────────────────────────────────────────────────── */}
+      {/* ── Sticky bottom CTA ────────────────────────────────────────────────── */}
       {!accepted && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
             <div>
               <p className="text-xs text-slate-500">Estimated total</p>
               <p className="text-lg font-bold text-slate-950">{formatCurrency(grandTotal)}</p>
-              <p className="text-xs text-slate-500">Deposit: <span className="font-semibold text-slate-800">{formatCurrency(deposit)}</span></p>
+              <p className="text-xs text-slate-500">
+                Deposit: <span className="font-semibold text-slate-800">{formatCurrency(deposit)}</span>
+              </p>
             </div>
             <button
               onClick={() => setAcceptStep('confirm')}
-              className="rounded-xl bg-kratos px-6 py-3 text-sm font-bold text-slate-950 shadow-sm hover:opacity-90"
+              className="rounded-xl bg-kratos px-6 py-3 text-sm font-bold text-slate-950 shadow-sm hover:opacity-90 transition-opacity"
             >
               Accept Estimate
             </button>
@@ -543,19 +606,18 @@ export default function EstimatePortalContent({
 
       {accepted && !paymentSucceeded && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-green-200 bg-green-50 px-4 py-3">
-          <div className="mx-auto flex max-w-4xl items-center gap-2">
+          <div className="mx-auto flex max-w-5xl items-center gap-2">
             <CheckCircle2 size={18} className="shrink-0 text-green-600" />
             <p className="text-sm font-semibold text-green-800">Estimate accepted — your move date is secured.</p>
           </div>
         </div>
       )}
 
-      {/* ── Accept modal ─────────────────────────────────────────────────── */}
+      {/* ── Accept modal ─────────────────────────────────────────────────────── */}
       {acceptStep !== 'idle' && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 px-0 sm:px-4">
           <div className="w-full max-w-lg overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl">
 
-            {/* Step 1: Confirm acceptance */}
             {acceptStep === 'confirm' && (
               <>
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -584,7 +646,8 @@ export default function EstimatePortalContent({
                     </div>
                   </div>
                   <p className="text-xs leading-relaxed text-slate-500">
-                    By accepting, you confirm that you have reviewed the estimate and understand the final total may vary based on actual time, inventory, and access conditions.
+                    By accepting, you confirm that you have reviewed the estimate and understand the final total
+                    may vary based on actual time, inventory, and access conditions.
                   </p>
                   {acceptError && (
                     <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -601,17 +664,13 @@ export default function EstimatePortalContent({
                     {acceptLoading && <Loader2 size={15} className="animate-spin" />}
                     Accept Estimate
                   </button>
-                  <button
-                    onClick={closeModal}
-                    className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50"
-                  >
+                  <button onClick={closeModal} className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50">
                     Cancel
                   </button>
                 </div>
               </>
             )}
 
-            {/* Step 2: Deposit prompt */}
             {acceptStep === 'deposit' && (
               <>
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -644,10 +703,7 @@ export default function EstimatePortalContent({
                     Pay Deposit — {formatCurrency(deposit)}
                   </button>
                   {allowSkipDeposit && (
-                    <button
-                      onClick={closeModal}
-                      className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50"
-                    >
+                    <button onClick={closeModal} className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50">
                       I&apos;ll pay later
                     </button>
                   )}
@@ -678,12 +734,23 @@ function SummaryRow({ label, value, bold }: { label: string; value: string; bold
   )
 }
 
-function InfoCard({ title, body, detail }: { title: string; body: string; detail?: string }) {
+function InfoPanel({ title, lines }: { title: string; lines: string[] }) {
+  const nonEmpty = lines.filter(Boolean)
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{title}</p>
-      <p className="mt-1.5 text-sm font-semibold text-slate-900 leading-snug">{body}</p>
-      {detail && <p className="mt-0.5 text-xs text-slate-500">{detail}</p>}
+    <div className="p-4 sm:p-5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{title}</p>
+      {nonEmpty.map((line, i) => (
+        <p
+          key={i}
+          className={`leading-snug ${
+            i === 0
+              ? 'text-sm font-semibold text-slate-900'
+              : 'text-xs text-slate-500 mt-0.5'
+          }`}
+        >
+          {line}
+        </p>
+      ))}
     </div>
   )
 }
