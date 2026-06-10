@@ -15,7 +15,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import {
-  ArrowLeft, ChevronLeft, ChevronRight,
+  ArrowLeft, ChevronDown, ChevronLeft, ChevronRight,
   Truck, CalendarDays, Inbox, Package, MapPin, Plus, X, Users,
   CheckCircle, UserRound, Trash2, Hash, Send, GripVertical,
   Printer, BarChart2, AlertCircle,
@@ -247,7 +247,7 @@ function DroppableHelpersSlot({
   return (
     <div
       ref={setNodeRef}
-      className={`px-1.5 py-1 rounded border text-xs min-h-[26px] transition-colors select-none
+      className={`px-1.5 py-1 rounded border text-xs min-h-[28px] transition-colors select-none
         ${isOver ? 'border-kratos bg-kratos/10' : helpers.length ? 'border-slate-200 bg-white' : 'border-dashed border-slate-300'}`}
     >
       {helpers.length === 0 ? (
@@ -256,22 +256,46 @@ function DroppableHelpersSlot({
           <span>{isOver ? 'Drop to add helper' : 'Drag crew here'}</span>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-1">
-          {helpers.map(h => (
-            <span key={h.person.id}
-              className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium">
-              {h.person.name.split(' ')[0]}
-              <button
-                onPointerDown={e => e.stopPropagation()}
-                onClick={() => onRemove(h.person.id)}
-                className="text-slate-400 hover:text-red-500 transition-colors"
+        <div className="flex flex-wrap items-center gap-1">
+          {/* Stacked avatar group */}
+          <div className="flex items-center -space-x-1.5 mr-0.5">
+            {helpers.slice(0, 5).map((h, i) => (
+              <div
+                key={h.person.id}
+                className="relative group/hav"
+                style={{ zIndex: helpers.length - i }}
               >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </span>
-          ))}
+                <div className="ring-2 ring-white rounded-full">
+                  <Avatar src={h.person.profile_picture_url} name={h.person.name} size="xs" />
+                </div>
+                {/* Name tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] rounded whitespace-nowrap opacity-0 group-hover/hav:opacity-100 pointer-events-none transition-opacity z-50">
+                  {h.person.name.split(' ')[0]}
+                </div>
+                {/* Remove button */}
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => onRemove(h.person.id)}
+                  className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full items-center justify-center hidden group-hover/hav:flex transition-all z-20 border border-white"
+                >
+                  <X className="w-1.5 h-1.5 text-white" />
+                </button>
+              </div>
+            ))}
+            {helpers.length > 5 && (
+              <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[8px] font-bold flex items-center justify-center ring-2 ring-white">
+                +{helpers.length - 5}
+              </div>
+            )}
+          </div>
+          {/* Names summary */}
+          <span className="text-[10px] text-slate-500 truncate max-w-[80px]">
+            {helpers.length === 1
+              ? helpers[0].person.name.split(' ')[0]
+              : `${helpers.length} helpers`}
+          </span>
           {isOver && (
-            <span className="inline-flex items-center bg-kratos/10 text-kratos border border-dashed border-kratos/40 rounded-full px-2 py-0.5 text-[10px] font-medium">
+            <span className="inline-flex items-center bg-kratos/10 text-kratos border border-dashed border-kratos/40 rounded-full px-1.5 py-0.5 text-[10px] font-medium ml-auto">
               + Add
             </span>
           )}
@@ -853,6 +877,30 @@ function TrucksTab({ trucks }: { trucks: DispatchTruck[] }) {
 // ─── Crew tab ─────────────────────────────────────────────────────────────────
 
 function CrewTab({ crew }: { crew: DispatchCrewMember[] }) {
+  const [tierFilter, setTierFilter] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+
+  const tiers = useMemo(() => {
+    const seen = new Map<string, { key: string; label: string }>()
+    for (const p of crew) {
+      if (p.tier && !seen.has(p.tier.key)) seen.set(p.tier.key, p.tier)
+    }
+    return Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label))
+  }, [crew])
+
+  const filtered = tierFilter ? crew.filter(p => p.tier?.key === tierFilter) : crew
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { label: string; people: DispatchCrewMember[] }>()
+    for (const p of filtered) {
+      const key = p.role_data?.key ?? 'other'
+      const label = p.role_data?.label ?? 'Other'
+      if (!map.has(key)) map.set(key, { label, people: [] })
+      map.get(key)!.people.push(p)
+    }
+    return Array.from(map.entries())
+  }, [filtered])
+
   if (!crew.length) {
     return (
       <div className="p-5 text-center flex-1 flex flex-col items-center justify-center">
@@ -864,9 +912,67 @@ function CrewTab({ crew }: { crew: DispatchCrewMember[] }) {
       </div>
     )
   }
+
   return (
-    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-      {crew.map(person => <DraggablePersonItem key={person.id} person={person} />)}
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Tier filter chips */}
+      {tiers.length > 0 && (
+        <div className="px-2 py-1.5 flex flex-wrap gap-1 border-b border-slate-100 flex-shrink-0 bg-white">
+          <button
+            onClick={() => setTierFilter(null)}
+            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
+              !tierFilter
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+          >
+            All
+          </button>
+          {tiers.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTierFilter(tierFilter === t.key ? null : t.key)}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
+                tierFilter === t.key
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Role subsections */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {filtered.length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-6">No crew matching filter</p>
+        )}
+        {grouped.map(([key, { label, people }]) => {
+          const isOpen = !(collapsed[key] ?? false)
+          return (
+            <div key={key}>
+              <button
+                onClick={() => setCollapsed(c => ({ ...c, [key]: isOpen }))}
+                className="w-full flex items-center justify-between px-1 py-1 rounded hover:bg-slate-100 transition-colors text-left"
+              >
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                  {label} ({people.length})
+                </span>
+                {isOpen
+                  ? <ChevronDown className="w-3 h-3 text-slate-300" />
+                  : <ChevronRight className="w-3 h-3 text-slate-300" />}
+              </button>
+              {isOpen && (
+                <div className="space-y-0.5 mt-0.5">
+                  {people.map(person => <DraggablePersonItem key={person.id} person={person} />)}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
