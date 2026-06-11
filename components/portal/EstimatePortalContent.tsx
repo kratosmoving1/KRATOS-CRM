@@ -174,12 +174,12 @@ type AcceptStep = 'idle' | 'confirm' | 'deposit'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const KRATOS_COMPANIES = [
-  'Kratos Moving',
-  'Kratos Cleaning',
-  'Kratos Painting',
-  'Kratos Security',
-  'JMF Logistics',
+const STORAGE = 'https://dyxopppyoqtwcorbdicf.supabase.co/storage/v1/object/public/logos'
+
+const KGC_COMPANIES = [
+  { name: 'Kratos Moving',   logoUrl: `${STORAGE}/kratos-moving/logo-short.png` },
+  { name: 'Kratos Cleaning', logoUrl: `${STORAGE}/kratos-cleaning/logo-short.png` },
+  { name: 'Kratos Painting', logoUrl: `${STORAGE}/kratos-painting/logo-short.png` },
 ]
 
 export default function EstimatePortalContent({
@@ -677,18 +677,29 @@ export default function EstimatePortalContent({
             <p className="text-xs" style={{ color: '#334155' }}>0.5 points per $1 subtotal &mdash; redeem across Kratos Group companies</p>
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }} className="px-6 py-5">
-            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#475569' }}>Explore Kratos Group</p>
-            <div className="flex flex-wrap gap-2">
-              {KRATOS_COMPANIES.map(company => (
-                <div
-                  key={company}
-                  className="rounded-full px-3 py-1.5 text-xs font-medium"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)' }}
-                >
-                  {company}
+            <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#475569' }}>Explore Kratos Group</p>
+            <div className="flex items-start gap-5">
+              {KGC_COMPANIES.map(co => (
+                <div key={co.name} className="flex flex-col items-center gap-2">
+                  <div
+                    className="flex items-center justify-center rounded-xl overflow-hidden"
+                    style={{ width: 52, height: 52, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={co.logoUrl}
+                      alt={co.name}
+                      style={{ width: 40, height: 40, objectFit: 'contain' }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/logo.png' }}
+                    />
+                  </div>
+                  <p className="text-[10px] font-semibold text-center leading-tight" style={{ color: '#64748b' }}>
+                    {co.name.replace('Kratos ', '')}
+                  </p>
                 </div>
               ))}
             </div>
+            <p className="text-xs mt-4" style={{ color: '#334155' }}>Redeem Kratos Points across all Kratos Group companies.</p>
           </div>
         </section>
 
