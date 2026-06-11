@@ -486,6 +486,7 @@ export default function OpportunityDetailPage() {
   const [savingNoteField, setSavingNoteField] = useState<string | null>(null)
   const [savingMoveSize, setSavingMoveSize] = useState(false)
   const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false)
+  const [sendingInvoice, setSendingInvoice] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10))
@@ -794,6 +795,31 @@ export default function OpportunityDetailPage() {
       await fetchCharges()
     } catch {
       toast.error('Network error — please try again')
+    }
+  }
+
+  async function handleSendInvoice() {
+    if (!opp) return
+    if (!opp.customer?.email) {
+      toast.error('No email address on file for this customer')
+      return
+    }
+    setSendingInvoice(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/send-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? 'Failed to send invoice')
+        return
+      }
+      toast.success(`Invoice sent to ${opp.customer.email}`)
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setSendingInvoice(false)
     }
   }
 
@@ -2644,82 +2670,191 @@ export default function OpportunityDetailPage() {
         )}
 
         {tab === 'accounting' && (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* Left: Summary + Add Payment */}
-            <PanelSection title="Payment Summary" icon={CreditCard}>
-              <MoneyRow label="Estimate Total" value={estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'} />
-              <MoneyRow label="Total Paid" value={formatCurrency(totalPaid)} />
-              <div className="mt-3 border-t border-slate-100 pt-3">
-                <MoneyRow
-                  label="Balance Due"
-                  value={balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid in full'}
-                  strong
-                />
+          <div className="space-y-4">
+            {/* Header row */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                Accounting — #{formatQuoteNumber(opp.opportunity_number)}
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSendInvoice}
+                  disabled={sendingInvoice || !opp.customer?.email}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sendingInvoice
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <ReceiptText size={14} />}
+                  Send Invoice
+                </button>
+                <button
+                  onClick={() => setPaymentDrawerOpen(true)}
+                  className="flex items-center gap-1.5 rounded-lg bg-kratos px-4 py-2 text-sm font-semibold text-slate-950"
+                >
+                  <CreditCard size={14} /> Add Payment
+                </button>
               </div>
-              <button
-                onClick={() => setPaymentDrawerOpen(true)}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950"
-              >
-                <CreditCard size={16} /> Add Payment
-              </button>
-            </PanelSection>
+            </div>
 
-            {/* Right: Payment history — spans 2 cols */}
-            <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <ReceiptText size={15} className="text-slate-400" />
-                  <p className="text-sm font-semibold text-slate-950">Payment History</p>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Left 2/3: Charge Summary + Payment History */}
+              <div className="space-y-4 lg:col-span-2">
+
+                {/* Charge Summary */}
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                    <p className="text-sm font-semibold text-slate-900">Charge Summary</p>
+                    {chargesLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
+                  </div>
+                  {charges.length === 0 && !chargesLoading ? (
+                    <div className="px-5 py-8 text-center">
+                      <p className="text-sm text-slate-400">No charges added yet</p>
+                      <p className="mt-1 text-xs text-slate-300">Build your estimate on the Estimate tab first.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50">
+                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Charge</th>
+                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Subtotal</th>
+                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Discount</th>
+                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {charges.map(c => (
+                            <tr key={c.id} className="hover:bg-slate-50/60">
+                              <td className="px-5 py-3.5 font-medium text-slate-900">{c.name}</td>
+                              <td className="px-5 py-3.5 text-right text-slate-600">{formatCurrency(c.subtotal)}</td>
+                              <td className="px-5 py-3.5 text-right">
+                                {c.discount_amount > 0
+                                  ? <span className="text-emerald-600">− {formatCurrency(c.discount_amount)}</span>
+                                  : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-5 py-3.5 text-right font-semibold text-slate-950">{formatCurrency(c.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-slate-200 bg-slate-50">
+                            <td colSpan={3} className="px-5 py-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Subtotal</td>
+                            <td className="px-5 py-3 text-right font-semibold text-slate-950">{formatCurrency(subtotal)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
                 </div>
-                {paymentsLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
-              </div>
 
-              {!paymentsLoading && payments.length === 0 && (
-                <div className="px-5 py-10 text-center">
-                  <CreditCard size={28} className="mx-auto text-slate-200 mb-3" />
-                  <p className="text-sm text-slate-400">No payments recorded yet</p>
-                  <p className="text-xs text-slate-300 mt-1">Click &ldquo;Add Payment&rdquo; to record a deposit or payment.</p>
-                </div>
-              )}
-
-              {payments.length > 0 && (
-                <div className="divide-y divide-slate-100">
-                  {payments.map(p => (
-                    <div key={p.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-950">
-                          {METHOD_LABELS[p.method] ?? p.method.replace(/_/g, ' ')}
-                          {p.reference_number && (
-                            <span className="ml-2 font-normal text-slate-500">#{p.reference_number}</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {new Date(p.payment_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {p.notes && <span className="ml-2 text-slate-300">· {p.notes}</span>}
-                        </p>
+                {/* Payment History */}
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <ReceiptText size={15} className="text-slate-400" />
+                      <p className="text-sm font-semibold text-slate-900">Payments</p>
+                    </div>
+                    {paymentsLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
+                  </div>
+                  {!paymentsLoading && payments.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                      <CreditCard size={28} className="mx-auto mb-3 text-slate-200" />
+                      <p className="text-sm text-slate-400">No payments recorded yet</p>
+                      <p className="mt-1 text-xs text-slate-300">Click &ldquo;Add Payment&rdquo; to record a deposit or payment.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="grid grid-cols-4 border-b border-slate-100 bg-slate-50 px-5 py-2.5">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Method</p>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Date</p>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Reference</p>
+                        <p className="text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Amount</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-slate-950">
-                          {formatCurrency(p.amount_cents / 100)}
-                        </p>
-                        <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mt-0.5 ${
-                          p.status === 'received' ? 'bg-emerald-100 text-emerald-700' :
-                          p.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                          p.status === 'refunded' ? 'bg-red-100 text-red-600' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {p.status}
-                        </span>
+                      <div className="divide-y divide-slate-100">
+                        {payments.map(p => (
+                          <div key={p.id} className="grid grid-cols-4 items-center px-5 py-3.5">
+                            <div>
+                              <p className="text-sm font-medium text-slate-900">
+                                {METHOD_LABELS[p.method] ?? p.method.replace(/_/g, ' ')}
+                              </p>
+                              <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                p.status === 'received' ? 'bg-emerald-100 text-emerald-700' :
+                                p.status === 'pending'  ? 'bg-amber-100 text-amber-700' :
+                                p.status === 'refunded' ? 'bg-red-100 text-red-600' :
+                                'bg-slate-100 text-slate-500'
+                              }`}>{p.status}</span>
+                            </div>
+                            <p className="text-sm text-slate-600">
+                              {new Date(p.payment_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                            <p className="text-sm text-slate-500">{p.reference_number ?? '—'}</p>
+                            <p className="text-right text-sm font-bold text-slate-950">{formatCurrency(p.amount_cents / 100)}</p>
+                          </div>
+                        ))}
+                        <div className="grid grid-cols-4 items-center rounded-b-xl bg-slate-50 px-5 py-3.5">
+                          <p className="col-span-3 text-sm font-semibold text-slate-700">Total Received</p>
+                          <p className="text-right text-sm font-bold text-slate-950">{formatCurrency(totalPaid)}</p>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                  {/* Totals footer */}
-                  <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 rounded-b-xl">
-                    <p className="text-sm font-semibold text-slate-700">Total Received</p>
-                    <p className="text-sm font-bold text-slate-950">{formatCurrency(totalPaid)}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Right 1/3: Quote Totals */}
+              <div className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <div className="border-b border-slate-100 px-5 py-4">
+                  <p className="text-sm font-semibold text-slate-900">Quote Total</p>
+                </div>
+                <div className="space-y-2.5 px-5 py-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">Subtotal</span>
+                    <span className="text-sm font-medium text-slate-900">{formatCurrency(subtotal)}</span>
+                  </div>
+                  {discounts > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500">Discounts</span>
+                      <span className="text-sm font-medium text-emerald-600">− {formatCurrency(discounts)}</span>
+                    </div>
+                  )}
+                  {discounts > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500">Subtotal (Less Discounts)</span>
+                      <span className="text-sm font-medium text-slate-900">{formatCurrency(subtotal - discounts)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">HST (13%)</span>
+                    <span className="text-sm font-medium text-slate-900">{formatCurrency(salesTax)}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-900">Grand Total</span>
+                      <span className="text-sm font-bold text-slate-950">{formatCurrency(estimateTotal)}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5 border-t border-slate-200 pt-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500">Payments Received</span>
+                      <span className="text-sm font-medium text-emerald-600">{totalPaid > 0 ? `− ${formatCurrency(totalPaid)}` : formatCurrency(0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-900">Balance Due</span>
+                      <span className={`text-base font-bold ${balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid in full'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
+                <div className="border-t border-slate-100 px-5 py-4">
+                  <button
+                    onClick={() => setPaymentDrawerOpen(true)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950"
+                  >
+                    <CreditCard size={16} /> Add Payment
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
