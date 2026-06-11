@@ -61,7 +61,7 @@ export async function POST(
   if (!person.email) return NextResponse.json({ error: 'No email address on file. Add their email and save first.' }, { status: 400 })
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://kratos-crm.vercel.app'
-  const redirectTo = `${appUrl}/crew/jobs`
+  const redirectTo = `${appUrl}/crew/auth/callback`
 
   // Try invite link first (works for brand-new users)
   let link: string | null = null
