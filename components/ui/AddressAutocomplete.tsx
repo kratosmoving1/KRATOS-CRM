@@ -1,6 +1,5 @@
 'use client';
 
-import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ParsedAddress = {
@@ -21,20 +20,34 @@ interface Props {
   hasSelected?: boolean;
 }
 
-let loadPromise: Promise<google.maps.PlacesLibrary | null> | null = null;
+// Module-level singleton so we only inject the script tag once
+let scriptStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
+const readyCallbacks: Array<(ok: boolean) => void> = [];
 
-function getPlaces(): Promise<google.maps.PlacesLibrary | null> {
-  if (typeof window === 'undefined') return Promise.resolve(null);
-  if (!loadPromise) {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      console.error('[AddressAutocomplete] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set');
-      return Promise.resolve(null);
-    }
-    setOptions({ key: apiKey, v: 'quarterly' });
-    loadPromise = importLibrary('places') as Promise<google.maps.PlacesLibrary>;
-  }
-  return loadPromise!;
+function loadMapsScript(apiKey: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (scriptStatus === 'ready') { resolve(true); return; }
+    if (scriptStatus === 'error') { resolve(false); return; }
+
+    readyCallbacks.push(resolve);
+
+    if (scriptStatus === 'loading') return; // already injected, just wait
+
+    scriptStatus = 'loading';
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=quarterly`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      scriptStatus = 'ready';
+      readyCallbacks.splice(0).forEach(cb => cb(true));
+    };
+    script.onerror = () => {
+      scriptStatus = 'error';
+      readyCallbacks.splice(0).forEach(cb => cb(false));
+    };
+    document.head.appendChild(script);
+  });
 }
 
 export function AddressAutocomplete({
@@ -50,39 +63,37 @@ export function AddressAutocomplete({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
-  const dummyDivRef = useRef<HTMLDivElement | null>(null);
+
+  const autocompleteRef = useRef<google.maps.places.AutocompleteService | null>(null);
+  const placesRef = useRef<google.maps.places.PlacesService | null>(null);
+  const dummyRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const requestSeqRef = useRef(0);
+  const reqSeqRef = useRef(0);
 
   useEffect(() => {
-    let cancelled = false;
-    getPlaces()
-      .then((places) => {
-        if (cancelled) return;
-        if (!places) {
-          setLoadStatus('error');
-          setErrorMessage('Address autocomplete unavailable — API key not configured.');
-          return;
-        }
-        autocompleteServiceRef.current = new places.AutocompleteService();
-        if (!dummyDivRef.current) {
-          dummyDivRef.current = document.createElement('div');
-        }
-        placesServiceRef.current = new places.PlacesService(dummyDivRef.current);
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      setLoadStatus('error');
+      setErrorMessage('Google Maps API key is not configured.');
+      return;
+    }
+    loadMapsScript(apiKey).then(ok => {
+      if (!ok) {
+        setLoadStatus('error');
+        setErrorMessage('Google Maps failed to load. Check the API key in Google Cloud Console.');
+        return;
+      }
+      try {
+        autocompleteRef.current = new google.maps.places.AutocompleteService();
+        if (!dummyRef.current) dummyRef.current = document.createElement('div');
+        placesRef.current = new google.maps.places.PlacesService(dummyRef.current);
         setLoadStatus('ready');
-        setErrorMessage(null);
-      })
-      .catch((err) => {
-        console.error('[AddressAutocomplete] load error:', err);
-        if (!cancelled) {
-          setLoadStatus('error');
-          setErrorMessage('Address autocomplete failed to load. Check console.');
-        }
-      });
-    return () => { cancelled = true; };
+      } catch (e) {
+        setLoadStatus('error');
+        setErrorMessage(`Maps init failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -96,32 +107,18 @@ export function AddressAutocomplete({
   }, []);
 
   const fetchSuggestions = useCallback((query: string) => {
-    const service = autocompleteServiceRef.current;
-    const seq = ++requestSeqRef.current;
-
-    if (!service || !query || query.length < 2) {
-      setSuggestions([]);
-      setIsOpen(false);
-      return;
-    }
+    const service = autocompleteRef.current;
+    const seq = ++reqSeqRef.current;
+    if (!service || !query || query.length < 2) { setSuggestions([]); setIsOpen(false); return; }
 
     service.getPlacePredictions(
-      {
-        input: query,
-        componentRestrictions: { country: 'ca' },
-        types: ['address'],
-      },
+      { input: query, componentRestrictions: { country: 'ca' }, types: ['address'] },
       (predictions, status) => {
-        if (seq !== requestSeqRef.current) return;
-        if (
-          status === google.maps.places.PlacesServiceStatus.OK &&
-          predictions &&
-          predictions.length > 0
-        ) {
+        if (seq !== reqSeqRef.current) return;
+        if (status === google.maps.places.PlacesServiceStatus.OK && predictions?.length) {
           setSuggestions(predictions);
           setIsOpen(true);
           setHighlightedIndex(0);
-          setErrorMessage(null);
         } else {
           setSuggestions([]);
           setIsOpen(false);
@@ -143,16 +140,9 @@ export function AddressAutocomplete({
     setSuggestions([]);
     onChange(description);
 
-    const service = placesServiceRef.current;
+    const service = placesRef.current;
     if (!service) {
-      onSelect({
-        fullAddress: description,
-        addressLine1: prediction.structured_formatting.main_text || description,
-        city: '',
-        province: '',
-        postalCode: '',
-        placeId: prediction.place_id,
-      });
+      onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
       return;
     }
 
@@ -160,60 +150,29 @@ export function AddressAutocomplete({
       { placeId: prediction.place_id, fields: ['address_components', 'formatted_address'] },
       (place, status) => {
         if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
-          onSelect({
-            fullAddress: description,
-            addressLine1: prediction.structured_formatting.main_text || description,
-            city: '',
-            province: '',
-            postalCode: '',
-            placeId: prediction.place_id,
-          });
+          onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
           return;
         }
-
         const comps = place.address_components ?? [];
         const get = (type: string, short = false) => {
           const c = comps.find(x => x.types.includes(type));
           return c ? (short ? c.short_name : c.long_name) : '';
         };
-        const addressLine1 =
-          [get('street_number'), get('route')].filter(Boolean).join(' ') ||
-          prediction.structured_formatting.main_text ||
-          '';
-        const city =
-          get('locality') ||
-          get('sublocality_level_1') ||
-          get('sublocality') ||
-          get('postal_town');
+        const addressLine1 = [get('street_number'), get('route')].filter(Boolean).join(' ') || prediction.structured_formatting.main_text || '';
+        const city = get('locality') || get('sublocality_level_1') || get('sublocality') || get('postal_town');
         const province = get('administrative_area_level_1', true);
         const postalCode = get('postal_code');
-
-        onSelect({
-          fullAddress: place.formatted_address || description,
-          addressLine1,
-          city,
-          province,
-          postalCode,
-          placeId: prediction.place_id,
-        });
+        onSelect({ fullAddress: place.formatted_address || description, addressLine1, city, province, postalCode, placeId: prediction.place_id });
       }
     );
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!isOpen || suggestions.length === 0) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex(i => Math.min(i + 1, suggestions.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSelect(suggestions[highlightedIndex]);
-    } else if (e.key === 'Escape') {
-      setIsOpen(false);
-    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedIndex(i => Math.min(i + 1, suggestions.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIndex(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); handleSelect(suggestions[highlightedIndex]); }
+    else if (e.key === 'Escape') { setIsOpen(false); }
   }
 
   return (
@@ -225,9 +184,8 @@ export function AddressAutocomplete({
           onChange={handleInputChange}
           onFocus={() => { if (suggestions.length > 0) setIsOpen(true); }}
           onKeyDown={handleKeyDown}
-          placeholder={
-            loadStatus === 'loading' ? 'Loading address autocomplete…' : placeholder
-          }
+          placeholder={loadStatus === 'loading' ? 'Loading address autocomplete…' : placeholder}
+          disabled={loadStatus === 'error'}
           className={className}
           autoComplete="off"
           autoCorrect="off"
@@ -235,9 +193,7 @@ export function AddressAutocomplete({
           spellCheck={false}
         />
         {hasSelected && !isOpen && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 text-sm select-none">
-            ✓
-          </span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 text-sm select-none">✓</span>
         )}
       </div>
 
@@ -248,22 +204,18 @@ export function AddressAutocomplete({
               key={s.place_id}
               onMouseDown={e => { e.preventDefault(); handleSelect(s); }}
               onMouseEnter={() => setHighlightedIndex(idx)}
-              className={`px-3 py-2.5 cursor-pointer text-sm border-b border-slate-100 last:border-0 ${
-                idx === highlightedIndex ? 'bg-orange-50' : 'hover:bg-slate-50'
-              }`}
+              className={`px-3 py-2.5 cursor-pointer text-sm border-b border-slate-100 last:border-0 ${idx === highlightedIndex ? 'bg-orange-50' : 'hover:bg-slate-50'}`}
             >
-              <div className="font-medium text-slate-900 leading-tight">
-                {s.structured_formatting.main_text}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5 leading-tight">
-                {s.structured_formatting.secondary_text}
-              </div>
+              <div className="font-medium text-slate-900 leading-tight">{s.structured_formatting.main_text}</div>
+              <div className="text-xs text-slate-500 mt-0.5 leading-tight">{s.structured_formatting.secondary_text}</div>
             </li>
           ))}
         </ul>
       )}
 
-      {errorMessage && <p className="text-xs text-red-500 mt-1">{errorMessage}</p>}
+      {errorMessage && (
+        <p className="text-xs text-red-500 mt-1 font-medium">{errorMessage}</p>
+      )}
     </div>
   );
 }
