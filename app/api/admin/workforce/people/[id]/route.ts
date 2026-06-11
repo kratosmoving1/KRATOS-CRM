@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .from('workforce_people')
     .update(payload)
     .eq('id', params.id)
-    .neq('is_deleted', true)
+    .not('is_deleted', 'is', true)
     .select(`
       id, name, role, role_id, location_id, english_proficiency, profile_picture_url,
       status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes,

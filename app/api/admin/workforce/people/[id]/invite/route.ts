@@ -41,7 +41,7 @@ function buildInviteText(name: string, link: string) {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const supabase = createClient()
@@ -60,7 +60,10 @@ export async function POST(
   if (fetchErr || !person) return NextResponse.json({ error: 'Person not found' }, { status: 404 })
   if (!person.email) return NextResponse.json({ error: 'No email address on file. Add their email and save first.' }, { status: 400 })
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://kratos-crm.vercel.app'
+  // Derive app URL from the request host — reliable in both prod and dev
+  const host = req.headers.get('host') ?? 'kratos-crm.vercel.app'
+  const proto = host.startsWith('localhost') ? 'http' : 'https'
+  const appUrl = `${proto}://${host}`
   const redirectTo = `${appUrl}/crew/auth/callback`
 
   // Try invite link first (works for brand-new users)
