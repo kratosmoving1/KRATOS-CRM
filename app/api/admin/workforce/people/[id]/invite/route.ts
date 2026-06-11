@@ -93,7 +93,7 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
-  const method: 'email' | 'sms' = body.method === 'sms' ? 'sms' : 'email'
+  const method: 'email' | 'sms' | 'both' = ['sms', 'both'].includes(body.method) ? body.method : 'email'
 
   const admin = createAdminClient()
 
@@ -106,44 +106,53 @@ export async function POST(
 
   if (fetchErr || !person) return NextResponse.json({ error: 'Person not found' }, { status: 404 })
 
-  if (method === 'sms') {
-    if (!person.phone) return NextResponse.json({ error: 'No phone number on file. Add their phone and save first.' }, { status: 400 })
-    if (!person.email) return NextResponse.json({ error: 'An email is required to create the account even when inviting by SMS.' }, { status: 400 })
-    const normalized = normalizePhoneToE164(person.phone)
+  // Validate required fields for the selected method(s)
+  const needsSms = method === 'sms' || method === 'both'
+  const needsEmail = method === 'email' || method === 'both'
+
+  if (needsEmail && !person.email) return NextResponse.json({ error: 'No email address on file. Add their email and save first.' }, { status: 400 })
+  if (needsSms && !person.email) return NextResponse.json({ error: 'An email is required to create the account even when inviting by SMS.' }, { status: 400 })
+  if (needsSms && !person.phone) return NextResponse.json({ error: 'No phone number on file. Add their phone and save first.' }, { status: 400 })
+
+  let normalized: ReturnType<typeof normalizePhoneToE164> | null = null
+  if (needsSms) {
+    normalized = normalizePhoneToE164(person.phone!)
     if (!normalized.isE164) return NextResponse.json({ error: `Phone number is not valid for SMS: ${person.phone}` }, { status: 400 })
-
-    const tempPassword = generateTempPassword()
-    const { userId, error: accountErr } = await getOrCreateAccount(admin, person as typeof person & { email: string }, tempPassword)
-    if (accountErr) return NextResponse.json({ error: accountErr }, { status: 500 })
-
-    try {
-      await sendSmsTwilio(normalized.normalized, buildSmsText(person.name.split(' ')[0], person.email, tempPassword))
-    } catch (smsErr) {
-      return NextResponse.json({ error: `Account created but SMS failed: ${smsErr instanceof Error ? smsErr.message : 'Unknown'}` }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true, method: 'sms', userId })
   }
 
-  // Email invite
-  if (!person.email) return NextResponse.json({ error: 'No email address on file. Add their email and save first.' }, { status: 400 })
-
+  // Generate ONE password for this entire request — used for all channels
   const tempPassword = generateTempPassword()
   const { userId, error: accountErr } = await getOrCreateAccount(admin, person as typeof person & { email: string }, tempPassword)
   if (accountErr) return NextResponse.json({ error: accountErr }, { status: 500 })
 
   const firstName = person.name.split(' ')[0]
-  try {
-    await sendEmail({
-      to: person.email,
-      subject: `${firstName}, your Kratos Crew account is ready`,
-      html: buildEmailHtml(firstName, person.email, tempPassword),
-      text: buildEmailText(firstName, person.email, tempPassword),
-      fromName: 'Kratos Moving',
-    })
-  } catch (emailErr) {
-    return NextResponse.json({ error: `Account created but email failed: ${emailErr instanceof Error ? emailErr.message : 'Unknown'}` }, { status: 500 })
+  const errors: string[] = []
+
+  if (needsEmail) {
+    try {
+      await sendEmail({
+        to: person.email!,
+        subject: `${firstName}, your Kratos Crew account is ready`,
+        html: buildEmailHtml(firstName, person.email!, tempPassword),
+        text: buildEmailText(firstName, person.email!, tempPassword),
+        fromName: 'Kratos Moving',
+      })
+    } catch (e) {
+      errors.push(`Email failed: ${e instanceof Error ? e.message : 'Unknown'}`)
+    }
   }
 
-  return NextResponse.json({ ok: true, method: 'email', userId })
+  if (needsSms && normalized) {
+    try {
+      await sendSmsTwilio(normalized.normalized, buildSmsText(firstName, person.email!, tempPassword))
+    } catch (e) {
+      errors.push(`SMS failed: ${e instanceof Error ? e.message : 'Unknown'}`)
+    }
+  }
+
+  if (errors.length > 0) {
+    return NextResponse.json({ error: `Account set but delivery failed: ${errors.join('; ')}` }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, method, userId })
 }

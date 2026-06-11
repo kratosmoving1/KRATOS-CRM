@@ -14,7 +14,7 @@ export async function GET() {
     .from('workforce_people')
     .select('id, name, profile_picture_url')
     .eq('profile_id', user.id)
-    .neq('is_deleted', true)
+    .not('is_deleted', 'is', true)
     .maybeSingle()
 
   if (!person) return NextResponse.json({ error: 'No crew profile found for this account.' }, { status: 404 })
