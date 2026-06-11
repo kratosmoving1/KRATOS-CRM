@@ -53,6 +53,9 @@ export interface WorkforcePerson {
   column_id: string | null
   position: number
   notes: string | null
+  email: string | null
+  phone: string | null
+  profile_id: string | null
   status?: WorkforceStatus | null
   tier?: WorkforceTier | null
   role_data?: WorkforceRole | null

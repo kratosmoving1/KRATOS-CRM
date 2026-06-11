@@ -17,6 +17,7 @@ export async function GET() {
       .select(`
         id, name, role, role_id, location_id, english_proficiency, profile_picture_url,
         status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes,
+        email, phone, profile_id,
         status:workforce_statuses(id,key,label,color,position),
         tier:workforce_tiers(id,key,label,color,position),
         role_data:workforce_roles(id,key,label,color,position),

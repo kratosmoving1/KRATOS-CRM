@@ -6,12 +6,14 @@ const ALLOWED = [
   'english_proficiency', 'profile_picture_url',
   'tenure_started_at', 'referred_by',
   'column_id', 'position', 'notes',
+  'email', 'phone',
 ]
 
 const NULLABLE_KEYS = [
   'role', 'role_id', 'location_id', 'status_id', 'tier_id',
   'english_proficiency', 'profile_picture_url',
   'tenure_started_at', 'referred_by', 'column_id', 'notes',
+  'email', 'phone',
 ]
 
 function coercePayload(obj: Record<string, unknown>) {
@@ -34,6 +36,7 @@ export async function GET(req: NextRequest) {
     .select(`
       id, name, role, role_id, location_id, english_proficiency, profile_picture_url,
       status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes,
+      email, phone, profile_id,
       status:workforce_statuses(id,key,label,color,position),
       tier:workforce_tiers(id,key,label,color,position),
       role_data:workforce_roles(id,key,label,color,position),
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest) {
     .select(`
       id, name, role, role_id, location_id, english_proficiency, profile_picture_url,
       status_id, tier_id, tenure_started_at, referred_by, column_id, position, notes,
+      email, phone, profile_id,
       status:workforce_statuses(id,key,label,color,position),
       tier:workforce_tiers(id,key,label,color,position),
       role_data:workforce_roles(id,key,label,color,position),

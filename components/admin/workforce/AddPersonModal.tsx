@@ -30,6 +30,8 @@ async function uploadProfilePicture(file: File): Promise<string> {
 
 export function AddPersonModal({ roles, locations, statuses, tiers, onCreated, onClose }: Props) {
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [roleId, setRoleId] = useState('')
   const [locationId, setLocationId] = useState('')
   const [statusId, setStatusId] = useState('')
@@ -65,6 +67,8 @@ export function AddPersonModal({ roles, locations, statuses, tiers, onCreated, o
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: name.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
         role_id: roleId || null,
         location_id: locationId || null,
         status_id: statusId || null,
@@ -153,6 +157,30 @@ export function AddPersonModal({ roles, locations, statuses, tiers, onCreated, o
                 className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${nameError ? 'border-red-400 bg-red-50' : 'border-slate-200'}`}
               />
               {nameError && <p className="text-xs text-red-500 mt-1">Name is required</p>}
+            </div>
+
+            {/* Email + Phone */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="crew@email.com"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="(416) 555-0100"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
             </div>
 
             {/* Row: Role + Location */}

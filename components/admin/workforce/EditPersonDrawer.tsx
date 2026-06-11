@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Trash2, Loader2, Camera } from 'lucide-react'
+import { X, Trash2, Loader2, Camera, Send, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { resizeImage } from '@/lib/workforce/resize-image'
 import { Avatar } from './Avatar'
@@ -31,6 +31,8 @@ async function uploadProfilePicture(file: File): Promise<string> {
 
 export function EditPersonDrawer({ person, roles, locations, statuses, tiers, onUpdated, onDeleted, onClose }: Props) {
   const [name, setName] = useState(person.name)
+  const [email, setEmail] = useState(person.email ?? '')
+  const [phone, setPhone] = useState(person.phone ?? '')
   const [roleId, setRoleId] = useState(person.role_id ?? '')
   const [locationId, setLocationId] = useState(person.location_id ?? '')
   const [statusId, setStatusId] = useState(person.status_id ?? '')
@@ -42,8 +44,11 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
   const [pictureUrl, setPictureUrl] = useState(person.profile_picture_url ?? null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(person.profile_picture_url ?? null)
+  const [hasAppAccess, setHasAppAccess] = useState(Boolean(person.profile_id))
 
   const [saving, setSaving] = useState(false)
+  const [sendingInvite, setSendingInvite] = useState(false)
+  const [inviteSent, setInviteSent] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,6 +62,8 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
     setStatusId(person.status_id ?? '')
     setTierId(person.tier_id ?? '')
     setEnglish(person.english_proficiency ?? '')
+    setEmail(person.email ?? '')
+    setPhone(person.phone ?? '')
     setNotes(person.notes ?? '')
     setTenureStarted(person.tenure_started_at ?? '')
     setReferredBy(person.referred_by ?? '')
@@ -65,6 +72,8 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
     setPendingFile(null)
     setError(null)
     setConfirmDelete(false)
+    setHasAppAccess(Boolean(person.profile_id))
+    setInviteSent(false)
   }, [person.id])
 
   async function handleSave() {
@@ -88,6 +97,8 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: name.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
         role_id: roleId || null,
         location_id: locationId || null,
         status_id: statusId || null,
@@ -109,6 +120,21 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
       setError(j.error || 'Failed to save')
     }
     setSaving(false)
+  }
+
+  async function handleSendInvite() {
+    if (!email.trim()) { setError('Add an email address first, then save, before sending the invite.'); return }
+    setSendingInvite(true)
+    setError(null)
+    const res = await fetch(`/api/admin/workforce/people/${person.id}/invite`, { method: 'POST' })
+    const j = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setInviteSent(true)
+      setHasAppAccess(true)
+    } else {
+      setError(j.error || 'Failed to send invite')
+    }
+    setSendingInvite(false)
   }
 
   async function handleDelete() {
@@ -186,6 +212,56 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
               onChange={e => setName(e.target.value)}
               className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
             />
+          </div>
+
+          {/* Crew App Access — email, phone, invite */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-700">Crew App Access</p>
+              {hasAppAccess && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                  <CheckCircle2 size={10} /> Active
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="crew@email.com"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="(416) 555-0100"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSendInvite}
+              disabled={sendingInvite || inviteSent}
+              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60 transition-colors"
+            >
+              {sendingInvite
+                ? <><Loader2 size={12} className="animate-spin" /> Sending...</>
+                : inviteSent
+                  ? <><CheckCircle2 size={12} /> Invite sent</>
+                  : <><Send size={12} /> {hasAppAccess ? 'Resend App Invite' : 'Send App Invite'}</>
+              }
+            </button>
+            <p className="text-[11px] text-slate-400">
+              Sends a login link to the crew member&apos;s email. They set their own password and log into the Kratos Crew app.
+            </p>
           </div>
 
           {/* Row: Role + Location */}

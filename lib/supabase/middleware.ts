@@ -48,5 +48,21 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(dashboardUrl)
   }
 
+  if (
+    !user &&
+    pathname.startsWith('/crew') &&
+    !pathname.startsWith('/crew/login')
+  ) {
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/crew/login'
+    return NextResponse.redirect(loginUrl)
+  }
+
+  if (user && pathname === '/crew/login') {
+    const crewUrl = request.nextUrl.clone()
+    crewUrl.pathname = '/crew/jobs'
+    return NextResponse.redirect(crewUrl)
+  }
+
   return supabaseResponse
 }
