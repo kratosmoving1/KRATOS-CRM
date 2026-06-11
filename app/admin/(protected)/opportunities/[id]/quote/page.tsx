@@ -731,8 +731,10 @@ export default function OpportunityDetailPage() {
   }, [id])
 
   useEffect(() => {
-    if (tab === 'estimate') {
+    if (tab === 'estimate' || tab === 'accounting') {
       fetchCharges()
+    }
+    if (tab === 'estimate') {
       fetchTripData()
       // Load profiles for Agent dropdown (only once per tab open)
       if (profiles.length === 0) {

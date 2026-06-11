@@ -174,12 +174,10 @@ type AcceptStep = 'idle' | 'confirm' | 'deposit'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const STORAGE = 'https://dyxopppyoqtwcorbdicf.supabase.co/storage/v1/object/public/logos'
-
 const KGC_COMPANIES = [
-  { name: 'Kratos Moving',   logoUrl: `${STORAGE}/kratos-moving/logo-short.png` },
-  { name: 'Kratos Cleaning', logoUrl: `${STORAGE}/kratos-cleaning/logo-short.png` },
-  { name: 'Kratos Painting', logoUrl: `${STORAGE}/kratos-painting/logo-short.png` },
+  { name: 'Moving',   logoUrl: '/logo.png', href: 'https://kratosgoc.com/moving' },
+  { name: 'Cleaning', logoUrl: 'https://dyxopppyoqtwcorbdicf.supabase.co/storage/v1/object/public/logos/kratos-cleaning:logo-short.png', href: 'https://kratosgoc.com/cleaning' },
+  { name: 'Painting', logoUrl: 'https://dyxopppyoqtwcorbdicf.supabase.co/storage/v1/object/public/logos/kratos-painting:logo-short.png', href: 'https://kratosgoc.com/painting' },
 ]
 
 export default function EstimatePortalContent({
@@ -388,11 +386,12 @@ export default function EstimatePortalContent({
                 </span>
               </div>
 
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
-                Your Moving Estimate
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-1">
+                {customer?.full_name ? `${customer.full_name.trim().split(/\s+/)[0]}, your` : 'Your'} Kratos move
+                <span className="block text-kratos">is in motion.</span>
               </h1>
 
-              <p className="text-sm text-slate-400">Starting on: {dateLabel(opp.service_date)}</p>
+              <p className="text-sm text-slate-400 mt-2">Starting on: {dateLabel(opp.service_date)}</p>
               <p className="text-sm text-slate-400">Arrival window: TBD</p>
             </div>
 
@@ -656,50 +655,72 @@ export default function EstimatePortalContent({
         })}
 
         {/* ── Kratos Points + Group ────────────────────────────────────────── */}
-        <section className="rounded-xl overflow-hidden shadow-md" style={{ background: '#0a0a0a' }}>
-          <div className="px-6 pt-6 pb-5">
-            <div className="flex items-center gap-2 mb-4">
+        <section className="rounded-2xl overflow-hidden shadow-xl" style={{ background: '#0a0a0a' }}>
+
+          {/* Points hero */}
+          <div className="relative px-7 pt-8 pb-7 overflow-hidden" style={{ borderBottom: '1px solid rgba(255,173,51,0.1)' }}>
+            {/* ambient glow */}
+            <div className="pointer-events-none absolute -top-10 -right-10 w-64 h-64 rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,173,51,0.1) 0%, transparent 70%)' }} />
+
+            <div className="flex items-center gap-2 mb-5">
               <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#ffad33"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffad33' }}>Kratos Points</p>
+              <span className="text-[11px] font-black tracking-[0.22em] uppercase" style={{ color: '#ffad33' }}>Kratos Points</span>
             </div>
-            <div className="flex items-end gap-5 mb-3">
-              <div>
-                <p className="text-4xl font-bold leading-none" style={{ color: '#ffad33' }}>{earnedPoints.toLocaleString()}</p>
-                <p className="text-xs mt-1" style={{ color: '#64748b' }}>points from this estimate</p>
-              </div>
+
+            <div className="flex items-end gap-4 mb-2">
+              <span
+                className="text-6xl font-black leading-none tabular-nums"
+                style={{ color: '#ffad33', textShadow: '0 0 48px rgba(255,173,51,0.35)' }}
+              >
+                {earnedPoints.toLocaleString()}
+              </span>
               {totalPoints > 0 && (
-                <div className="pb-0.5">
-                  <p className="text-xl font-semibold leading-none" style={{ color: '#94a3b8' }}>{totalPoints.toLocaleString()} total</p>
-                  <p className="text-xs mt-1" style={{ color: '#475569' }}>accumulated with Kratos</p>
-                </div>
+                <span className="mb-1.5 text-base font-medium" style={{ color: '#475569' }}>
+                  {totalPoints.toLocaleString()} total
+                </span>
               )}
             </div>
-            <p className="text-xs" style={{ color: '#334155' }}>0.5 points per $1 subtotal &mdash; redeem across Kratos Group companies</p>
+            <p className="text-sm font-medium mb-3" style={{ color: '#94a3b8' }}>points earned from this estimate</p>
+            <p className="text-xs" style={{ color: '#2d3748' }}>
+              <em style={{ color: '#475569', fontStyle: 'italic' }}>Κράτος</em>
+              {' '}— 0.5 pts per $1 subtotal · redeem at every Kratos Group company
+            </p>
           </div>
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }} className="px-6 py-5">
-            <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#475569' }}>Explore Kratos Group</p>
-            <div className="flex items-start gap-5">
+
+          {/* Company cards */}
+          <div className="px-7 pt-6 pb-7">
+            <p className="text-[10px] font-black tracking-[0.2em] uppercase mb-5" style={{ color: '#2d3748' }}>Explore Kratos Group</p>
+            <div className="grid grid-cols-3 gap-3">
               {KGC_COMPANIES.map(co => (
-                <div key={co.name} className="flex flex-col items-center gap-2">
+                <a
+                  key={co.name}
+                  href={co.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex flex-col items-center gap-2.5 rounded-xl px-2 py-4 transition-all duration-200 hover:scale-[1.03]"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+                >
                   <div
                     className="flex items-center justify-center rounded-xl overflow-hidden"
-                    style={{ width: 52, height: 52, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    style={{ width: 56, height: 56, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,173,51,0.15)' }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={co.logoUrl}
                       alt={co.name}
-                      style={{ width: 40, height: 40, objectFit: 'contain' }}
+                      style={{ width: 44, height: 44, objectFit: 'contain' }}
                       onError={(e) => { (e.target as HTMLImageElement).src = '/logo.png' }}
                     />
                   </div>
-                  <p className="text-[10px] font-semibold text-center leading-tight" style={{ color: '#64748b' }}>
-                    {co.name.replace('Kratos ', '')}
-                  </p>
-                </div>
+                  <span className="text-[11px] font-bold text-center leading-tight" style={{ color: '#64748b' }}>
+                    {co.name}
+                  </span>
+                </a>
               ))}
             </div>
-            <p className="text-xs mt-4" style={{ color: '#334155' }}>Redeem Kratos Points across all Kratos Group companies.</p>
+            <p className="text-[11px] mt-5 text-center" style={{ color: '#1e293b' }}>
+              Redeem Kratos Points across every company in the Kratos Group.
+            </p>
           </div>
         </section>
 
