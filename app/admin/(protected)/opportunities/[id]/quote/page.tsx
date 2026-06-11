@@ -491,7 +491,7 @@ export default function OpportunityDetailPage() {
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10))
   const [paymentReference, setPaymentReference] = useState('')
   const [paymentNotes, setPaymentNotes] = useState('')
-  const [paymentStatus, setPaymentStatus] = useState('received')
+  const [sendReceipt, setSendReceipt] = useState(false)
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [payments, setPayments] = useState<PaymentRecord[]>([])
@@ -1074,7 +1074,7 @@ export default function OpportunityDetailPage() {
           paymentDate,
           referenceNumber: paymentReference,
           notes: paymentNotes,
-          status: paymentStatus,
+          sendReceipt,
         }),
       })
       const data = await res.json()
@@ -1084,12 +1084,19 @@ export default function OpportunityDetailPage() {
         return
       }
 
-      toast.success('Payment recorded')
+      if (data.receiptError) {
+        toast.success('Payment recorded')
+        setPaymentMessage(data.receiptError)
+      } else if (data.receiptSent) {
+        toast.success('Payment recorded — receipt sent to customer')
+      } else {
+        toast.success('Payment recorded')
+      }
       setSelectedPaymentMethod(null)
       setPaymentAmount('')
       setPaymentReference('')
       setPaymentNotes('')
-      setPaymentStatus('received')
+      setSendReceipt(false)
       loadTimeline()
       loadPayments()
     } catch {
@@ -2832,24 +2839,11 @@ export default function OpportunityDetailPage() {
                     </label>
 
                     <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Payment status
-                      <select
-                        value={paymentStatus}
-                        onChange={e => setPaymentStatus(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
-                      >
-                        <option value="received">Received</option>
-                        <option value="recorded">Recorded</option>
-                        <option value="pending">Pending</option>
-                      </select>
-                    </label>
-
-                    <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
                       Reference / confirmation number
                       <input
                         value={paymentReference}
                         onChange={e => setPaymentReference(e.target.value)}
-                        placeholder="Optional"
+                        placeholder="Optional — cheque #, e-transfer ref, etc."
                         className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
                       />
                     </label>
@@ -2859,15 +2853,32 @@ export default function OpportunityDetailPage() {
                       <textarea
                         value={paymentNotes}
                         onChange={e => setPaymentNotes(e.target.value)}
-                        rows={3}
-                        placeholder="Optional"
+                        rows={2}
+                        placeholder="Optional internal note"
                         className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-950 outline-none focus:border-kratos focus:ring-2 focus:ring-kratos/20"
                       />
                     </label>
                   </div>
 
+                  {/* Receipt checkbox */}
+                  <label className="mt-4 flex items-start gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={sendReceipt}
+                      onChange={e => setSendReceipt(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-kratos"
+                    />
+                    <span className="text-sm text-slate-700 leading-5">
+                      Send payment receipt to customer
+                      {opp.customer?.email
+                        ? <span className="block text-xs text-slate-400">{opp.customer.email}</span>
+                        : <span className="block text-xs text-slate-400">No email on file — add one first</span>
+                      }
+                    </span>
+                  </label>
+
                   {(selectedIsRecordOnly || selectedSupportsStripe) && (
-                    <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                    <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
                       Record only. No card details are processed or stored in Kratos CRM.
                     </p>
                   )}
