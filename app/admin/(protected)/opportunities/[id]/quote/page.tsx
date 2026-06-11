@@ -168,6 +168,25 @@ interface OppDetail {
   can_view_profitability?: boolean
 }
 
+interface PaymentRecord {
+  id: string
+  method: string
+  status: string
+  amount_cents: number
+  payment_date: string
+  reference_number: string | null
+  notes: string | null
+  created_at: string
+  provider: string
+}
+
+const METHOD_LABELS: Record<string, string> = {
+  cash: 'Cash', check: 'Cheque', credit_card: 'Credit Card',
+  credit_card_record: 'Credit Card', debit_card: 'Debit Card',
+  debit_card_record: 'Debit Card', interac_e_transfer: 'Interac e-Transfer',
+  wire_transfer: 'Wire Transfer',
+}
+
 interface TimelineItem {
   id: string
   _kind: 'communication' | 'audit' | 'follow_up'
@@ -475,6 +494,8 @@ export default function OpportunityDetailPage() {
   const [paymentStatus, setPaymentStatus] = useState('received')
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [payments, setPayments] = useState<PaymentRecord[]>([])
+  const [paymentsLoading, setPaymentsLoading] = useState(false)
   const [notesTab, setNotesTab] = useState<'internal' | 'customer' | 'crew' | 'dispatcher'>('internal')
 
   // Profiles (for Agent dropdown in Information card)
@@ -509,7 +530,17 @@ export default function OpportunityDetailPage() {
     finally { setTimelineLoading(false) }
   }, [id])
 
+  const loadPayments = useCallback(async () => {
+    setPaymentsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/payments`)
+      if (res.ok) setPayments(await res.json())
+    } catch {}
+    finally { setPaymentsLoading(false) }
+  }, [id])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadPayments() }, [loadPayments])
   useEffect(() => {
     if (tab !== 'sales') return
     loadTimeline()
@@ -1054,13 +1085,13 @@ export default function OpportunityDetailPage() {
       }
 
       toast.success('Payment recorded')
-      setPaymentDrawerOpen(false)
       setSelectedPaymentMethod(null)
       setPaymentAmount('')
       setPaymentReference('')
       setPaymentNotes('')
       setPaymentStatus('received')
       loadTimeline()
+      loadPayments()
     } catch {
       setPaymentMessage('Unable to reach the payment server.')
     } finally {
@@ -1088,7 +1119,9 @@ export default function OpportunityDetailPage() {
   const discounts = chargeTotals.total_discounts
   const salesTax = chargeTotals.sales_tax
   const estimateTotal = chargeTotals.estimate_total
-  const totalPaid = 0
+  const totalPaid = payments
+    .filter(p => p.status !== 'failed' && p.status !== 'refunded')
+    .reduce((sum, p) => sum + p.amount_cents / 100, 0)
   const balanceDue = Math.max(estimateTotal - totalPaid, 0)
   const profit = opp.total_amount - opp.estimated_cost
   const selectedPaymentConfig = PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod)
@@ -2603,10 +2636,17 @@ export default function OpportunityDetailPage() {
 
         {tab === 'accounting' && (
           <div className="grid gap-4 lg:grid-cols-3">
-            <PanelSection title="Payments" icon={CreditCard}>
-              <MoneyRow label="Deposit" value={formatCurrency(Number(opp.deposit_amount ?? 150) || 150)} />
+            {/* Left: Summary + Add Payment */}
+            <PanelSection title="Payment Summary" icon={CreditCard}>
+              <MoneyRow label="Estimate Total" value={estimateTotal > 0 ? formatCurrency(estimateTotal) : '—'} />
               <MoneyRow label="Total Paid" value={formatCurrency(totalPaid)} />
-              <MoneyRow label="Balance Due" value={balanceDue > 0 ? formatCurrency(balanceDue) : '—'} strong />
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <MoneyRow
+                  label="Balance Due"
+                  value={balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid in full'}
+                  strong
+                />
+              </div>
               <button
                 onClick={() => setPaymentDrawerOpen(true)}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950"
@@ -2614,8 +2654,64 @@ export default function OpportunityDetailPage() {
                 <CreditCard size={16} /> Add Payment
               </button>
             </PanelSection>
-            <PanelActionSection title="Invoices" icon={ReceiptText} body="Invoice workflow coming soon" detail="Invoices will connect to quote totals, deposits, and payment status." />
-            <PanelActionSection title="Stripe / Manual Status" icon={WalletCards} body="No connected payment summary yet" detail="Recorded payments and Stripe webhook status will appear here." />
+
+            {/* Right: Payment history — spans 2 cols */}
+            <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <ReceiptText size={15} className="text-slate-400" />
+                  <p className="text-sm font-semibold text-slate-950">Payment History</p>
+                </div>
+                {paymentsLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
+              </div>
+
+              {!paymentsLoading && payments.length === 0 && (
+                <div className="px-5 py-10 text-center">
+                  <CreditCard size={28} className="mx-auto text-slate-200 mb-3" />
+                  <p className="text-sm text-slate-400">No payments recorded yet</p>
+                  <p className="text-xs text-slate-300 mt-1">Click &ldquo;Add Payment&rdquo; to record a deposit or payment.</p>
+                </div>
+              )}
+
+              {payments.length > 0 && (
+                <div className="divide-y divide-slate-100">
+                  {payments.map(p => (
+                    <div key={p.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-950">
+                          {METHOD_LABELS[p.method] ?? p.method.replace(/_/g, ' ')}
+                          {p.reference_number && (
+                            <span className="ml-2 font-normal text-slate-500">#{p.reference_number}</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {new Date(p.payment_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {p.notes && <span className="ml-2 text-slate-300">· {p.notes}</span>}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-slate-950">
+                          {formatCurrency(p.amount_cents / 100)}
+                        </p>
+                        <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mt-0.5 ${
+                          p.status === 'received' ? 'bg-emerald-100 text-emerald-700' :
+                          p.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                          p.status === 'refunded' ? 'bg-red-100 text-red-600' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {p.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Totals footer */}
+                  <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 rounded-b-xl">
+                    <p className="text-sm font-semibold text-slate-700">Total Received</p>
+                    <p className="text-sm font-bold text-slate-950">{formatCurrency(totalPaid)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -2808,8 +2904,40 @@ export default function OpportunityDetailPage() {
               )}
 
               {paymentMessage && (
-                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {paymentMessage}
+                </div>
+              )}
+
+              {/* Payment history in drawer */}
+              {payments.length > 0 && (
+                <div className="mt-6">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Payment history</p>
+                  <div className="rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                    {payments.map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3 bg-white">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-950">
+                            {METHOD_LABELS[p.method] ?? p.method.replace(/_/g, ' ')}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {new Date(p.payment_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {p.reference_number && ` · #${p.reference_number}`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-slate-950">{formatCurrency(p.amount_cents / 100)}</p>
+                          <span className={`text-[10px] font-semibold uppercase ${p.status === 'received' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {p.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50">
+                      <p className="text-xs font-semibold text-slate-600">Total paid</p>
+                      <p className="text-sm font-bold text-slate-950">{formatCurrency(totalPaid)}</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
