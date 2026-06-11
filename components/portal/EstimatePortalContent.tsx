@@ -387,7 +387,7 @@ export default function EstimatePortalContent({
               </div>
 
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-1">
-                {customer?.full_name ? `${customer.full_name.trim().split(/\s+/)[0]}, your` : 'Your'} Kratos move
+                Your Kratos move
                 <span className="block text-kratos">is in motion.</span>
               </h1>
 
