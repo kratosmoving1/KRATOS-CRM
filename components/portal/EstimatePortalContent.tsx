@@ -80,6 +80,7 @@ interface Props {
   isPreview: boolean
   alreadySigned: boolean
   paymentSucceeded: boolean
+  depositPaid?: boolean
   portalSettings: PortalSettings | null
 }
 
@@ -172,7 +173,7 @@ type AcceptStep = 'idle' | 'confirm' | 'deposit'
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function EstimatePortalContent({
-  data, token, isPreview, alreadySigned, paymentSucceeded, portalSettings,
+  data, token, isPreview, alreadySigned, paymentSucceeded, depositPaid, portalSettings,
 }: Props) {
   const { opp, customer, charges, subtotal, discounts, hst, total, deposit, moveSize } = data
 
@@ -223,6 +224,7 @@ export default function EstimatePortalContent({
 
   // Accept flow state
   const [accepted, setAccepted] = useState(alreadySigned || paymentSucceeded)
+  const isDepositPaid = (depositPaid ?? false) || paymentSucceeded
   const [acceptStep, setAcceptStep] = useState<AcceptStep>('idle')
   const [acceptLoading, setAcceptLoading] = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
@@ -664,11 +666,33 @@ export default function EstimatePortalContent({
         </div>
       )}
 
-      {accepted && !paymentSucceeded && (
+      {accepted && isDepositPaid && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-green-200 bg-green-50 px-4 py-3">
           <div className="mx-auto flex max-w-5xl items-center gap-2">
             <CheckCircle2 size={18} className="shrink-0 text-green-600" />
             <p className="text-sm font-semibold text-green-800">Estimate accepted — your move date is secured.</p>
+          </div>
+        </div>
+      )}
+
+      {accepted && !isDepositPaid && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-amber-400 bg-amber-50 px-4 py-3 shadow-lg">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="shrink-0 h-6 w-6 rounded-full bg-amber-400 flex items-center justify-center">
+                <span style={{ fontSize: 13, fontWeight: 'bold', color: '#fff' }}>!</span>
+              </div>
+              <p className="text-sm font-semibold text-amber-900">
+                Estimate accepted — but your deposit hasn&apos;t been paid yet.
+                <span className="hidden sm:inline text-amber-700 font-normal"> Pay now to fully secure your move date.</span>
+              </p>
+            </div>
+            <button
+              onClick={() => setAcceptStep('deposit')}
+              className="shrink-0 rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300 transition-colors whitespace-nowrap"
+            >
+              Pay Deposit — {formatCurrency(deposit)}
+            </button>
           </div>
         </div>
       )}

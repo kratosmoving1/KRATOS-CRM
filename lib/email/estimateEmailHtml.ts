@@ -3,6 +3,7 @@ export interface CancellationEmailData {
   quoteNumber: string
   companyPhone: string
   cancellationReason?: string
+  portalLink?: string
 }
 
 export interface EstimateEmailData {
@@ -30,6 +31,7 @@ export interface BookingConfirmationData {
   destinationAddress: string
   companyPhone: string
   agentFirstName: string
+  portalLink?: string
 }
 
 const KRATOS_ORANGE = '#ffad33'
@@ -193,7 +195,7 @@ export function buildBookingConfirmationHtml(d: BookingConfirmationData): string
       <tr><td style="padding:4px 40px 20px"><hr style="border:none;border-top:1px solid #e2e8f0;margin:0" /></td></tr>
 
       <!-- Move summary -->
-      <tr><td style="padding:0 40px 32px">
+      <tr><td style="padding:0 40px 24px">
         <p style="margin:0 0 12px;font-size:15px;font-weight:bold;color:${KRATOS_ORANGE}">Your Move Details:</p>
         <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">
           <tr>
@@ -218,6 +220,14 @@ export function buildBookingConfirmationHtml(d: BookingConfirmationData): string
           </tr>
         </table>
       </td></tr>
+
+      ${d.portalLink ? `
+      <!-- Portal CTA -->
+      <tr><td align="center" style="padding:8px 40px 32px">
+        <a href="${d.portalLink}" style="display:inline-block;background:${KRATOS_ORANGE};color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 40px;border-radius:6px;letter-spacing:0.02em">
+          View Your Estimate Portal
+        </a>
+      </td></tr>` : ''}
 
       <!-- Footer -->
       <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
@@ -258,6 +268,14 @@ export function buildCancellationEmailHtml(d: CancellationEmailData): string {
 
       <!-- Divider -->
       <tr><td style="padding:4px 40px 20px"><hr style="border:none;border-top:1px solid #e2e8f0;margin:0" /></td></tr>
+
+      ${d.portalLink ? `
+      <!-- Portal CTA -->
+      <tr><td align="center" style="padding:8px 40px 24px">
+        <a href="${d.portalLink}" style="display:inline-block;background:${KRATOS_ORANGE};color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 40px;border-radius:6px;letter-spacing:0.02em">
+          View Your Estimate
+        </a>
+      </td></tr>` : ''}
 
       <!-- Footer -->
       <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">

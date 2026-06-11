@@ -21,6 +21,10 @@ function one<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? v[0] ?? null : v
 }
 
+function appOrigin(req: NextRequest) {
+  return process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
@@ -46,14 +50,24 @@ export async function POST(
 
   const admin = createAdminClient()
 
-  const { data: opp, error: fetchErr } = await admin
-    .from('opportunities')
-    .select('id, status, opportunity_number, service_type, service_date, origin_address_line1, origin_city, origin_province, dest_address_line1, dest_city, dest_province, sales_agent_id, customer:customers!customer_id(full_name, email), agent:profiles!sales_agent_id(full_name)')
-    .eq('id', params.id)
-    .neq('is_deleted', true)
-    .single()
+  const [oppResult, portalLinkResult] = await Promise.all([
+    admin
+      .from('opportunities')
+      .select('id, status, opportunity_number, service_type, service_date, origin_address_line1, origin_city, origin_province, dest_address_line1, dest_city, dest_province, sales_agent_id, customer:customers!customer_id(full_name, email), agent:profiles!sales_agent_id(full_name)')
+      .eq('id', params.id)
+      .not('is_deleted', 'is', 'true')
+      .single(),
+    admin
+      .from('estimate_portal_links')
+      .select('token')
+      .eq('opportunity_id', params.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
-  if (fetchErr || !opp) return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
+  const opp = oppResult.data
+  if (oppResult.error || !opp) return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
 
   if (normalizedRole === 'sales' && opp.sales_agent_id !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -76,7 +90,6 @@ export async function POST(
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
-  // Audit log
   await admin.from('audit_log').insert({
     user_id:     user.id,
     entity_type: 'opportunity',
@@ -85,18 +98,19 @@ export async function POST(
     diff:        { from: currentStatus, to: newStatus, ...(cancellationReason ? { cancellationReason } : {}) },
   })
 
-  // Email notification
-  const rawCustomer = opp.customer as CustomerRow
-  const rawAgent    = opp.agent as AgentRow
-  const customerRow = one(rawCustomer)
-  const agentRow    = one(rawAgent)
-  const customerName  = customerRow?.full_name ?? 'Customer'
-  const customerEmail = customerRow?.email ?? null
-  const firstName     = customerName.trim().split(/\s+/)[0] ?? customerName
-  const agentFirst    = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
-  const quoteNumber   = formatQuoteNumber(opp.opportunity_number)
-
-  if (customerEmail && sendEmailNotification) {
+  // Build email + log to communications synchronously so it's not dropped by serverless
+  if (customerEmail(opp) && sendEmailNotification) {
+    const rawCustomer = opp.customer as CustomerRow
+    const rawAgent    = opp.agent as AgentRow
+    const customerRow = one(rawCustomer)
+    const agentRow    = one(rawAgent)
+    const custEmail     = customerRow?.email ?? ''
+    const customerName  = customerRow?.full_name ?? 'Customer'
+    const firstName     = customerName.trim().split(/\s+/)[0] ?? customerName
+    const agentFirst    = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
+    const quoteNumber   = formatQuoteNumber(opp.opportunity_number)
+    const portalToken   = portalLinkResult.data?.token
+    const portalLink    = portalToken ? `${appOrigin(req)}/portal/estimate/${portalToken}` : undefined
     const moveDateLabel = opp.service_date
       ? new Date(opp.service_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
       : 'To be confirmed'
@@ -121,6 +135,7 @@ export async function POST(
         destinationAddress: destination,
         companyPhone: COMPANY_PHONE,
         agentFirstName: agentFirst,
+        portalLink,
       })
     } else if (newStatus === 'cancelled') {
       subject = `Your Kratos Moving Booking Has Been Cancelled — Quote #${quoteNumber}`
@@ -130,30 +145,40 @@ export async function POST(
         quoteNumber,
         companyPhone: COMPANY_PHONE,
         cancellationReason,
+        portalLink,
       })
     }
 
     if (subject && html) {
-      sendEmail({
-        to: customerEmail,
-        subject,
-        text,
-        html,
-        fromName: 'Kratos Moving',
-        fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
-      }).then(() => {
-        void admin.from('communications').insert({
+      try {
+        await sendEmail({
+          to: custEmail,
+          subject,
+          text,
+          html,
+          fromName: 'Kratos Moving',
+          fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
+        })
+        await admin.from('communications').insert({
           opportunity_id: params.id,
           type: 'email',
           direction: 'outbound',
           subject,
           body: html,
-          email_to: customerEmail,
+          email_to: custEmail,
           created_by: user.id,
         })
-      }).catch(err => console.error('[status] notification email failed:', err))
+      } catch (err) {
+        console.error('[status] notification email failed:', err)
+      }
     }
   }
 
   return NextResponse.json({ ok: true, newStatus })
+}
+
+function customerEmail(opp: { customer: unknown }): boolean {
+  const raw = opp.customer
+  const row = Array.isArray(raw) ? raw[0] : raw
+  return Boolean((row as { email?: string | null } | null)?.email)
 }

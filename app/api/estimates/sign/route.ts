@@ -87,6 +87,8 @@ export async function POST(req: NextRequest) {
   // Send booking confirmation email (fire-and-forget — never block the response)
   if (customerEmail) {
     const companyPhone = process.env.COMPANY_PHONE ?? '(800) 321-3222'
+    const appOriginUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+    const portalLink   = `${appOriginUrl}/portal/estimate/${token}`
     const moveDateLabel = opp?.service_date
       ? new Date(opp.service_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
       : 'To be confirmed'
@@ -106,18 +108,20 @@ export async function POST(req: NextRequest) {
       destinationAddress: destination,
       companyPhone,
       agentFirstName,
+      portalLink,
     })
     const confirmSubject = `Your Move is Confirmed — Kratos Moving #${quoteNumber}`
     const confirmText = `Hi ${firstName}, your Kratos Moving estimate has been accepted and your move date is secured. A coordinator will be in touch shortly. — Kratos Moving`
-    sendEmail({
-      to: customerEmail,
-      subject: confirmSubject,
-      text: confirmText,
-      html,
-      fromName: 'Kratos Moving',
-      fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
-    }).then(() => {
-      void supabase.from('communications').insert({
+    try {
+      await sendEmail({
+        to: customerEmail,
+        subject: confirmSubject,
+        text: confirmText,
+        html,
+        fromName: 'Kratos Moving',
+        fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
+      })
+      await supabase.from('communications').insert({
         opportunity_id: link.opportunity_id,
         type: 'email',
         direction: 'outbound',
@@ -125,7 +129,9 @@ export async function POST(req: NextRequest) {
         body: html,
         email_to: customerEmail,
       })
-    }).catch(err => console.error('[sign] confirmation email failed:', err))
+    } catch (err) {
+      console.error('[sign] confirmation email failed:', err)
+    }
   }
 
   return NextResponse.json({ ok: true })

@@ -60,7 +60,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     .from('opportunities')
     .select('*, customer:customers!customer_id(full_name, email, phone)')
     .eq('id', link.opportunity_id)
-    .neq('is_deleted', true)
+    .not('is_deleted', 'is', 'true')
     .single()
 
   if (!opp) return <PortalError title="Estimate not found" />
@@ -91,8 +91,8 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     ? (MOVE_SIZE_LABELS[opp.move_size] ?? String(opp.move_size).replace(/_/g, ' '))
     : 'To be confirmed'
 
-  // Fetch portal settings, signatures, and content blocks in parallel
-  const [signatureResult, settingsResult, blocksResult] = await Promise.all([
+  // Fetch portal settings, signatures, content blocks, and payment status in parallel
+  const [signatureResult, settingsResult, blocksResult, paymentResult] = await Promise.all([
     supabase
       .from('estimate_signatures')
       .select('id')
@@ -112,9 +112,17 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       .eq('is_deleted', false)
       .eq('is_visible', true)
       .order('position', { ascending: true }),
+    supabase
+      .from('payments')
+      .select('id')
+      .eq('opportunity_id', link.opportunity_id)
+      .eq('status', 'received')
+      .limit(1)
+      .maybeSingle(),
   ])
 
-  const signature = signatureResult.data
+  const signature   = signatureResult.data
+  const depositPaid = Boolean(paymentResult.data)
 
   const data: PortalPageData = {
     opp: {
@@ -183,6 +191,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       isPreview={Boolean(searchParams.preview)}
       alreadySigned={Boolean(signature)}
       paymentSucceeded={searchParams.payment === 'success'}
+      depositPaid={depositPaid}
       portalSettings={portalSettings}
     />
   )
