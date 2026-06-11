@@ -107,7 +107,9 @@ export async function POST(
     const custEmail     = customerRow?.email ?? ''
     const customerName  = customerRow?.full_name ?? 'Customer'
     const firstName     = customerName.trim().split(/\s+/)[0] ?? customerName
-    const agentFirst    = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
+    const agentParts   = agentRow?.full_name?.trim().split(/\s+/) ?? []
+    const agentFirst   = agentParts[0] ?? ''
+    const agentLastInitial = agentParts[1]?.[0] ?? ''
     const quoteNumber   = formatQuoteNumber(opp.opportunity_number)
     const portalToken   = portalLinkResult.data?.token
     const portalLink    = portalToken ? `${appOrigin(req)}/portal/estimate/${portalToken}` : undefined
@@ -135,6 +137,7 @@ export async function POST(
         destinationAddress: destination,
         companyPhone: COMPANY_PHONE,
         agentFirstName: agentFirst,
+        agentLastInitial,
         portalLink,
       })
     } else if (newStatus === 'cancelled') {

@@ -4,6 +4,8 @@ export interface CancellationEmailData {
   companyPhone: string
   cancellationReason?: string
   portalLink?: string
+  agentFirstName?: string
+  agentLastInitial?: string
 }
 
 export interface RescheduleEmailData {
@@ -17,6 +19,7 @@ export interface RescheduleEmailData {
   destinationAddress: string
   companyPhone: string
   agentFirstName?: string
+  agentLastInitial?: string
   portalLink?: string
 }
 
@@ -24,6 +27,7 @@ export interface EstimateEmailData {
   customerFirstName: string
   customerFullName: string
   agentFirstName: string
+  agentLastInitial?: string
   quoteNumber: string
   moveDate: string
   serviceType: string
@@ -45,11 +49,19 @@ export interface BookingConfirmationData {
   destinationAddress: string
   companyPhone: string
   agentFirstName: string
+  agentLastInitial?: string
   portalLink?: string
 }
 
 const KRATOS_ORANGE = '#ffad33'
 const KRATOS_DARK   = '#0f172a'
+const HEADER_BG     = '#0a0a0a'
+
+// Returns "Alex S." or just "Alex" if no last initial available
+function agentDisplay(first: string | undefined, lastInitial: string | undefined): string {
+  if (!first) return ''
+  return lastInitial ? `${first} ${lastInitial}.` : first
+}
 
 function emailWrapper(content: string) {
   return `<!DOCTYPE html>
@@ -74,6 +86,29 @@ function emailWrapper(content: string) {
 </html>`
 }
 
+function emailHeader() {
+  return `<tr><td align="center" style="background:${HEADER_BG};padding:32px 40px">
+    <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="72" style="height:72px;width:auto;display:block;margin:0 auto" />
+  </td></tr>`
+}
+
+function emailFooter(params: {
+  quoteNumber: string
+  companyPhone: string
+  agentFirstName?: string
+  agentLastInitial?: string
+}) {
+  const { quoteNumber, companyPhone, agentFirstName, agentLastInitial } = params
+  const agent = agentDisplay(agentFirstName, agentLastInitial)
+  return `<tr><td style="background:#f8fafc;padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center">
+    <p style="margin:0 0 4px;font-size:13px;color:#64748b;line-height:1.6">
+      Questions? Call us at <strong>${companyPhone}</strong>.
+    </p>
+    ${agent ? `<p style="margin:0 0 4px;font-size:13px;color:#64748b">Your Kratos specialist: <strong>${agent}</strong> &middot; Quote #${quoteNumber}</p>` : `<p style="margin:0 0 4px;font-size:13px;color:#64748b">Quote #${quoteNumber}</p>`}
+    <p style="margin:8px 0 0;font-size:14px;font-weight:bold;color:${KRATOS_ORANGE}">Done As Promised.</p>
+  </td></tr>`
+}
+
 export function buildEstimateEmailHtml(d: EstimateEmailData): string {
   const badgesHtml = d.badges && d.badges.some(b => b.image_url)
     ? `<tr><td style="padding:24px 40px 8px">
@@ -86,10 +121,7 @@ export function buildEstimateEmailHtml(d: EstimateEmailData): string {
     : ''
 
   const content = `
-      <!-- Header strip -->
-      <tr><td style="background:${KRATOS_DARK};padding:28px 40px">
-        <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="48" style="height:48px;width:auto" />
-      </td></tr>
+      ${emailHeader()}
 
       <!-- Title -->
       <tr><td style="padding:36px 40px 0">
@@ -165,24 +197,14 @@ export function buildEstimateEmailHtml(d: EstimateEmailData): string {
         </p>
       </td></tr>
 
-      <!-- Footer -->
-      <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
-        <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
-          Questions? Reply to this email or call us at <strong>${d.companyPhone}</strong>.<br />
-          ${d.agentFirstName ? `Your coordinator: <strong>${d.agentFirstName}</strong> · ` : ''}
-          Estimate #${d.quoteNumber}
-        </p>
-      </td></tr>`
+      ${emailFooter({ quoteNumber: d.quoteNumber, companyPhone: d.companyPhone, agentFirstName: d.agentFirstName, agentLastInitial: d.agentLastInitial })}`
 
   return emailWrapper(content)
 }
 
 export function buildBookingConfirmationHtml(d: BookingConfirmationData): string {
   const content = `
-      <!-- Header strip -->
-      <tr><td style="background:${KRATOS_DARK};padding:28px 40px">
-        <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="48" style="height:48px;width:auto" />
-      </td></tr>
+      ${emailHeader()}
 
       <!-- Success badge -->
       <tr><td align="center" style="padding:36px 40px 24px">
@@ -243,24 +265,14 @@ export function buildBookingConfirmationHtml(d: BookingConfirmationData): string
         </a>
       </td></tr>` : ''}
 
-      <!-- Footer -->
-      <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
-        <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
-          ${d.agentFirstName ? `Your coordinator: <strong>${d.agentFirstName}</strong> · ` : ''}
-          Estimate #${d.quoteNumber}<br />
-          <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
-        </p>
-      </td></tr>`
+      ${emailFooter({ quoteNumber: d.quoteNumber, companyPhone: d.companyPhone, agentFirstName: d.agentFirstName, agentLastInitial: d.agentLastInitial })}`
 
   return emailWrapper(content)
 }
 
 export function buildRescheduleEmailHtml(d: RescheduleEmailData): string {
   const content = `
-      <!-- Header strip -->
-      <tr><td style="background:${KRATOS_DARK};padding:28px 40px">
-        <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="48" style="height:48px;width:auto" />
-      </td></tr>
+      ${emailHeader()}
 
       <!-- Title -->
       <tr><td align="center" style="padding:36px 40px 8px">
@@ -318,23 +330,14 @@ export function buildRescheduleEmailHtml(d: RescheduleEmailData): string {
         </a>
       </td></tr>` : ''}
 
-      <!-- Footer -->
-      <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
-        <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
-          Questions? Call us at <strong>${d.companyPhone}</strong>.${d.agentFirstName ? ` Your coordinator: <strong>${d.agentFirstName}</strong>.` : ''}<br />
-          Quote #${d.quoteNumber} · <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
-        </p>
-      </td></tr>`
+      ${emailFooter({ quoteNumber: d.quoteNumber, companyPhone: d.companyPhone, agentFirstName: d.agentFirstName, agentLastInitial: d.agentLastInitial })}`
 
   return emailWrapper(content)
 }
 
 export function buildCancellationEmailHtml(d: CancellationEmailData): string {
   const content = `
-      <!-- Header strip -->
-      <tr><td style="background:${KRATOS_DARK};padding:28px 40px">
-        <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="48" style="height:48px;width:auto" />
-      </td></tr>
+      ${emailHeader()}
 
       <!-- Title -->
       <tr><td style="padding:36px 40px 8px">
@@ -365,13 +368,7 @@ export function buildCancellationEmailHtml(d: CancellationEmailData): string {
         </a>
       </td></tr>` : ''}
 
-      <!-- Footer -->
-      <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
-        <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
-          Questions? Call us at <strong>${d.companyPhone}</strong>. · Quote #${d.quoteNumber}<br />
-          <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
-        </p>
-      </td></tr>`
+      ${emailFooter({ quoteNumber: d.quoteNumber, companyPhone: d.companyPhone, agentFirstName: d.agentFirstName, agentLastInitial: d.agentLastInitial })}`
 
   return emailWrapper(content)
 }

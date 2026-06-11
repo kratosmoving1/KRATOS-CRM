@@ -121,11 +121,11 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       .maybeSingle(),
     opp.customer_id
       ? supabase
-          .from('opportunities')
-          .select('total_amount')
+          .from('payments')
+          .select('amount_cents')
           .eq('customer_id', opp.customer_id)
-          .eq('is_deleted', false)
-          .in('status', ['booked', 'completed', 'closed'])
+          .not('is_deleted', 'is', true)
+          .eq('status', 'received')
       : Promise.resolve({ data: null, error: null }),
   ])
 
@@ -133,7 +133,7 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
   const depositPaid = Boolean(paymentResult.data)
 
   const customerTotalSpent = (historicalSpendResult.data ?? []).reduce(
-    (sum, r) => sum + (Number(r.total_amount) || 0),
+    (sum, r) => sum + (Number(r.amount_cents) || 0) / 100,
     0,
   )
   const totalPoints  = Math.floor(customerTotalSpent * 0.5)

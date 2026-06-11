@@ -122,7 +122,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (custEmail) {
       const customerName   = customerRow?.full_name ?? 'Customer'
       const firstName      = customerName.trim().split(/\s+/)[0] ?? customerName
-      const agentFirstName = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
+      const agentParts     = agentRow?.full_name?.trim().split(/\s+/) ?? []
+      const agentFirstName = agentParts[0] ?? ''
+      const agentLastInitial = agentParts[1]?.[0] ?? ''
       const quoteNumber    = formatQuoteNumber(opp.opportunity_number)
       const portalToken    = portalLinkResult.data?.token
       const appOrigin      = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
@@ -144,6 +146,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         destinationAddress: destination,
         companyPhone:      COMPANY_PHONE,
         agentFirstName,
+        agentLastInitial,
         portalLink,
       })
 

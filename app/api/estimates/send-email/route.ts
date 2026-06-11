@@ -222,10 +222,12 @@ export async function POST(req: NextRequest) {
   try {
     const sender = senderForProfile(profile?.email)
     if (!sender.fromEmail) throw new Error(emailConfigError())
+    const agentParts = vars.agent_full_name.trim().split(/\s+/)
     const htmlEmail = buildEstimateEmailHtml({
       customerFirstName: vars.customer_first_name,
       customerFullName: vars.customer_full_name,
       agentFirstName: vars.agent_first_name,
+      agentLastInitial: agentParts[1]?.[0] ?? '',
       quoteNumber: vars.quote_number,
       moveDate: moveDateLabel,
       serviceType: serviceTypeLabel,

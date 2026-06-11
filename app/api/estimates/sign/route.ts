@@ -96,7 +96,9 @@ export async function POST(req: NextRequest) {
     const origin = [opp?.origin_address_line1, opp?.origin_city, opp?.origin_province].filter(Boolean).join(', ')
     const destination = [opp?.dest_address_line1, opp?.dest_city, opp?.dest_province].filter(Boolean).join(', ')
     const firstName = customerName.trim().split(/\s+/)[0] ?? customerName
-    const agentFirstName = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
+    const agentParts = agentRow?.full_name?.trim().split(/\s+/) ?? []
+    const agentFirstName = agentParts[0] ?? ''
+    const agentLastInitial = agentParts[1]?.[0] ?? ''
     const quoteNumber = formatQuoteNumber(opp?.opportunity_number ?? '')
     const html = buildBookingConfirmationHtml({
       customerFirstName: firstName,
@@ -108,6 +110,7 @@ export async function POST(req: NextRequest) {
       destinationAddress: destination,
       companyPhone,
       agentFirstName,
+      agentLastInitial,
       portalLink,
     })
     const confirmSubject = `Your Move is Confirmed — Kratos Moving #${quoteNumber}`
