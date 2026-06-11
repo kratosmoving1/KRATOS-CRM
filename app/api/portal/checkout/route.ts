@@ -35,20 +35,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'This estimate link is expired or invalid.' }, { status: 404 })
   }
 
-  type CustomerField = { full_name: string; email: string | null }[] | { full_name: string; email: string | null } | null
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
-    .select('id, opportunity_number, deposit_amount, total_amount, customer_id, customer:customers!customer_id(full_name, email)')
+    .select('id, opportunity_number, deposit_amount, total_amount, customer_id')
     .eq('id', link.opportunity_id)
     .maybeSingle()
 
   if (oppErr) {
     console.error('[PortalCheckout] opportunity query error:', oppErr.message, 'opportunity_id:', link.opportunity_id)
+    return NextResponse.json({ error: `Database error: ${oppErr.message}` }, { status: 500 })
   }
-  if (!opp) return NextResponse.json({ error: 'Estimate not found.' }, { status: 404 })
+  if (!opp) return NextResponse.json({ error: `Estimate not found. (id: ${link.opportunity_id})` }, { status: 404 })
 
-  const rawCustomer = opp.customer as unknown as CustomerField
-  const customer = Array.isArray(rawCustomer) ? rawCustomer[0] ?? null : rawCustomer
+  // Fetch customer email separately — non-blocking if the join fails
+  let customer: { full_name: string; email: string | null } | null = null
+  if (opp.customer_id) {
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('full_name, email')
+      .eq('id', opp.customer_id)
+      .maybeSingle()
+    customer = cust ?? null
+  }
 
   // Resolve deposit amount
   const requestedDeposit = typeof body.depositAmount === 'number' ? body.depositAmount : null
