@@ -1213,6 +1213,7 @@ export default function OpportunityDetailPage() {
                 depositAmount: opp.deposit_amount ?? null,
                 moveSize: opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : null,
                 moveDate: opp.service_date ? formatDateShort(opp.service_date) : null,
+                status: opp.status,
                 customer: opp.customer ? {
                   id: opp.customer.id,
                   fullName: opp.customer.full_name,
@@ -1220,6 +1221,7 @@ export default function OpportunityDetailPage() {
                   phone: opp.customer.phone,
                 } : null,
               }}
+              onStatusChange={newStatus => setOpp(p => p ? { ...p, status: newStatus } : p)}
             />
             <button
               onClick={() => setShowStatusModal(true)}
@@ -1811,7 +1813,18 @@ export default function OpportunityDetailPage() {
                                 <p className="text-sm font-medium text-slate-700 mb-1">{item.subject}</p>
                               )}
                               {item.body && (
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>
+                                item.type === 'email' && item.body.trimStart().startsWith('<!DOCTYPE') ? (
+                                  <div className="mt-1 rounded-lg overflow-hidden border border-slate-200" style={{ height: 480 }}>
+                                    <iframe
+                                      srcDoc={item.body}
+                                      className="w-full h-full border-0"
+                                      sandbox="allow-same-origin"
+                                      title="Email preview"
+                                    />
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.body}</p>
+                                )
                               )}
                             </div>
                           )}

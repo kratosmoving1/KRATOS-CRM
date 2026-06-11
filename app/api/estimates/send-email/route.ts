@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
       type: 'email',
       direction: 'outbound',
       subject,
-      body: text,
+      body: htmlEmail,
       email_to: recipientEmail,
       created_by: user.id,
     })

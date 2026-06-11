@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowRight, ChevronDown, Copy, Eye, FileText, Loader2, Mail, MessageSquare, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, Copy, Eye, FileText, Loader2, Mail, MessageSquare, RotateCcw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/format'
+
+type OppStatus = 'opportunity' | 'booked' | 'completed' | 'closed' | 'cancelled'
 
 type SendEstimateMenuProps = {
   opportunity: {
@@ -13,6 +15,7 @@ type SendEstimateMenuProps = {
     depositAmount?: number | null
     moveSize?: string | null
     moveDate?: string | null
+    status?: OppStatus | string | null
     customer?: {
       id: string
       fullName: string
@@ -20,6 +23,7 @@ type SendEstimateMenuProps = {
       phone: string | null
     } | null
   }
+  onStatusChange?: (newStatus: OppStatus) => void
 }
 
 type SmsStatus = { canSend: boolean; provider: string; reason?: string }
@@ -31,8 +35,8 @@ const PRICING_OPTIONS = [
   { value: 'summary',         label: 'Summary' },
 ]
 
-export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps) {
-  const [menuOpen, setMenuOpen]   = useState(false)
+export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEstimateMenuProps) {
+  const [menuOpen, setMenuOpen]     = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [pricingDisplay, setPricingDisplay] = useState('estimated_price')
   const [depositAmount, setDepositAmount]   = useState(String(opportunity.depositAmount ?? 150))
@@ -42,6 +46,17 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
   const [loading, setLoading] = useState(false)
   const [smsStatus, setSmsStatus] = useState<SmsStatus | null>(null)
 
+  // Book confirmation modal
+  const [bookModalOpen, setBookModalOpen] = useState(false)
+
+  // Cancel confirmation modal
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [cancelReason, setCancelReason]       = useState('')
+
+  // Reopen confirmation modal
+  const [reopenModalOpen, setReopenModalOpen] = useState(false)
+
+  const currentStatus = (opportunity.status ?? 'opportunity') as OppStatus
   const hasEmail = Boolean(opportunity.customer?.email)
   const hasPhone = Boolean(opportunity.customer?.phone)
   const smsReady = Boolean(smsStatus?.canSend && hasPhone)
@@ -79,7 +94,7 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
     }
   }
 
-  async function sendEmail() {
+  async function sendEstimateEmail() {
     if (!hasEmail || !opportunity.customer?.email) {
       toast.error('No customer email on file')
       return
@@ -139,10 +154,38 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
     }
   }
 
+  async function changeStatus(newStatus: OppStatus, cancellationReason?: string) {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${opportunity.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newStatus, cancellationReason }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? `Unable to change status to ${newStatus}`); return }
+      toast.success(
+        newStatus === 'booked'     ? 'Opportunity booked. Confirmation email sent.' :
+        newStatus === 'cancelled'  ? 'Opportunity cancelled. Email sent to customer.' :
+        newStatus === 'opportunity' ? 'Opportunity reopened.' :
+        `Status changed to ${newStatus}.`
+      )
+      onStatusChange?.(newStatus)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to change status')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function placeholder(label: string) {
     toast.message(`${label} is coming soon.`)
     setMenuOpen(false)
   }
+
+  const canBook   = currentStatus === 'opportunity'
+  const canCancel = currentStatus === 'opportunity' || currentStatus === 'booked'
+  const canReopen = currentStatus === 'cancelled'
 
   return (
     <div className="relative inline-flex">
@@ -162,28 +205,167 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
       </button>
 
       {menuOpen && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-          <button onClick={() => { setDrawerOpen(true); setMenuOpen(false) }} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            <Mail size={14} /> Send Estimate
-          </button>
-          <button onClick={openPreview} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview Estimate
-          </button>
-          <button onClick={() => placeholder('Book')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            <ArrowRight size={14} /> Book
-          </button>
-          <button onClick={() => placeholder('Mark Lost')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            <X size={14} /> Mark Lost
-          </button>
-          <button onClick={() => placeholder('Send Invoice')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            <FileText size={14} /> Send Invoice
-          </button>
-          <button onClick={() => placeholder('Duplicate Quote')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-            <Copy size={14} /> Duplicate Quote
-          </button>
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+          <div className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+            <button onClick={() => { setDrawerOpen(true); setMenuOpen(false) }} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
+              <Mail size={14} /> Send Estimate
+            </button>
+            <button onClick={openPreview} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview Estimate
+            </button>
+            {canBook && (
+              <button
+                onClick={() => { setMenuOpen(false); setBookModalOpen(true) }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-green-700 hover:bg-green-50"
+              >
+                <ArrowRight size={14} /> Book
+              </button>
+            )}
+            {canCancel && (
+              <button
+                onClick={() => { setMenuOpen(false); setCancelModalOpen(true) }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
+              >
+                <X size={14} /> Cancel
+              </button>
+            )}
+            {canReopen && (
+              <button
+                onClick={() => { setMenuOpen(false); setReopenModalOpen(true) }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-blue-600 hover:bg-blue-50"
+              >
+                <RotateCcw size={14} /> Reopen
+              </button>
+            )}
+            <div className="border-t border-slate-100" />
+            <button onClick={() => placeholder('Send Invoice')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
+              <FileText size={14} /> Send Invoice
+            </button>
+            <button onClick={() => placeholder('Duplicate Quote')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
+              <Copy size={14} /> Duplicate Quote
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Book confirmation modal */}
+      {bookModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-950/40" onClick={() => setBookModalOpen(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Book this opportunity?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will mark the opportunity as <strong>Booked</strong> and send a booking confirmation email to{' '}
+              <strong>{opportunity.customer?.email ?? 'the customer'}</strong>.
+            </p>
+            {!hasEmail && (
+              <p className="mt-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                No customer email on file — status will change but no email will be sent.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setBookModalOpen(false)}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={loading}
+                onClick={async () => {
+                  setBookModalOpen(false)
+                  await changeStatus('booked')
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {loading && <Loader2 size={13} className="animate-spin" />}
+                Confirm Booking
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Cancel confirmation modal */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-950/40" onClick={() => setCancelModalOpen(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Cancel this opportunity?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will mark the opportunity as <strong>Cancelled</strong>
+              {hasEmail ? ` and send a cancellation email to ${opportunity.customer?.email}.` : '.'}
+            </p>
+            <div className="mt-4">
+              <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
+                Reason (optional)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                rows={3}
+                placeholder="e.g. Customer requested cancellation"
+                className="w-full resize-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-red-400"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setCancelModalOpen(false)}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Go Back
+              </button>
+              <button
+                disabled={loading}
+                onClick={async () => {
+                  setCancelModalOpen(false)
+                  await changeStatus('cancelled', cancelReason.trim() || undefined)
+                  setCancelReason('')
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {loading && <Loader2 size={13} className="animate-spin" />}
+                Confirm Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reopen confirmation modal */}
+      {reopenModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-950/40" onClick={() => setReopenModalOpen(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Reopen this opportunity?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will move the opportunity back to <strong>Open</strong> status.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setReopenModalOpen(false)}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={loading}
+                onClick={async () => {
+                  setReopenModalOpen(false)
+                  await changeStatus('opportunity')
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading && <Loader2 size={13} className="animate-spin" />}
+                Reopen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Estimate drawer */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-slate-950/40" onClick={() => setDrawerOpen(false)} />
@@ -342,7 +524,7 @@ export default function SendEstimateMenu({ opportunity }: SendEstimateMenuProps)
                   Preview customer portal
                 </button>
                 <button
-                  onClick={sendEmail}
+                  onClick={sendEstimateEmail}
                   disabled={loading || !hasEmail || !sendEmailChecked}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950 hover:opacity-90 disabled:opacity-50"
                 >

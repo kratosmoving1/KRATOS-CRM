@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
         type: 'email',
         direction: 'outbound',
         subject: confirmSubject,
-        body: confirmText,
+        body: html,
         email_to: customerEmail,
       })
     }).catch(err => console.error('[sign] confirmation email failed:', err))

@@ -1,3 +1,10 @@
+export interface CancellationEmailData {
+  customerFirstName: string
+  quoteNumber: string
+  companyPhone: string
+  cancellationReason?: string
+}
+
 export interface EstimateEmailData {
   customerFirstName: string
   customerFullName: string
@@ -217,6 +224,45 @@ export function buildBookingConfirmationHtml(d: BookingConfirmationData): string
         <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
           ${d.agentFirstName ? `Your coordinator: <strong>${d.agentFirstName}</strong> · ` : ''}
           Estimate #${d.quoteNumber}<br />
+          <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
+        </p>
+      </td></tr>`
+
+  return emailWrapper(content)
+}
+
+export function buildCancellationEmailHtml(d: CancellationEmailData): string {
+  const content = `
+      <!-- Header strip -->
+      <tr><td style="background:${KRATOS_DARK};padding:28px 40px">
+        <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="48" style="height:48px;width:auto" />
+      </td></tr>
+
+      <!-- Title -->
+      <tr><td style="padding:36px 40px 8px">
+        <h1 style="margin:0;font-size:24px;font-weight:bold;color:${KRATOS_DARK}">Your Booking Has Been Cancelled</h1>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="padding:16px 40px 0;font-size:15px;color:${KRATOS_DARK};line-height:1.7">
+        <p style="margin:0 0 16px">Hi <strong>${d.customerFirstName}</strong>,</p>
+        <p style="margin:0 0 16px">
+          We wanted to let you know that your Kratos Moving booking (Quote #${d.quoteNumber}) has been cancelled.
+          ${d.cancellationReason ? `<br /><br />Reason: <em>${d.cancellationReason}</em>` : ''}
+        </p>
+        <p style="margin:0 0 24px">
+          If this was a mistake or you'd like to rebook, please don't hesitate to reach out.
+          We'd love to help you plan your next move.
+        </p>
+      </td></tr>
+
+      <!-- Divider -->
+      <tr><td style="padding:4px 40px 20px"><hr style="border:none;border-top:1px solid #e2e8f0;margin:0" /></td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
+          Questions? Call us at <strong>${d.companyPhone}</strong>. · Quote #${d.quoteNumber}<br />
           <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
         </p>
       </td></tr>`
