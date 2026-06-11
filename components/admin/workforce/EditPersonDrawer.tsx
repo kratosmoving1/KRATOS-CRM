@@ -122,11 +122,17 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
     setSaving(false)
   }
 
-  async function handleSendInvite() {
-    if (!email.trim()) { setError('Add an email address first, then save, before sending the invite.'); return }
+  async function handleSendInvite(method: 'email' | 'sms') {
+    if (method === 'email' && !email.trim()) { setError('Add an email address first, then save before sending.'); return }
+    if (method === 'sms' && !phone.trim()) { setError('Add a phone number first, then save before sending via SMS.'); return }
+    if (method === 'sms' && !email.trim()) { setError('An email is required to create the account even when inviting via SMS.'); return }
     setSendingInvite(true)
     setError(null)
-    const res = await fetch(`/api/admin/workforce/people/${person.id}/invite`, { method: 'POST' })
+    const res = await fetch(`/api/admin/workforce/people/${person.id}/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method }),
+    })
     const j = await res.json().catch(() => ({}))
     if (res.ok) {
       setInviteSent(true)
@@ -246,21 +252,34 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
                 />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleSendInvite}
-              disabled={sendingInvite}
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60 transition-colors"
-            >
-              {sendingInvite
-                ? <><Loader2 size={12} className="animate-spin" /> Sending...</>
-                : inviteSent
-                  ? <><CheckCircle2 size={12} className="text-green-400" /> Sent — click to resend</>
-                  : <><Send size={12} /> {hasAppAccess ? 'Resend App Invite' : 'Send App Invite'}</>
-              }
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleSendInvite('email')}
+                disabled={sendingInvite}
+                className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60 transition-colors"
+              >
+                {sendingInvite
+                  ? <><Loader2 size={12} className="animate-spin" /> Sending...</>
+                  : inviteSent
+                    ? <><CheckCircle2 size={12} className="text-green-400" /> Sent — resend email</>
+                    : <><Send size={12} /> {hasAppAccess ? 'Resend via Email' : 'Send via Email'}</>
+                }
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSendInvite('sms')}
+                disabled={sendingInvite}
+                className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                {sendingInvite
+                  ? <><Loader2 size={12} className="animate-spin" /> Sending...</>
+                  : <><Send size={12} /> {hasAppAccess ? 'Resend via SMS' : 'Send via SMS'}</>
+                }
+              </button>
+            </div>
             <p className="text-[11px] text-slate-400">
-              Sends a login link to the crew member&apos;s email. They set their own password and log into the Kratos Crew app.
+              Sends email + temp password to the crew member. They log into the Kratos Crew app at kratos-crm.vercel.app/crew/login.
             </p>
           </div>
 
