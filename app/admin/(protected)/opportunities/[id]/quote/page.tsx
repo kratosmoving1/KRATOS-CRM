@@ -123,10 +123,13 @@ function applyMerge(text: string, opp: OppDetail): string {
 
 function formatDate(d: string | null | undefined) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+  // Append T12:00:00 for date-only strings to avoid UTC-offset off-by-one
+  const iso = d.length === 10 ? d + 'T12:00:00' : d
+  return new Date(iso).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 function formatDateShort(d: string) {
-  return new Date(d).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+  const iso = d.length === 10 ? d + 'T12:00:00' : d
+  return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function formatDatetime(d: string) {
   return new Date(d).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -404,15 +407,12 @@ export default function OpportunityDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Move date inline edit (Information card modal)
-  const [showDateEdit, setShowDateEdit] = useState(false)
+  // Reschedule confirmation modal
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [editingDate, setEditingDate] = useState('')
   const [editingTbd, setEditingTbd] = useState(false)
+  const [sendRescheduleNotif, setSendRescheduleNotif] = useState(true)
   const [savingDate, setSavingDate] = useState(false)
-
-  // Date pill inline edit (Estimate tab job summary row)
-  const [editingPillDate, setEditingPillDate] = useState(false)
-  const [savingPillDate, setSavingPillDate] = useState(false)
 
   // Address edit modal
   const [addressEditData, setAddressEditData] = useState<EditAddressData | null>(null)
@@ -590,7 +590,8 @@ export default function OpportunityDetailPage() {
     if (!opp) return
     setEditingDate(opp.service_date ?? '')
     setEditingTbd(!opp.service_date)
-    setShowDateEdit(true)
+    setSendRescheduleNotif(true)
+    setShowRescheduleModal(true)
   }
 
   async function saveDateEdit() {
@@ -600,46 +601,21 @@ export default function OpportunityDetailPage() {
       const res = await fetch(`/api/admin/opportunities/${id}/move-date`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceDate: editingTbd ? null : editingDate, tbd: editingTbd }),
+        body: JSON.stringify({
+          serviceDate: editingTbd ? null : editingDate,
+          tbd: editingTbd,
+          sendEmail: sendRescheduleNotif,
+        }),
       })
       const json = await res.json()
       if (!res.ok) { toast.error(json.error ?? 'Failed to save date'); return }
       setOpp(p => p ? { ...p, service_date: json.service_date } : p)
-      setShowDateEdit(false)
+      setShowRescheduleModal(false)
       toast.success('Move date updated.')
     } catch {
       toast.error('Network error — please try again')
     } finally {
       setSavingDate(false)
-    }
-  }
-
-  async function commitPillDate(newDate: string) {
-    if (!opp) return
-    const currentDate = opp.service_date ?? ''
-    if (!newDate || newDate === currentDate) {
-      setEditingPillDate(false)
-      return
-    }
-    setSavingPillDate(true)
-    try {
-      const res = await fetch(`/api/admin/opportunities/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ service_date: newDate }),
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(j.error || 'Failed to update date')
-        return
-      }
-      setOpp(p => p ? { ...p, service_date: j.service_date } : p)
-      toast.success('Move date updated.')
-    } catch {
-      toast.error('Network error — please try again')
-    } finally {
-      setSavingPillDate(false)
-      setEditingPillDate(false)
     }
   }
 
@@ -2223,29 +2199,14 @@ export default function OpportunityDetailPage() {
                     {/* Bottom row: date pill + est charges */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        {editingPillDate ? (
-                          <input
-                            type="date"
-                            defaultValue={opp.service_date ?? ''}
-                            autoFocus
-                            disabled={savingPillDate}
-                            onBlur={(e) => { commitPillDate(e.target.value) }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') setEditingPillDate(false)
-                              if (e.key === 'Enter') commitPillDate((e.target as HTMLInputElement).value)
-                            }}
-                            className="px-3 py-1 rounded-md border border-orange-400 ring-2 ring-orange-100 text-xs text-slate-900 focus:outline-none"
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setEditingPillDate(true)}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"
-                          >
-                            <Calendar size={12} />
-                            {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'} @ TBD
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={openDateEdit}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                        >
+                          <Calendar size={12} />
+                          {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'} @ TBD
+                        </button>
                       </div>
                       <span className="text-xs font-semibold text-slate-700">
                         Est. Moving Charges{' '}
@@ -2550,7 +2511,7 @@ export default function OpportunityDetailPage() {
                   </div>
                   <InfoRow label="Source" value={opp.lead_source?.name ?? '—'} />
                   <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
-                  <InfoRow label="Move date" value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} />
+                  <InfoRow label="Move date" value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} editable onClick={openDateEdit} />
                   <InfoRow label="Move size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
                 </div>
 
@@ -2934,6 +2895,67 @@ export default function OpportunityDetailPage() {
         onClose={() => setPreviewOpen(false)}
         onRefresh={() => { setPreviewOpen(false); setDocsPanelOpen(true) }}
       />
+
+      {showRescheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !savingDate && setShowRescheduleModal(false)} />
+          <div className="relative w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+            <h3 className="font-semibold text-slate-900">Change Move Date</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Current: <span className="font-medium text-slate-700">{opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}</span>
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">New Date</label>
+                <input
+                  type="date"
+                  value={editingTbd ? '' : editingDate}
+                  disabled={editingTbd || savingDate}
+                  onChange={e => setEditingDate(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-kratos focus:outline-none focus:ring-1 focus:ring-kratos disabled:bg-slate-50 disabled:text-slate-400"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingTbd}
+                  onChange={e => setEditingTbd(e.target.checked)}
+                  disabled={savingDate}
+                  className="rounded border-slate-300 text-kratos focus:ring-kratos"
+                />
+                <span className="text-sm text-slate-700">Set to TBD (no confirmed date)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sendRescheduleNotif}
+                  onChange={e => setSendRescheduleNotif(e.target.checked)}
+                  disabled={savingDate}
+                  className="rounded border-slate-300 text-kratos focus:ring-kratos"
+                />
+                <span className="text-sm text-slate-700">Notify customer by email</span>
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowRescheduleModal(false)}
+                disabled={savingDate}
+                className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveDateEdit}
+                disabled={savingDate || (!editingTbd && !editingDate)}
+                className="flex items-center gap-2 rounded-lg bg-kratos px-4 py-2 text-sm font-semibold text-white hover:bg-kratos/90 disabled:opacity-50"
+              >
+                {savingDate && <Loader2 size={14} className="animate-spin" />}
+                Confirm Reschedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

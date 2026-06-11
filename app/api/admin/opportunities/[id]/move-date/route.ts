@@ -63,7 +63,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const canUpdateAssigned = opp.sales_agent_id === user.id && hasPermission(profile?.role, 'lead:update_assigned')
   if (!canUpdateAny && !canUpdateAssigned) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { serviceDate, tbd } = await req.json()
+  const body = await req.json()
+  const { serviceDate, tbd } = body
+  const sendEmailFlag: boolean = body.sendEmail !== false
   const newDate = tbd ? null : (serviceDate || null)
 
   // Only send reschedule email if the date actually changed
@@ -100,9 +102,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     userAgent: req.headers.get('user-agent'),
   })
 
-  // Send reschedule email when date changes on an active booking
+  // Send reschedule email when date changes on an active booking (if agent opted in)
   const activeStatuses = ['opportunity', 'booked', 'completed']
-  if (dateChanged && activeStatuses.includes(opp.status ?? '')) {
+  if (dateChanged && sendEmailFlag && activeStatuses.includes(opp.status ?? '')) {
     const customerRow = one(opp.customer as CustomerRow)
     const agentRow    = one(opp.agent as AgentRow)
     const custEmail   = customerRow?.email ?? null

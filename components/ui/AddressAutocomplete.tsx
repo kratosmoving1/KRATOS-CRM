@@ -31,7 +31,7 @@ function getPlaces(): Promise<google.maps.PlacesLibrary | null> {
       console.error('[AddressAutocomplete] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set');
       return Promise.resolve(null);
     }
-    setOptions({ key: apiKey, v: 'weekly' });
+    setOptions({ key: apiKey, v: 'quarterly' });
     loadPromise = importLibrary('places') as Promise<google.maps.PlacesLibrary>;
   }
   return loadPromise!;
