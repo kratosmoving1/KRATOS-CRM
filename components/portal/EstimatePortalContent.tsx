@@ -110,29 +110,32 @@ function replaceMergeTags(text: string, vars: Record<string, string>): string {
 
 // Render header notes with bold-orange customer name, orange "Accept Estimate", and styled dividers
 function renderRichNotes(text: string, vars: Record<string, string>): React.ReactNode {
-  // Mark customer_name before generic replacement so we can style it
   const marked = text.replace(/\{\{\s*customer_name\s*\}\}/gi, '\x00CNAME\x00')
   const replaced = replaceMergeTags(marked, vars)
+  const lines = replaced.split('\n')
 
-  return replaced.split('\n').map((line, lineIdx) => {
-    // Lines that look like a divider (——, --, or only dashes/unicode dashes)
+  return lines.map((line, lineIdx) => {
     if (/^[-—–\s]{3,}$/.test(line.trim())) {
-      return <div key={lineIdx} className="my-3 h-px bg-kratos opacity-60" />
+      return <div key={lineIdx} className="my-4 h-px bg-kratos opacity-50 w-16" />
     }
     if (line.trim() === '') {
-      return <div key={lineIdx} className="h-2" />
+      return <div key={lineIdx} className="h-3" />
     }
 
-    // Split line on customer name marker and "Accept Estimate"
     const parts = line.split(/(\x00CNAME\x00|Accept Estimate)/g)
+
+    // First line with the customer name gets larger treatment
+    const isFirstLine = lineIdx === lines.findIndex(l => l.includes('\x00CNAME\x00') || (l.trim() && !/^[-—–\s]{3,}$/.test(l.trim())))
+    const isNameLine = line.includes('\x00CNAME\x00')
+
     return (
-      <p key={lineIdx} className="leading-relaxed">
+      <p key={lineIdx} className={isNameLine && isFirstLine ? 'text-[17px] font-semibold leading-snug mb-1' : 'leading-relaxed text-slate-700'}>
         {parts.map((part, i) => {
           if (part === '\x00CNAME\x00') {
             return <strong key={i} className="font-bold text-kratos">{vars.customer_name || 'Customer'}</strong>
           }
           if (part === 'Accept Estimate') {
-            return <span key={i} className="font-semibold text-kratos">Accept Estimate</span>
+            return <span key={i} className="font-semibold text-kratos underline decoration-kratos/40 underline-offset-2">Accept Estimate</span>
           }
           return <span key={i}>{part}</span>
         })}
@@ -347,8 +350,8 @@ export default function EstimatePortalContent({
       )}
 
       {/* ── Dark hero ────────────────────────────────────────────────────────── */}
-      <div className="bg-[#0a0a0a] text-white">
-        <div className="mx-auto max-w-5xl px-6 py-10 sm:py-14">
+      <div className="bg-[#0a0a0a] text-white pb-10">
+        <div className="mx-auto max-w-5xl px-6 pt-10 sm:pt-14">
           <div className="flex items-start justify-between gap-8">
 
             {/* Left: logo + quote info */}
@@ -356,9 +359,9 @@ export default function EstimatePortalContent({
               <Image
                 src={cfg?.logo_url ?? '/logo.png'}
                 alt={companyName}
-                width={120}
-                height={120}
-                className="object-contain mb-6"
+                width={72}
+                height={72}
+                className="object-contain mb-3"
               />
 
               <div className="flex items-center gap-3 mb-1.5">
@@ -383,8 +386,8 @@ export default function EstimatePortalContent({
             {/* Right: hourly rate + info lines */}
             {hourlyRate > 0 && (
               <div className="flex-shrink-0 text-right hidden sm:block">
-                <p className="text-5xl font-bold text-white leading-none mb-3">
-                  {formatCurrency(hourlyRate)}<span className="text-2xl text-slate-400 font-normal">/hour</span>
+                <p className="text-4xl font-semibold text-white leading-none mb-3">
+                  {formatCurrency(hourlyRate)}<span className="text-lg text-slate-400 font-normal">/hour</span>
                 </p>
                 <div className="space-y-1">
                   {heroInfoLines.map((line, i) => (
@@ -398,8 +401,8 @@ export default function EstimatePortalContent({
           {/* Mobile: hourly rate below logo/title */}
           {hourlyRate > 0 && (
             <div className="mt-6 sm:hidden">
-              <p className="text-4xl font-bold text-white">
-                {formatCurrency(hourlyRate)}<span className="text-xl text-slate-400 font-normal">/hour</span>
+              <p className="text-3xl font-semibold text-white">
+                {formatCurrency(hourlyRate)}<span className="text-lg text-slate-400 font-normal">/hour</span>
               </p>
               <div className="mt-2 space-y-0.5">
                 {heroInfoLines.map((line, i) => (
@@ -411,10 +414,10 @@ export default function EstimatePortalContent({
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-5 space-y-5 pb-6">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 space-y-5 pb-6 -mt-5 relative z-10">
 
         {/* ── Info panel ───────────────────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl bg-white shadow-md">
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
             <InfoPanel
               title="Customer Support"
@@ -447,7 +450,7 @@ export default function EstimatePortalContent({
 
         {/* ── Header notes (rich rendered) ─────────────────────────────────── */}
         {cfg?.header_notes && (
-          <div className="rounded-lg bg-white px-6 py-6 shadow-sm text-sm text-slate-800">
+          <div className="rounded-xl bg-white px-7 py-7 shadow-sm text-[15px] leading-relaxed text-slate-800">
             {renderRichNotes(cfg.header_notes, mergeVars)}
           </div>
         )}
@@ -795,14 +798,14 @@ function InfoPanel({ title, lines }: { title: string; lines: string[] }) {
   const nonEmpty = lines.filter(Boolean)
   return (
     <div className="p-5">
-      <p className="text-xs font-bold text-slate-800 mb-2">{title}</p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{title}</p>
       {nonEmpty.map((line, i) => (
         <p
           key={i}
           className={`leading-snug ${
             i === 0
               ? 'text-sm font-semibold text-slate-900'
-              : 'text-xs text-slate-500 mt-0.5'
+              : 'text-xs text-slate-500 mt-1'
           }`}
         >
           {line}
