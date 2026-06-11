@@ -249,13 +249,13 @@ export function EditPersonDrawer({ person, roles, locations, statuses, tiers, on
             <button
               type="button"
               onClick={handleSendInvite}
-              disabled={sendingInvite || inviteSent}
+              disabled={sendingInvite}
               className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60 transition-colors"
             >
               {sendingInvite
                 ? <><Loader2 size={12} className="animate-spin" /> Sending...</>
                 : inviteSent
-                  ? <><CheckCircle2 size={12} /> Invite sent</>
+                  ? <><CheckCircle2 size={12} className="text-green-400" /> Sent — click to resend</>
                   : <><Send size={12} /> {hasAppAccess ? 'Resend App Invite' : 'Send App Invite'}</>
               }
             </button>
