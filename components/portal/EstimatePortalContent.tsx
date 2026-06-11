@@ -486,31 +486,49 @@ export default function EstimatePortalContent({
           <div className="space-y-1.5 text-sm">
             {laborCharge && hourlyRate > 0 ? (
               <>
-                {laborHours > 0    && <SummaryRow label="Estimated labour"       value={`${laborHours}h`} />}
-                {travelHours > 0   && <SummaryRow label="Estimated travel"       value={`${travelHours}h`} />}
-                {billableHours > 0 && <SummaryRow label="Total billable hours"   value={`${billableHours}h`} bold />}
+                {/* Package name + composition as the primary line item */}
+                <div className="mb-1">
+                  <SummaryRow
+                    label={`${packageName} (${numTrucks} Truck${numTrucks !== 1 ? 's' : ''} & ${numCrew} Movers)`}
+                    value={formatCurrencyFull(laborCharge.total)}
+                    bold
+                  />
+                  {billableHours > 0 && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {billableHours}h @ {formatCurrencyFull(hourlyRate)}/hr
+                      {travelHours > 0 && ` (incl. ${travelHours}h travel)`}
+                    </p>
+                  )}
+                </div>
                 {supplementaryCharges.length > 0 && <div className="border-t border-slate-100 my-2" />}
               </>
             ) : null}
             {supplementaryCharges.map((c, i) => (
               <div key={i}>
-                <SummaryRow label={c.name} value={formatCurrency(c.total)} />
+                <SummaryRow label={c.name} value={formatCurrencyFull(c.total)} />
                 {c.discount_amount > 0 && (
-                  <p className="text-xs text-green-700 ml-2 mt-0.5">Discount: − {formatCurrency(c.discount_amount)}</p>
+                  <p className="text-xs text-green-700 ml-2 mt-0.5">Discount: − {formatCurrencyFull(c.discount_amount)}</p>
                 )}
               </div>
             ))}
             <div className="border-t border-slate-100 mt-3 pt-3 space-y-1.5">
-              <SummaryRow label="Subtotal"             value={formatCurrency(subtotal)} />
-              {discounts > 0 && <SummaryRow label="Discounts"        value={`− ${formatCurrency(discounts)}`} />}
-              {materialsSubtotal > 0 && <SummaryRow label="Moving materials" value={formatCurrency(materialsSubtotal)} />}
-              <SummaryRow label="HST (13%)"            value={formatCurrency(grandHst)} />
+              <SummaryRow label="Subtotal"          value={formatCurrencyFull(subtotal)} />
+              {discounts > 0 && <SummaryRow label="Discounts"     value={`− ${formatCurrencyFull(discounts)}`} />}
+              {materialsSubtotal > 0 && <SummaryRow label="Moving materials" value={formatCurrencyFull(materialsSubtotal)} />}
+              <SummaryRow label="HST (13%)"         value={formatCurrencyFull(grandHst)} />
               <div className="border-t border-slate-100 pt-2">
-                <SummaryRow label="Estimated total"    value={formatCurrency(grandTotal)} bold />
+                <SummaryRow label="Estimated total" value={formatCurrencyFull(grandTotal)} bold />
               </div>
             </div>
           </div>
         </section>
+
+        {/* ── Kratos package notes — right under estimate breakdown ─────── */}
+        {cfg?.footer_notes && (
+          <div className="rounded-lg bg-white px-6 py-5 shadow-sm text-sm text-slate-600">
+            {renderRichNotes(cfg.footer_notes, mergeVars)}
+          </div>
+        )}
 
         {/* ── Moving materials ─────────────────────────────────────────────── */}
         {showMaterials && (
@@ -523,7 +541,7 @@ export default function EstimatePortalContent({
                 <h2 className="text-sm font-bold text-slate-900">Moving Materials</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {materialsSubtotal > 0
-                    ? `${formatCurrency(materialsSubtotal)} in selected materials`
+                    ? `${formatCurrencyFull(materialsSubtotal)} in selected materials`
                     : 'Optional boxes, tape, and packing supplies'}
                 </p>
               </div>
@@ -615,13 +633,6 @@ export default function EstimatePortalContent({
               ))}
             </div>
           </section>
-        )}
-
-        {/* ── Footer notes ─────────────────────────────────────────────────── */}
-        {cfg?.footer_notes && (
-          <div className="rounded-lg bg-white px-6 py-5 shadow-sm text-sm text-slate-600">
-            {renderRichNotes(cfg.footer_notes, mergeVars)}
-          </div>
         )}
 
         {/* ── Content blocks ───────────────────────────────────────────────── */}
