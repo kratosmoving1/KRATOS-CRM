@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     .from('opportunities')
     .select('id, opportunity_number, deposit_amount, total_amount, customer_id, customer:customers!customer_id(full_name, email)')
     .eq('id', link.opportunity_id)
-    .eq('is_deleted', false)
+    .neq('is_deleted', true)
     .single()
 
   if (!opp) return NextResponse.json({ error: 'Estimate not found.' }, { status: 404 })

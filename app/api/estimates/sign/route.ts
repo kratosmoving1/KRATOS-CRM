@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendEmail } from '@/lib/email/sendEmail'
+import { buildBookingConfirmationHtml } from '@/lib/email/estimateEmailHtml'
+import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
@@ -32,16 +35,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, alreadyAccepted: true })
   }
 
-  // Resolve customer name from the opportunity
-  type CustomerRow = { full_name: string }[] | { full_name: string } | null
+  // Resolve customer + move details from the opportunity
+  type CustomerRow = { full_name: string; email: string | null }[] | { full_name: string; email: string | null } | null
+  type AgentRow    = { full_name: string | null }[] | { full_name: string | null } | null
   const { data: opp } = await supabase
     .from('opportunities')
-    .select('customer:customers!customer_id(full_name)')
+    .select('opportunity_number, service_type, service_date, origin_address_line1, origin_city, origin_province, dest_address_line1, dest_city, dest_province, customer:customers!customer_id(full_name, email), agent:profiles!sales_agent_id(full_name)')
     .eq('id', link.opportunity_id)
     .single()
 
   const rawCustomer = opp?.customer as CustomerRow
-  const customerName = (Array.isArray(rawCustomer) ? rawCustomer[0]?.full_name : rawCustomer?.full_name) ?? 'Customer'
+  const rawAgent    = opp?.agent as AgentRow
+  const customerRow = Array.isArray(rawCustomer) ? rawCustomer[0] ?? null : rawCustomer
+  const agentRow    = Array.isArray(rawAgent)    ? rawAgent[0] ?? null    : rawAgent
+  const customerName  = customerRow?.full_name ?? 'Customer'
+  const customerEmail = customerRow?.email ?? null
 
   const ipAddress = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? null
   const userAgent = req.headers.get('user-agent') ?? null
@@ -75,6 +83,39 @@ export async function POST(req: NextRequest) {
     .from('opportunities')
     .update({ accepted_at: new Date().toISOString() })
     .eq('id', link.opportunity_id)
+
+  // Send booking confirmation email (fire-and-forget — never block the response)
+  if (customerEmail) {
+    const companyPhone = process.env.COMPANY_PHONE ?? '(800) 321-3222'
+    const moveDateLabel = opp?.service_date
+      ? new Date(opp.service_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+      : 'To be confirmed'
+    const serviceTypeLabel = String(opp?.service_type ?? 'Moving').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    const origin = [opp?.origin_address_line1, opp?.origin_city, opp?.origin_province].filter(Boolean).join(', ')
+    const destination = [opp?.dest_address_line1, opp?.dest_city, opp?.dest_province].filter(Boolean).join(', ')
+    const firstName = customerName.trim().split(/\s+/)[0] ?? customerName
+    const agentFirstName = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
+    const quoteNumber = formatQuoteNumber(opp?.opportunity_number ?? '')
+    const html = buildBookingConfirmationHtml({
+      customerFirstName: firstName,
+      customerFullName: customerName,
+      quoteNumber,
+      moveDate: moveDateLabel,
+      serviceType: serviceTypeLabel,
+      originAddress: origin,
+      destinationAddress: destination,
+      companyPhone,
+      agentFirstName,
+    })
+    sendEmail({
+      to: customerEmail,
+      subject: `Your Move is Confirmed — Kratos Moving #${quoteNumber}`,
+      text: `Hi ${firstName}, your Kratos Moving estimate has been accepted and your move date is secured. A coordinator will be in touch shortly. — Kratos Moving`,
+      html,
+      fromName: 'Kratos Moving',
+      fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
+    }).catch(err => console.error('[sign] confirmation email failed:', err))
+  }
 
   return NextResponse.json({ ok: true })
 }

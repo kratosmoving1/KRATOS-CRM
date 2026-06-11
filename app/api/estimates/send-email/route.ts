@@ -8,6 +8,7 @@ import { getOrCreateEstimatePortalLink, portalEstimateUrl } from '@/lib/estimate
 import { emailConfigError, sendEmail } from '@/lib/email/sendEmail'
 import { renderTemplate } from '@/lib/ringcentral/client'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
+import { buildEstimateEmailHtml } from '@/lib/email/estimateEmailHtml'
 import type { Json } from '@/types/database'
 
 const COMPANY_PHONE = '(800) 321-3222'
@@ -181,18 +182,37 @@ export async function POST(req: NextRequest) {
     quote_number: formatQuoteNumber(opportunity.opportunity_number),
   }
 
-  const { data: template } = await supabase
-    .from('communication_templates')
-    .select('*')
-    .eq('channel', 'email')
-    .eq('trigger', 'estimate_ready')
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  const [templateResult, badgesResult] = await Promise.all([
+    supabase
+      .from('communication_templates')
+      .select('*')
+      .eq('channel', 'email')
+      .eq('trigger', 'estimate_ready')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('customer_portal_badges')
+      .select('name, image_url, position')
+      .eq('is_deleted', false)
+      .order('position', { ascending: true }),
+  ])
+  const template = templateResult.data
+  const badges = (badgesResult.data ?? []) as Array<{ name: string; image_url: string | null }>
 
-  const subject = await renderTemplate(template?.subject ?? 'Your Kratos Moving estimate is ready', vars)
+  const subject = await renderTemplate(
+    template?.subject ?? 'Your Kratos Moving Estimate Is Ready — Done as Promised!',
+    vars,
+  )
   const text = customMessage ?? await renderTemplate(template?.body || DEFAULT_ESTIMATE_EMAIL_BODY, vars)
+
+  const serviceTypeLabel = String(opportunity.service_type ?? 'Moving')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+  const moveDateLabel = opportunity.service_date
+    ? new Date(opportunity.service_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+    : 'To be confirmed'
 
   await supabase
     .from('opportunities')
@@ -202,11 +222,25 @@ export async function POST(req: NextRequest) {
   try {
     const sender = senderForProfile(profile?.email)
     if (!sender.fromEmail) throw new Error(emailConfigError())
+    const htmlEmail = buildEstimateEmailHtml({
+      customerFirstName: vars.customer_first_name,
+      customerFullName: vars.customer_full_name,
+      agentFirstName: vars.agent_first_name,
+      quoteNumber: vars.quote_number,
+      moveDate: moveDateLabel,
+      serviceType: serviceTypeLabel,
+      originAddress: vars.origin_address,
+      destinationAddress: vars.destination_address,
+      estimateLink,
+      depositAmount: vars.deposit_amount,
+      companyPhone: vars.company_phone,
+      badges,
+    })
     const result = await sendEmail({
       to: recipientEmail,
       subject,
       text,
-      html: htmlFromText(text),
+      html: htmlEmail,
       fromName: sender.fromName,
       fromEmail: sender.fromEmail,
       replyTo: sender.replyTo,
