@@ -107,13 +107,24 @@ export async function POST(req: NextRequest) {
       companyPhone,
       agentFirstName,
     })
+    const confirmSubject = `Your Move is Confirmed — Kratos Moving #${quoteNumber}`
+    const confirmText = `Hi ${firstName}, your Kratos Moving estimate has been accepted and your move date is secured. A coordinator will be in touch shortly. — Kratos Moving`
     sendEmail({
       to: customerEmail,
-      subject: `Your Move is Confirmed — Kratos Moving #${quoteNumber}`,
-      text: `Hi ${firstName}, your Kratos Moving estimate has been accepted and your move date is secured. A coordinator will be in touch shortly. — Kratos Moving`,
+      subject: confirmSubject,
+      text: confirmText,
       html,
       fromName: 'Kratos Moving',
       fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
+    }).then(() => {
+      void supabase.from('communications').insert({
+        opportunity_id: link.opportunity_id,
+        type: 'email',
+        direction: 'outbound',
+        subject: confirmSubject,
+        body: confirmText,
+        email_to: customerEmail,
+      })
     }).catch(err => console.error('[sign] confirmation email failed:', err))
   }
 

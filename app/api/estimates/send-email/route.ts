@@ -254,9 +254,6 @@ export async function POST(req: NextRequest) {
       subject,
       body: text,
       email_to: recipientEmail,
-      provider: result.provider,
-      provider_message_id: result.id ?? null,
-      status: 'sent',
       created_by: user.id,
     })
 
@@ -298,11 +295,8 @@ export async function POST(req: NextRequest) {
       type: 'email',
       direction: 'outbound',
       subject,
-      body: text,
+      body: `[FAILED] ${message}\n\n${text}`,
       email_to: recipientEmail,
-      provider: process.env.EMAIL_PROVIDER ?? null,
-      status: 'failed',
-      error_message: message,
       created_by: user.id,
     })
     await logAuditEvent({
