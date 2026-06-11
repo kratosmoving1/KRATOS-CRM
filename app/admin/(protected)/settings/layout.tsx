@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Tag, PlugZap, FileText, Building2, CalendarCog, BadgeDollarSign,
   Users2, Megaphone, ClipboardList, Truck, ShieldAlert, BoxSelect,
-  Warehouse, PieChart, Cog, BookOpen,
+  Warehouse, PieChart, Cog, BookOpen, Mail,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
@@ -32,11 +32,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Comms & Docs',
     items: [
-      { label: 'Templates',        href: '/admin/settings/templates',  icon: FileText },
-      { label: 'Documents',        href: '/admin/settings/documents',  icon: BookOpen },
-      { label: 'Integrations',     href: '/admin/settings/integrations', icon: PlugZap },
-      { label: 'Customer Portal',  href: '/admin/settings/portal',     icon: Users2 },
-      { label: 'Dispatch',         href: '/admin/settings/dispatch',   icon: Truck },
+      { label: 'Templates',        href: '/admin/settings/templates',      icon: FileText },
+      { label: 'Communications',   href: '/admin/settings/communications', icon: Mail },
+      { label: 'Documents',        href: '/admin/settings/documents',      icon: BookOpen },
+      { label: 'Integrations',     href: '/admin/settings/integrations',   icon: PlugZap },
+      { label: 'Customer Portal',  href: '/admin/settings/portal',         icon: Users2 },
+      { label: 'Dispatch',         href: '/admin/settings/dispatch',       icon: Truck },
     ],
   },
   {

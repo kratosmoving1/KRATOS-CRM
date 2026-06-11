@@ -6,6 +6,20 @@ export interface CancellationEmailData {
   portalLink?: string
 }
 
+export interface RescheduleEmailData {
+  customerFirstName: string
+  customerFullName: string
+  quoteNumber: string
+  oldMoveDate: string
+  newMoveDate: string
+  serviceType: string
+  originAddress: string
+  destinationAddress: string
+  companyPhone: string
+  agentFirstName?: string
+  portalLink?: string
+}
+
 export interface EstimateEmailData {
   customerFirstName: string
   customerFullName: string
@@ -235,6 +249,80 @@ export function buildBookingConfirmationHtml(d: BookingConfirmationData): string
           ${d.agentFirstName ? `Your coordinator: <strong>${d.agentFirstName}</strong> · ` : ''}
           Estimate #${d.quoteNumber}<br />
           <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
+        </p>
+      </td></tr>`
+
+  return emailWrapper(content)
+}
+
+export function buildRescheduleEmailHtml(d: RescheduleEmailData): string {
+  const content = `
+      <!-- Header strip -->
+      <tr><td style="background:${KRATOS_DARK};padding:28px 40px">
+        <img src="https://kratos-crm.vercel.app/logo.png" alt="Kratos Moving" height="48" style="height:48px;width:auto" />
+      </td></tr>
+
+      <!-- Title -->
+      <tr><td align="center" style="padding:36px 40px 8px">
+        <h1 style="margin:0;font-size:24px;font-weight:bold;color:${KRATOS_DARK}">Your Move Date Has Been Updated</h1>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="padding:16px 40px 0;font-size:15px;color:${KRATOS_DARK};line-height:1.7">
+        <p style="margin:0 0 16px">Hi <strong>${d.customerFirstName}</strong>,</p>
+        <p style="margin:0 0 16px">
+          We're writing to let you know that the date for your upcoming Kratos Moving job has been updated.
+          Please review the new details below and reach out if you have any questions.
+        </p>
+      </td></tr>
+
+      <!-- Divider -->
+      <tr><td style="padding:4px 40px 20px"><hr style="border:none;border-top:1px solid #e2e8f0;margin:0" /></td></tr>
+
+      <!-- Move details -->
+      <tr><td style="padding:0 40px 24px">
+        <p style="margin:0 0 12px;font-size:15px;font-weight:bold;color:${KRATOS_ORANGE}">Updated Move Details:</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;width:140px"><strong>Customer</strong></td>
+            <td style="padding:6px 0;color:${KRATOS_DARK}">${d.customerFullName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b"><strong>Previous Date</strong></td>
+            <td style="padding:6px 0;color:#94a3b8;text-decoration:line-through">${d.oldMoveDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b"><strong>New Date</strong></td>
+            <td style="padding:6px 0;color:${KRATOS_DARK};font-weight:bold">${d.newMoveDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b"><strong>Service Type</strong></td>
+            <td style="padding:6px 0;color:${KRATOS_DARK}">${d.serviceType || 'Moving'}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b"><strong>Origin</strong></td>
+            <td style="padding:6px 0;color:${KRATOS_DARK}">${d.originAddress || 'See estimate'}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b"><strong>Destination</strong></td>
+            <td style="padding:6px 0;color:${KRATOS_DARK}">${d.destinationAddress || 'See estimate'}</td>
+          </tr>
+        </table>
+      </td></tr>
+
+      ${d.portalLink ? `
+      <!-- Portal CTA -->
+      <tr><td align="center" style="padding:8px 40px 32px">
+        <a href="${d.portalLink}" style="display:inline-block;background:${KRATOS_ORANGE};color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 40px;border-radius:6px;letter-spacing:0.02em">
+          View Your Estimate Portal
+        </a>
+      </td></tr>` : ''}
+
+      <!-- Footer -->
+      <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6">
+          Questions? Call us at <strong>${d.companyPhone}</strong>.${d.agentFirstName ? ` Your coordinator: <strong>${d.agentFirstName}</strong>.` : ''}<br />
+          Quote #${d.quoteNumber} · <strong style="color:${KRATOS_ORANGE}">Done As Promised.</strong>
         </p>
       </td></tr>`
 
