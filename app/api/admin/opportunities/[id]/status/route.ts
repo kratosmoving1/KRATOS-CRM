@@ -40,6 +40,7 @@ export async function POST(
   const cancellationReason: string | undefined = typeof body.cancellationReason === 'string' && body.cancellationReason.trim()
     ? body.cancellationReason.trim()
     : undefined
+  const sendEmailNotification: boolean = body.sendEmail !== false
 
   if (!newStatus) return NextResponse.json({ error: 'newStatus is required' }, { status: 400 })
 
@@ -95,7 +96,7 @@ export async function POST(
   const agentFirst    = agentRow?.full_name?.trim().split(/\s+/)[0] ?? ''
   const quoteNumber   = formatQuoteNumber(opp.opportunity_number)
 
-  if (customerEmail) {
+  if (customerEmail && sendEmailNotification) {
     const moveDateLabel = opp.service_date
       ? new Date(opp.service_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
       : 'To be confirmed'

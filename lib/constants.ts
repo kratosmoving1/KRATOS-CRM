@@ -152,7 +152,7 @@ export type OppStatus = typeof OPP_STATUSES[number]['value']
 
 export const STATUS_TRANSITIONS: Record<OppStatus, OppStatus[]> = {
   opportunity: ['booked', 'cancelled'],
-  booked:      ['completed', 'cancelled'],
+  booked:      ['completed', 'cancelled', 'opportunity'],
   completed:   ['closed', 'cancelled'],
   closed:      [],
   cancelled:   ['opportunity'],

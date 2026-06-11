@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       .from('opportunities')
       .select('id, sales_agent_id')
       .eq('id', opportunityId)
-      .eq('is_deleted', false)
+      .not('is_deleted', 'is', 'true')
       .single()
 
     if (error || !opportunity) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })

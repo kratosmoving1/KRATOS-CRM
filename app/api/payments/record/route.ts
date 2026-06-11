@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     .from('opportunities')
     .select('id, customer_id, sales_agent_id, total_amount')
     .eq('id', opportunityId)
-    .eq('is_deleted', false)
+    .not('is_deleted', 'is', 'true')
     .single()
 
   if (oppError || !opportunity) {

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     .from('opportunities')
     .select('*, customer:customers!customer_id(full_name, email, phone)')
     .eq('id', link.opportunity_id)
-    .eq('is_deleted', false)
+    .not('is_deleted', 'is', 'true')
     .single()
 
   if (!opp) return NextResponse.json({ error: 'Estimate not found' }, { status: 404 })

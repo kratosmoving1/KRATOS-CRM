@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowRight, ChevronDown, Copy, Eye, FileText, Loader2, Mail, MessageSquare, RotateCcw, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, Copy, Eye, FileText, Loader2, Mail, MessageSquare, RotateCcw, Undo2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/format'
 
@@ -46,20 +46,27 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
   const [loading, setLoading] = useState(false)
   const [smsStatus, setSmsStatus] = useState<SmsStatus | null>(null)
 
-  // Book confirmation modal
-  const [bookModalOpen, setBookModalOpen] = useState(false)
-
-  // Cancel confirmation modal
+  // Modal state
+  const [bookModalOpen,   setBookModalOpen]   = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
-  const [cancelReason, setCancelReason]       = useState('')
-
-  // Reopen confirmation modal
+  const [unbookModalOpen, setUnbookModalOpen] = useState(false)
   const [reopenModalOpen, setReopenModalOpen] = useState(false)
+
+  // Per-modal options
+  const [cancelReason,        setCancelReason]        = useState('')
+  const [bookNotify,          setBookNotify]          = useState(true)
+  const [cancelNotify,        setCancelNotify]        = useState(true)
+  const [unbookNotify,        setUnbookNotify]        = useState(false)
 
   const currentStatus = (opportunity.status ?? 'opportunity') as OppStatus
   const hasEmail = Boolean(opportunity.customer?.email)
   const hasPhone = Boolean(opportunity.customer?.phone)
   const smsReady = Boolean(smsStatus?.canSend && hasPhone)
+
+  const canBook   = currentStatus === 'opportunity'
+  const canUnbook = currentStatus === 'booked'
+  const canCancel = currentStatus === 'opportunity' || currentStatus === 'booked'
+  const canReopen = currentStatus === 'cancelled'
 
   useEffect(() => {
     fetch('/api/admin/sms/status')
@@ -154,20 +161,25 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
     }
   }
 
-  async function changeStatus(newStatus: OppStatus, cancellationReason?: string) {
+  async function changeStatus(newStatus: OppStatus, opts: { cancellationReason?: string; sendEmail?: boolean } = {}) {
     setLoading(true)
     try {
       const res = await fetch(`/api/admin/opportunities/${opportunity.id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newStatus, cancellationReason }),
+        body: JSON.stringify({
+          newStatus,
+          cancellationReason: opts.cancellationReason,
+          sendEmail: opts.sendEmail !== false,
+        }),
       })
       const data = await res.json()
-      if (!res.ok) { toast.error(data.error ?? `Unable to change status to ${newStatus}`); return }
+      if (!res.ok) { toast.error(data.error ?? `Unable to change status`); return }
       toast.success(
-        newStatus === 'booked'     ? 'Opportunity booked. Confirmation email sent.' :
-        newStatus === 'cancelled'  ? 'Opportunity cancelled. Email sent to customer.' :
-        newStatus === 'opportunity' ? 'Opportunity reopened.' :
+        newStatus === 'booked'      ? `Booked.${opts.sendEmail !== false ? ' Confirmation email sent.' : ''}` :
+        newStatus === 'cancelled'   ? `Cancelled.${opts.sendEmail !== false ? ' Cancellation email sent.' : ''}` :
+        newStatus === 'opportunity' && currentStatus === 'booked' ? 'Unbooked — moved back to Open.' :
+        newStatus === 'opportunity' ? 'Reopened.' :
         `Status changed to ${newStatus}.`
       )
       onStatusChange?.(newStatus)
@@ -182,10 +194,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
     toast.message(`${label} is coming soon.`)
     setMenuOpen(false)
   }
-
-  const canBook   = currentStatus === 'opportunity'
-  const canCancel = currentStatus === 'opportunity' || currentStatus === 'booked'
-  const canReopen = currentStatus === 'cancelled'
 
   return (
     <div className="relative inline-flex">
@@ -212,14 +220,27 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
               <Mail size={14} /> Send Estimate
             </button>
             <button onClick={openPreview} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview Estimate
+              <Eye size={14} /> Preview Estimate
             </button>
+
+            {(canBook || canUnbook || canCancel || canReopen) && (
+              <div className="border-t border-slate-100" />
+            )}
+
             {canBook && (
               <button
                 onClick={() => { setMenuOpen(false); setBookModalOpen(true) }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-green-700 hover:bg-green-50"
               >
                 <ArrowRight size={14} /> Book
+              </button>
+            )}
+            {canUnbook && (
+              <button
+                onClick={() => { setMenuOpen(false); setUnbookModalOpen(true) }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-amber-700 hover:bg-amber-50"
+              >
+                <Undo2 size={14} /> Unbook
               </button>
             )}
             {canCancel && (
@@ -238,6 +259,7 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                 <RotateCcw size={14} /> Reopen
               </button>
             )}
+
             <div className="border-t border-slate-100" />
             <button onClick={() => placeholder('Send Invoice')} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
               <FileText size={14} /> Send Invoice
@@ -249,33 +271,37 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
         </>
       )}
 
-      {/* Book confirmation modal */}
+      {/* Book modal */}
       {bookModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-slate-950/40" onClick={() => setBookModalOpen(false)} />
           <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-900">Book this opportunity?</h3>
             <p className="mt-2 text-sm text-slate-600">
-              This will mark the opportunity as <strong>Booked</strong> and send a booking confirmation email to{' '}
-              <strong>{opportunity.customer?.email ?? 'the customer'}</strong>.
+              Status will change to <strong>Booked</strong>.
             </p>
-            {!hasEmail && (
-              <p className="mt-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                No customer email on file — status will change but no email will be sent.
-              </p>
+            {hasEmail && (
+              <label className="mt-4 flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={bookNotify}
+                  onChange={e => setBookNotify(e.target.checked)}
+                  className="accent-kratos h-4 w-4"
+                />
+                <span className="text-sm text-slate-700">
+                  Send booking confirmation email to <strong>{opportunity.customer?.email}</strong>
+                </span>
+              </label>
             )}
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setBookModalOpen(false)}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-              >
+              <button onClick={() => setBookModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">
                 Cancel
               </button>
               <button
                 disabled={loading}
                 onClick={async () => {
                   setBookModalOpen(false)
-                  await changeStatus('booked')
+                  await changeStatus('booked', { sendEmail: bookNotify })
                 }}
                 className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
               >
@@ -287,15 +313,56 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
         </div>
       )}
 
-      {/* Cancel confirmation modal */}
+      {/* Unbook modal */}
+      {unbookModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-950/40" onClick={() => setUnbookModalOpen(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Unbook this opportunity?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Status will move back to <strong>Open</strong>.
+            </p>
+            {hasEmail && (
+              <label className="mt-4 flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={unbookNotify}
+                  onChange={e => setUnbookNotify(e.target.checked)}
+                  className="accent-kratos h-4 w-4"
+                />
+                <span className="text-sm text-slate-700">
+                  Notify customer by email
+                </span>
+              </label>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setUnbookModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+                Cancel
+              </button>
+              <button
+                disabled={loading}
+                onClick={async () => {
+                  setUnbookModalOpen(false)
+                  await changeStatus('opportunity', { sendEmail: unbookNotify })
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+              >
+                {loading && <Loader2 size={13} className="animate-spin" />}
+                Unbook
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel modal */}
       {cancelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-slate-950/40" onClick={() => setCancelModalOpen(false)} />
           <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-900">Cancel this opportunity?</h3>
             <p className="mt-2 text-sm text-slate-600">
-              This will mark the opportunity as <strong>Cancelled</strong>
-              {hasEmail ? ` and send a cancellation email to ${opportunity.customer?.email}.` : '.'}
+              Status will change to <strong>Cancelled</strong>.
             </p>
             <div className="mt-4">
               <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
@@ -309,18 +376,31 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                 className="w-full resize-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-red-400"
               />
             </div>
+            {hasEmail && (
+              <label className="mt-3 flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cancelNotify}
+                  onChange={e => setCancelNotify(e.target.checked)}
+                  className="accent-kratos h-4 w-4"
+                />
+                <span className="text-sm text-slate-700">
+                  Send cancellation email to <strong>{opportunity.customer?.email}</strong>
+                </span>
+              </label>
+            )}
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setCancelModalOpen(false)}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-              >
+              <button onClick={() => setCancelModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">
                 Go Back
               </button>
               <button
                 disabled={loading}
                 onClick={async () => {
                   setCancelModalOpen(false)
-                  await changeStatus('cancelled', cancelReason.trim() || undefined)
+                  await changeStatus('cancelled', {
+                    cancellationReason: cancelReason.trim() || undefined,
+                    sendEmail: cancelNotify,
+                  })
                   setCancelReason('')
                 }}
                 className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
@@ -333,27 +413,24 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
         </div>
       )}
 
-      {/* Reopen confirmation modal */}
+      {/* Reopen modal */}
       {reopenModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-slate-950/40" onClick={() => setReopenModalOpen(false)} />
           <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-900">Reopen this opportunity?</h3>
             <p className="mt-2 text-sm text-slate-600">
-              This will move the opportunity back to <strong>Open</strong> status.
+              Status will move back to <strong>Open</strong>.
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setReopenModalOpen(false)}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-              >
+              <button onClick={() => setReopenModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">
                 Cancel
               </button>
               <button
                 disabled={loading}
                 onClick={async () => {
                   setReopenModalOpen(false)
-                  await changeStatus('opportunity')
+                  await changeStatus('opportunity', { sendEmail: false })
                 }}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
               >
@@ -386,7 +463,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              {/* Summary card */}
               <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -417,7 +493,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                 </div>
               </section>
 
-              {/* Pricing display */}
               <section>
                 <h3 className="mt-6 text-xs font-semibold uppercase tracking-widest text-slate-500">Pricing Display</h3>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -437,7 +512,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                 </div>
               </section>
 
-              {/* Deposit */}
               <section className="mt-6">
                 <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
                   Deposit Amount
@@ -453,11 +527,8 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                 </label>
               </section>
 
-              {/* Send to */}
               <section className="mt-6">
                 <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Send estimate to</h3>
-
-                {/* Email */}
                 <label className={`mt-3 flex items-start gap-3 rounded-xl border p-3 transition-colors ${
                   hasEmail ? 'border-slate-200 hover:border-slate-300' : 'border-slate-100 opacity-60'
                 }`}>
@@ -477,8 +548,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                     </span>
                   </span>
                 </label>
-
-                {/* SMS */}
                 <label className={`mt-2 flex items-start gap-3 rounded-xl border p-3 transition-colors ${
                   smsReady ? 'border-slate-200 hover:border-slate-300' : 'border-slate-100 opacity-60'
                 }`}>
@@ -498,7 +567,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                 </label>
               </section>
 
-              {/* Optional message */}
               <section className="mt-6">
                 <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500">
                   Optional message
@@ -520,7 +588,6 @@ export default function SendEstimateMenu({ opportunity, onStatusChange }: SendEs
                   disabled={loading}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
-                  {loading ? <Loader2 size={14} className="inline animate-spin mr-1.5" /> : null}
                   Preview customer portal
                 </button>
                 <button

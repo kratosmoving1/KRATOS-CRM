@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     .from('opportunities')
     .select('*, customer:customers!customer_id(id, full_name, email, phone), agent:profiles!sales_agent_id(full_name, email)')
     .eq('id', opportunityId)
-    .eq('is_deleted', false)
+    .not('is_deleted', 'is', 'true')
     .single()
 
   if (error || !opportunity) return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
     supabase
       .from('customer_portal_badges')
       .select('name, image_url, position')
-      .eq('is_deleted', false)
+      .not('is_deleted', 'is', 'true')
       .order('position', { ascending: true }),
   ])
   const template = templateResult.data
