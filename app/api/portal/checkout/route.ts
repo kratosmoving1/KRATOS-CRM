@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
-    .select('id, opportunity_number, deposit_amount, total_amount, customer_id')
+    .select('id, opportunity_number, total_amount, customer_id')
     .eq('id', link.opportunity_id)
     .maybeSingle()
 
@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
     console.error('[PortalCheckout] opportunity query error:', oppErr.message, 'opportunity_id:', link.opportunity_id)
     return NextResponse.json({ error: `Database error: ${oppErr.message}` }, { status: 500 })
   }
-  if (!opp) return NextResponse.json({ error: `Estimate not found. (id: ${link.opportunity_id})` }, { status: 404 })
+  if (!opp) return NextResponse.json({ error: 'Estimate not found.' }, { status: 404 })
 
-  // Fetch customer email separately — non-blocking if the join fails
+  // Fetch customer email separately — non-blocking if it fails
   let customer: { full_name: string; email: string | null } | null = null
   if (opp.customer_id) {
     const { data: cust } = await supabase
@@ -58,10 +58,9 @@ export async function POST(req: NextRequest) {
     customer = cust ?? null
   }
 
-  // Resolve deposit amount
+  // Use deposit amount from the portal page (client always sends it); fall back to $150
   const requestedDeposit = typeof body.depositAmount === 'number' ? body.depositAmount : null
-  const savedDeposit = Number(opp.deposit_amount ?? 150)
-  const deposit = requestedDeposit ?? (Number.isFinite(savedDeposit) && savedDeposit > 0 ? savedDeposit : 150)
+  const deposit = requestedDeposit ?? 150
   const depositCents = Math.round(deposit * 100)
 
   if (depositCents < 100) {
