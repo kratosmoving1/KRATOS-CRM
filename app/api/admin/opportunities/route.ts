@@ -90,22 +90,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Cannot assign opportunity to another user' }, { status: 403 })
   }
 
-  // Generate opportunity number
-  const year = new Date().getFullYear()
-  const { data: maxRow } = await supabase
+  // Generate sequential quote number (#1002, #1003, ...)
+  // Handles both legacy "KM-2026-00002" and new plain integer formats.
+  const { data: allNums } = await supabase
     .from('opportunities')
     .select('opportunity_number')
-    .like('opportunity_number', `KM-${year}-%`)
-    .order('opportunity_number', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .not('opportunity_number', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(200)
 
-  let seq = 1
-  if (maxRow?.opportunity_number) {
-    const parts = maxRow.opportunity_number.split('-')
-    seq = parseInt(parts[2] ?? '0') + 1
+  let maxSeq = 1001
+  for (const row of allNums ?? []) {
+    const m = row.opportunity_number?.match(/(\d+)$/)
+    if (m) {
+      const n = parseInt(m[1])
+      if (n > maxSeq) maxSeq = n
+    }
   }
-  const opportunityNumber = `KM-${year}-${String(seq).padStart(5, '0')}`
+  const opportunityNumber = String(maxSeq + 1)
 
   let customerId: string
   try {

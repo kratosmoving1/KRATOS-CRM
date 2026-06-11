@@ -91,8 +91,8 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     ? (MOVE_SIZE_LABELS[opp.move_size] ?? String(opp.move_size).replace(/_/g, ' '))
     : 'To be confirmed'
 
-  // Fetch portal settings, signatures, content blocks, and payment status in parallel
-  const [signatureResult, settingsResult, blocksResult, paymentResult] = await Promise.all([
+  // Fetch portal settings, signatures, content blocks, payment status, and historical spend in parallel
+  const [signatureResult, settingsResult, blocksResult, paymentResult, historicalSpendResult] = await Promise.all([
     supabase
       .from('estimate_signatures')
       .select('id')
@@ -119,10 +119,25 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       .eq('status', 'received')
       .limit(1)
       .maybeSingle(),
+    opp.customer_id
+      ? supabase
+          .from('opportunities')
+          .select('total_amount')
+          .eq('customer_id', opp.customer_id)
+          .eq('is_deleted', false)
+          .in('status', ['booked', 'completed', 'closed'])
+      : Promise.resolve({ data: null, error: null }),
   ])
 
   const signature   = signatureResult.data
   const depositPaid = Boolean(paymentResult.data)
+
+  const customerTotalSpent = (historicalSpendResult.data ?? []).reduce(
+    (sum, r) => sum + (Number(r.total_amount) || 0),
+    0,
+  )
+  const totalPoints  = Math.floor(customerTotalSpent * 0.5)
+  const earnedPoints = Math.floor(totals.subtotal * 0.5)
 
   const data: PortalPageData = {
     opp: {
@@ -193,6 +208,8 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       paymentSucceeded={searchParams.payment === 'success'}
       depositPaid={depositPaid}
       portalSettings={portalSettings}
+      earnedPoints={earnedPoints}
+      totalPoints={totalPoints}
     />
   )
 }

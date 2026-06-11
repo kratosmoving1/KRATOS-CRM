@@ -45,8 +45,9 @@ function buildReceiptHtml(params: {
   quoteNumber: string
   referenceNumber: string | null
   notes: string | null
+  portalUrl: string | null
 }) {
-  const { customerName, amount, method, date, quoteNumber, referenceNumber, notes } = params
+  const { customerName, amount, method, date, quoteNumber, referenceNumber, notes, portalUrl } = params
   const firstName = customerName.split(' ')[0] || customerName
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/></head>
@@ -78,7 +79,7 @@ function buildReceiptHtml(params: {
                 </tr>
                 <tr>
                   <td style="padding:6px 0;font-size:13px;color:#64748b">Quote</td>
-                  <td style="padding:6px 0;font-size:13px;color:#f8fafc;text-align:right">${quoteNumber}</td>
+                  <td style="padding:6px 0;font-size:13px;color:#f8fafc;text-align:right">#${quoteNumber}</td>
                 </tr>
                 ${referenceNumber ? `<tr>
                   <td style="padding:6px 0;font-size:13px;color:#64748b">Reference #</td>
@@ -90,6 +91,11 @@ function buildReceiptHtml(params: {
               </table>
             </td></tr>
           </table>
+          ${portalUrl ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+            <tr><td align="center">
+              <a href="${portalUrl}" style="display:inline-block;padding:12px 28px;background:#ffad33;color:#0a0a0a;font-size:13px;font-weight:700;text-decoration:none;border-radius:8px;letter-spacing:0.04em;">View Your Estimate</a>
+            </td></tr>
+          </table>` : ''}
           <p style="margin:0;font-size:13px;color:#64748b;text-align:center;line-height:1.6;">Questions? Call us at <strong style="color:#94a3b8;">(800) 321-3222</strong> or reply to this email.</p>
         </td></tr>
         <tr><td style="padding:16px 32px 24px;text-align:center;border-top:1px solid #334155;">
@@ -142,16 +148,31 @@ export async function POST(req: NextRequest) {
   }
   if (!amountCents) return NextResponse.json({ error: 'Payment amount must be greater than zero' }, { status: 400 })
 
-  const { data: opportunity, error: oppError } = await supabase
-    .from('opportunities')
-    .select('id, opportunity_number, customer_id, sales_agent_id, total_amount, customer:customers!customer_id(full_name, email)')
-    .eq('id', opportunityId)
-    .not('is_deleted', 'is', true)
-    .single()
+  const [oppResult, portalLinkResult] = await Promise.all([
+    supabase
+      .from('opportunities')
+      .select('id, opportunity_number, customer_id, sales_agent_id, total_amount, customer:customers!customer_id(full_name, email)')
+      .eq('id', opportunityId)
+      .not('is_deleted', 'is', true)
+      .single(),
+    supabase
+      .from('estimate_portal_links')
+      .select('token')
+      .eq('opportunity_id', opportunityId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
-  if (oppError || !opportunity) {
+  const opportunity = oppResult.data
+  if (oppResult.error || !opportunity) {
     return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
   }
+
+  const appOrigin = process.env.NEXT_PUBLIC_APP_URL ?? 'https://kratos-crm.vercel.app'
+  const portalUrl = portalLinkResult.data?.token
+    ? `${appOrigin}/portal/estimate/${portalLinkResult.data.token}`
+    : null
 
   customerId = customerId ?? opportunity.customer_id
   const role = normalizeRole(profile.role)
@@ -224,19 +245,23 @@ export async function POST(req: NextRequest) {
       const formattedDate = new Date(paymentDate + 'T12:00:00').toLocaleDateString('en-CA', {
         month: 'long', day: 'numeric', year: 'numeric',
       })
+      const displayNumber = opportunity.opportunity_number?.match(/(\d+)$/)?.[1]
+        ? String(Number(opportunity.opportunity_number.match(/(\d+)$/)![1]))
+        : (opportunity.opportunity_number ?? opportunityId)
       const receiptParams = {
         customerName,
         amount: formatCurrency(amountCents),
         method: METHOD_LABELS[paymentMethod] ?? paymentMethod,
         date: formattedDate,
-        quoteNumber: opportunity.opportunity_number ?? opportunityId,
+        quoteNumber: displayNumber,
         referenceNumber,
         notes,
+        portalUrl,
       }
       try {
         await sendEmail({
           to: customerEmail,
-          subject: `Payment receipt — Kratos Moving Quote #${opportunity.opportunity_number}`,
+          subject: `Payment receipt — Kratos Moving #${displayNumber}`,
           html: buildReceiptHtml(receiptParams),
           text: buildReceiptText(receiptParams),
           fromName: 'Kratos Moving',

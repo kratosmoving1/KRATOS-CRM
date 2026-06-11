@@ -82,6 +82,8 @@ interface Props {
   paymentSucceeded: boolean
   depositPaid?: boolean
   portalSettings: PortalSettings | null
+  earnedPoints?: number
+  totalPoints?: number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -172,8 +174,17 @@ type AcceptStep = 'idle' | 'confirm' | 'deposit'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const KRATOS_COMPANIES = [
+  'Kratos Moving',
+  'Kratos Cleaning',
+  'Kratos Painting',
+  'Kratos Security',
+  'JMF Logistics',
+]
+
 export default function EstimatePortalContent({
   data, token, isPreview, alreadySigned, paymentSucceeded, depositPaid, portalSettings,
+  earnedPoints = 0, totalPoints = 0,
 }: Props) {
   const { opp, customer, charges, subtotal, discounts, hst, total, deposit, moveSize } = data
 
@@ -368,7 +379,7 @@ export default function EstimatePortalContent({
 
               <div className="flex items-center gap-3 mb-1.5">
                 <span className="text-sm text-slate-400">
-                  Estimate {formatQuoteNumber(opp.opportunity_number)}
+                  Estimate #{formatQuoteNumber(opp.opportunity_number)}
                 </span>
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
                   accepted ? 'bg-green-700 text-green-100' : 'bg-amber-700/80 text-amber-100'
@@ -643,6 +654,43 @@ export default function EstimatePortalContent({
           if (block.section_type === 'company_logos')  return <CompanyLogosBlock key={block.id} block={block} />
           return null
         })}
+
+        {/* ── Kratos Points + Group ────────────────────────────────────────── */}
+        <section className="rounded-xl overflow-hidden shadow-md" style={{ background: '#0a0a0a' }}>
+          <div className="px-6 pt-6 pb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#ffad33"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffad33' }}>Kratos Points</p>
+            </div>
+            <div className="flex items-end gap-5 mb-3">
+              <div>
+                <p className="text-4xl font-bold leading-none" style={{ color: '#ffad33' }}>{earnedPoints.toLocaleString()}</p>
+                <p className="text-xs mt-1" style={{ color: '#64748b' }}>points from this estimate</p>
+              </div>
+              {totalPoints > 0 && (
+                <div className="pb-0.5">
+                  <p className="text-xl font-semibold leading-none" style={{ color: '#94a3b8' }}>{totalPoints.toLocaleString()} total</p>
+                  <p className="text-xs mt-1" style={{ color: '#475569' }}>accumulated with Kratos</p>
+                </div>
+              )}
+            </div>
+            <p className="text-xs" style={{ color: '#334155' }}>0.5 points per $1 subtotal &mdash; redeem across Kratos Group companies</p>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }} className="px-6 py-5">
+            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#475569' }}>Explore Kratos Group</p>
+            <div className="flex flex-wrap gap-2">
+              {KRATOS_COMPANIES.map(company => (
+                <div
+                  key={company}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium"
+                  style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  {company}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* ── Disclaimer ───────────────────────────────────────────────────── */}
         <div className="rounded-lg border border-slate-200 bg-white px-5 py-4 shadow-sm">

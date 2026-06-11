@@ -83,6 +83,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Cascade date change to dispatch assignments so the dispatch board stays in sync.
+  // Clear crew_id so the job shows as unscheduled on the new date (dispatcher re-assigns).
+  if (dateChanged && newDate) {
+    await admin
+      .from('dispatch_job_assignments')
+      .update({ scheduled_date: newDate, crew_id: null })
+      .eq('opportunity_id', params.id)
+      .eq('is_deleted', false)
+  }
+
   await admin.from('audit_log').insert({
     user_id:     user.id,
     entity_type: 'opportunity',
