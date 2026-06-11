@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       role_data:workforce_roles(id,key,label,color,position),
       location:workforce_locations(id,key,label,color,position)
     `)
-    .neq('is_deleted', true)
+    .not('is_deleted', 'is', true)
     .order('position', { ascending: true })
 
   if (columnId) query = query.eq('column_id', columnId)

@@ -23,7 +23,7 @@ export async function GET() {
         role_data:workforce_roles(id,key,label,color,position),
         location:workforce_locations(id,key,label,color,position)
       `)
-      .neq('is_deleted', true)
+      .not('is_deleted', 'is', true)
       .order('position', { ascending: true }),
     supabase
       .from('workforce_statuses')
