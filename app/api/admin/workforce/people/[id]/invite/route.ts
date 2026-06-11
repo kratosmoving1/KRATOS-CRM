@@ -60,8 +60,8 @@ export async function POST(
   if (fetchErr || !person) return NextResponse.json({ error: 'Person not found' }, { status: 404 })
   if (!person.email) return NextResponse.json({ error: 'No email address on file. Add their email and save first.' }, { status: 400 })
 
-  // Derive app URL from the request host — reliable in both prod and dev
-  const host = req.headers.get('host') ?? 'kratos-crm.vercel.app'
+  // x-forwarded-host is the real public domain on Vercel; fall back to host header in dev
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? 'kratos-crm.vercel.app'
   const proto = host.startsWith('localhost') ? 'http' : 'https'
   const appUrl = `${proto}://${host}`
   const redirectTo = `${appUrl}/crew/auth/callback`
