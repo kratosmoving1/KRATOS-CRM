@@ -6,7 +6,7 @@ import {
   CheckCircle2, ChevronDown, ChevronUp, Download, Loader2,
   Minus, Phone, Plus, Shield, X,
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatCurrencyFull } from '@/lib/format'
 import { PORTAL_MATERIALS, type PortalMaterial } from '@/lib/portal/materials'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 
@@ -359,9 +359,9 @@ export default function EstimatePortalContent({
               <Image
                 src={cfg?.logo_url ?? '/logo.png'}
                 alt={companyName}
-                width={72}
-                height={72}
-                className="object-contain mb-3"
+                width={96}
+                height={96}
+                className="object-contain mb-4"
               />
 
               <div className="flex items-center gap-3 mb-1.5">
@@ -387,7 +387,7 @@ export default function EstimatePortalContent({
             {hourlyRate > 0 && (
               <div className="flex-shrink-0 text-right hidden sm:block">
                 <p className="text-4xl font-semibold text-white leading-none mb-3">
-                  {formatCurrency(hourlyRate)}<span className="text-lg text-slate-400 font-normal">/hour</span>
+                  {formatCurrencyFull(hourlyRate)}<span className="text-lg text-slate-400 font-normal">/hour</span>
                 </p>
                 <div className="space-y-1">
                   {heroInfoLines.map((line, i) => (
@@ -402,7 +402,7 @@ export default function EstimatePortalContent({
           {hourlyRate > 0 && (
             <div className="mt-6 sm:hidden">
               <p className="text-3xl font-semibold text-white">
-                {formatCurrency(hourlyRate)}<span className="text-lg text-slate-400 font-normal">/hour</span>
+                {formatCurrencyFull(hourlyRate)}<span className="text-lg text-slate-400 font-normal">/hour</span>
               </p>
               <div className="mt-2 space-y-0.5">
                 {heroInfoLines.map((line, i) => (
