@@ -67,21 +67,56 @@ async function getOrCreateAccount(
   person: { id: string; name: string; email: string; profile_id: string | null },
   tempPassword: string,
 ): Promise<{ userId: string; error?: string }> {
+  // Case 1: already linked — just reset the password
   if (person.profile_id) {
     const { error } = await admin.auth.admin.updateUserById(person.profile_id, { password: tempPassword })
     if (error) return { userId: '', error: `Could not reset password: ${error.message}` }
     return { userId: person.profile_id }
   }
-  const { data: created, error } = await admin.auth.admin.createUser({
+
+  // Case 2: no link — try to create a fresh account
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: person.email,
     password: tempPassword,
     email_confirm: true,
     user_metadata: { full_name: person.name, workforce_person_id: person.id, role: 'crew' },
   })
-  if (error) return { userId: '', error: `Could not create account: ${error.message}` }
-  const userId = created.user.id
-  await admin.from('workforce_people').update({ profile_id: userId }).eq('id', person.id)
-  return { userId }
+
+  if (!createErr) {
+    const userId = created.user.id
+    await admin.from('workforce_people').update({ profile_id: userId }).eq('id', person.id)
+    return { userId }
+  }
+
+  // Case 3: account already exists (created via magic link with no password set).
+  // Find the existing user by email, set the password, and link profile_id.
+  const isAlreadyExists =
+    createErr.message.toLowerCase().includes('already') ||
+    createErr.message.toLowerCase().includes('registered') ||
+    (createErr as { status?: number }).status === 422
+
+  if (!isAlreadyExists) {
+    return { userId: '', error: `Could not create account: ${createErr.message}` }
+  }
+
+  const { data: listData } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const existing = (listData?.users ?? []).find(
+    u => u.email?.toLowerCase() === person.email.toLowerCase()
+  )
+
+  if (!existing) {
+    return { userId: '', error: `An account for ${person.email} already exists but could not be located. Check Supabase Auth dashboard.` }
+  }
+
+  const { error: updateErr } = await admin.auth.admin.updateUserById(existing.id, {
+    password: tempPassword,
+    user_metadata: { full_name: person.name, workforce_person_id: person.id, role: 'crew' },
+  })
+  if (updateErr) return { userId: '', error: `Could not set password on existing account: ${updateErr.message}` }
+
+  // Link profile_id so future invites hit Case 1
+  await admin.from('workforce_people').update({ profile_id: existing.id }).eq('id', person.id)
+  return { userId: existing.id }
 }
 
 export async function POST(
