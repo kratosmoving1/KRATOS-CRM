@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { MOVE_SIZE_LABELS } from '@/lib/constants'
-import EstimatePortalContent, { type PortalCharge, type PortalPageData, type PortalSettings } from '@/components/portal/EstimatePortalContent'
+import EstimatePortalContent, { type PortalCharge, type PortalPageData, type PortalSettings, type ContentBlock } from '@/components/portal/EstimatePortalContent'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -91,8 +91,8 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     ? (MOVE_SIZE_LABELS[opp.move_size] ?? String(opp.move_size).replace(/_/g, ' '))
     : 'To be confirmed'
 
-  // Fetch portal settings + check if already signed in parallel
-  const [signatureResult, settingsResult] = await Promise.all([
+  // Fetch portal settings, signatures, and content blocks in parallel
+  const [signatureResult, settingsResult, blocksResult] = await Promise.all([
     supabase
       .from('estimate_signatures')
       .select('id')
@@ -106,6 +106,12 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
         badges:customer_portal_badges(id, name, image_url, position, is_deleted)
       `)
       .maybeSingle(),
+    supabase
+      .from('customer_portal_content_blocks')
+      .select('id, section_type, title, body, data, position, is_visible')
+      .eq('is_deleted', false)
+      .eq('is_visible', true)
+      .order('position', { ascending: true }),
   ])
 
   const signature = signatureResult.data
@@ -136,8 +142,9 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
     moveSize,
   }
 
-  type AttachRow = { id: string; name: string; file_url: string; position: number; is_deleted: boolean }
-  type BadgeRow  = { id: string; name: string; image_url: string | null; position: number; is_deleted: boolean }
+  type AttachRow       = { id: string; name: string; file_url: string; position: number; is_deleted: boolean }
+  type BadgeRow        = { id: string; name: string; image_url: string | null; position: number; is_deleted: boolean }
+  type ContentBlockRow = { id: string; section_type: string; title: string | null; body: string | null; data: Record<string, unknown>; position: number; is_visible: boolean }
 
   let portalSettings: PortalSettings | null = null
   if (settingsResult.data) {
@@ -162,6 +169,10 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
         .filter(b => !b.is_deleted)
         .sort((a, b) => a.position - b.position)
         .map(({ id, name, image_url }) => ({ id, name, image_url })),
+      content_blocks: ((blocksResult.data ?? []) as ContentBlockRow[])
+        .map(({ id, section_type, title, body, data: bdata, position, is_visible }) =>
+          ({ id, section_type: section_type as ContentBlock['section_type'], title, body, data: (bdata ?? {}) as Record<string, unknown>, position, is_visible })
+        ),
     }
   }
 
