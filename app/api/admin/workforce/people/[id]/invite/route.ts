@@ -3,9 +3,20 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email/sendEmail'
 
-function buildInviteHtml(name: string, link: string, isExisting: boolean) {
-  const action = isExisting ? 'Log in to the Kratos Crew app' : 'Set up your Kratos Crew app account'
-  const buttonLabel = isExisting ? 'Open Crew App' : 'Set Up My Account'
+const APP_URL = process.env.NODE_ENV === 'development'
+  ? 'http://localhost:3000'
+  : 'https://kratos-crm.vercel.app'
+
+// Generate a memorable temp password: Word + 4 digits + symbol
+// Easy to type on mobile, meets most complexity requirements
+function generateTempPassword(): string {
+  const words = ['Mover', 'Truck', 'Drive', 'Carry', 'Haul', 'Shift', 'Crew']
+  const word = words[Math.floor(Math.random() * words.length)]
+  const num = Math.floor(1000 + Math.random() * 9000)
+  return `${word}${num}!`
+}
+
+function buildCredentialsHtml(firstName: string, email: string, password: string) {
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"/></head>
@@ -15,16 +26,28 @@ function buildInviteHtml(name: string, link: string, isExisting: boolean) {
       <table width="100%" style="max-width:520px;background:#1e293b;border-radius:16px;overflow:hidden;">
         <tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #334155;">
           <p style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#ffad33;">Kratos Moving</p>
-          <h1 style="margin:0;font-size:22px;font-weight:700;color:#f8fafc;">You&apos;re on the crew, ${name.split(' ')[0]}.</h1>
+          <h1 style="margin:0;font-size:22px;font-weight:700;color:#f8fafc;">You're on the crew, ${firstName}.</h1>
         </td></tr>
         <tr><td style="padding:28px 32px;">
-          <p style="margin:0 0 24px;font-size:15px;color:#94a3b8;line-height:1.6;">${action} to see your upcoming jobs, addresses, and crew assignments.</p>
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td align="center">
-              <a href="${link}" style="display:inline-block;background:#ffad33;color:#0f172a;font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;text-decoration:none;">${buttonLabel}</a>
+          <p style="margin:0 0 20px;font-size:15px;color:#94a3b8;line-height:1.6;">Your Kratos Crew account is ready. Use the login details below to see your upcoming jobs.</p>
+
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:10px;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Your login details</p>
+              <p style="margin:0 0 8px;font-size:14px;color:#94a3b8;">Email</p>
+              <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#f8fafc;">${email}</p>
+              <p style="margin:0 0 8px;font-size:14px;color:#94a3b8;">Temporary Password</p>
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffad33;letter-spacing:0.05em;">${password}</p>
             </td></tr>
           </table>
-          <p style="margin:24px 0 0;font-size:12px;color:#475569;text-align:center;">This link expires in 24 hours. If you didn&apos;t expect this email, ignore it.</p>
+
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td align="center">
+              <a href="${APP_URL}/crew/login" style="display:inline-block;background:#ffad33;color:#0f172a;font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;text-decoration:none;">Open Crew App</a>
+            </td></tr>
+          </table>
+
+          <p style="margin:20px 0 0;font-size:12px;color:#475569;text-align:center;">Save this password — you'll need it each time you log in.</p>
         </td></tr>
         <tr><td style="padding:16px 32px 24px;text-align:center;border-top:1px solid #334155;">
           <p style="margin:0;font-size:12px;color:#334155;">Kratos Moving Inc. &mdash; Crew Portal</p>
@@ -36,12 +59,12 @@ function buildInviteHtml(name: string, link: string, isExisting: boolean) {
 </html>`
 }
 
-function buildInviteText(name: string, link: string) {
-  return `Hi ${name.split(' ')[0]},\n\nYou've been added to the Kratos Moving crew. Use the link below to set up your account and see your jobs:\n\n${link}\n\nThis link expires in 24 hours.\n\n— Kratos Moving`
+function buildCredentialsText(firstName: string, email: string, password: string) {
+  return `Hi ${firstName},\n\nYour Kratos Crew account is ready. Log in at ${APP_URL}/crew/login\n\nEmail: ${email}\nTemporary Password: ${password}\n\nSave this password — you'll need it each time you log in.\n\n— Kratos Moving`
 }
 
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const supabase = createClient()
@@ -60,62 +83,41 @@ export async function POST(
   if (fetchErr || !person) return NextResponse.json({ error: 'Person not found' }, { status: 404 })
   if (!person.email) return NextResponse.json({ error: 'No email address on file. Add their email and save first.' }, { status: 400 })
 
-  const appUrl = process.env.NODE_ENV === 'development'
-    ? 'http://localhost:3000'
-    : 'https://kratos-crm.vercel.app'
-  const redirectTo = `${appUrl}/crew/auth/callback`
+  const firstName = person.name.split(' ')[0]
+  const tempPassword = generateTempPassword()
 
-  // Try invite link first (works for brand-new users)
-  let link: string | null = null
-  let isExisting = false
+  let userId: string | null = person.profile_id ?? null
 
-  const { data: inviteLink, error: inviteErr } = await admin.auth.admin.generateLink({
-    type: 'invite',
-    email: person.email,
-    options: {
-      redirectTo,
-      data: { full_name: person.name, workforce_person_id: person.id, role: 'crew' },
-    },
-  })
-
-  if (!inviteErr && inviteLink?.properties?.action_link) {
-    link = inviteLink.properties.action_link
-    // Link profile_id if this created a new user
-    const newUserId = inviteLink.user?.id
-    if (newUserId && !person.profile_id) {
-      await admin.from('workforce_people').update({ profile_id: newUserId }).eq('id', person.id)
-    }
+  if (userId) {
+    // Existing account — reset their password to the new temp password
+    const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword })
+    if (error) return NextResponse.json({ error: `Could not reset password: ${error.message}` }, { status: 500 })
   } else {
-    // User already exists — generate a magic link so they can log in
-    isExisting = true
-    const { data: magicData, error: magicErr } = await admin.auth.admin.generateLink({
-      type: 'magiclink',
+    // New account — create it directly (email_confirm: true skips any verify email)
+    const { data: created, error } = await admin.auth.admin.createUser({
       email: person.email,
-      options: { redirectTo },
+      password: tempPassword,
+      email_confirm: true,
+      user_metadata: { full_name: person.name, workforce_person_id: person.id, role: 'crew' },
     })
-    if (magicErr || !magicData?.properties?.action_link) {
-      return NextResponse.json(
-        { error: `Could not generate invite link: ${magicErr?.message ?? 'Unknown error'}` },
-        { status: 500 },
-      )
-    }
-    link = magicData.properties.action_link
+    if (error) return NextResponse.json({ error: `Could not create account: ${error.message}` }, { status: 500 })
+    userId = created.user.id
+    // Link the new auth user to the workforce record
+    await admin.from('workforce_people').update({ profile_id: userId }).eq('id', person.id)
   }
 
-  // Send via our own email provider (Resend/SendGrid) — reliable, branded
+  // Send credentials email — no magic links, no URLs that scanners can consume
   try {
     await sendEmail({
       to: person.email,
-      subject: isExisting
-        ? 'Your Kratos Crew login link'
-        : `${person.name.split(' ')[0]}, you've been added to the Kratos crew`,
-      html: buildInviteHtml(person.name, link, isExisting),
-      text: buildInviteText(person.name, link),
+      subject: `${firstName}, your Kratos Crew account is ready`,
+      html: buildCredentialsHtml(firstName, person.email, tempPassword),
+      text: buildCredentialsText(firstName, person.email, tempPassword),
       fromName: 'Kratos Moving',
     })
   } catch (emailErr) {
     return NextResponse.json(
-      { error: `Invite link generated but email failed to send: ${emailErr instanceof Error ? emailErr.message : 'Unknown error'}` },
+      { error: `Account created but email failed: ${emailErr instanceof Error ? emailErr.message : 'Unknown error'}` },
       { status: 500 },
     )
   }
