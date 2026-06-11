@@ -15,6 +15,18 @@ export default function CrewAuthCallbackPage() {
     async function handleCallback() {
       const url = new URL(window.location.href)
 
+      // Detect error in hash immediately (e.g. otp_expired, access_denied)
+      const hashParams = new URLSearchParams(url.hash.replace('#', ''))
+      const hashError = hashParams.get('error_code') || hashParams.get('error')
+      if (hashError) {
+        if (hashError === 'otp_expired') {
+          setError('This invite link has expired. Ask your manager to resend the invite — links are valid for 1 hour.')
+        } else {
+          setError(`Invite link error: ${hashParams.get('error_description') || hashError}. Ask your manager to resend.`)
+        }
+        return
+      }
+
       // PKCE flow — Supabase sends ?code=xxx
       const code = url.searchParams.get('code')
       if (code) {
@@ -24,15 +36,14 @@ export default function CrewAuthCallbackPage() {
         return
       }
 
-      // Legacy / hash-based flow — createBrowserClient auto-detects #access_token=xxx
-      // Calling getSession() triggers the detection
+      // Hash-based flow — createBrowserClient auto-detects #access_token=xxx
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         router.replace('/crew/jobs')
         return
       }
 
-      // Wait for the async auth state change (hash tokens processed on next tick)
+      // Wait for async auth state change
       let settled = false
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (settled) return
@@ -47,7 +58,6 @@ export default function CrewAuthCallbackPage() {
         }
       })
 
-      // Give up after 12 seconds
       setTimeout(() => {
         if (settled) return
         settled = true
