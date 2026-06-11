@@ -36,13 +36,15 @@ export async function POST(req: NextRequest) {
   }
 
   type CustomerField = { full_name: string; email: string | null }[] | { full_name: string; email: string | null } | null
-  const { data: opp } = await supabase
+  const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
     .select('id, opportunity_number, deposit_amount, total_amount, customer_id, customer:customers!customer_id(full_name, email)')
     .eq('id', link.opportunity_id)
-    .not('is_deleted', 'is', 'true')
-    .single()
+    .maybeSingle()
 
+  if (oppErr) {
+    console.error('[PortalCheckout] opportunity query error:', oppErr.message, 'opportunity_id:', link.opportunity_id)
+  }
   if (!opp) return NextResponse.json({ error: 'Estimate not found.' }, { status: 404 })
 
   const rawCustomer = opp.customer as unknown as CustomerField
