@@ -2,6 +2,7 @@
 
 import { Avatar } from './Avatar'
 import type { WorkforcePerson } from '@/lib/workforce/types'
+import { ENGLISH_LABEL } from './PeopleFilterBar'
 
 interface Props {
   person: WorkforcePerson
@@ -19,9 +20,6 @@ function Pill({ color, children }: { color: string; children: React.ReactNode })
   )
 }
 
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
 
 export function PersonListCard({ person, onClick }: Props) {
   return (
@@ -58,7 +56,7 @@ export function PersonListCard({ person, onClick }: Props) {
             <Pill color={person.location.color}>{person.location.label}</Pill>
           )}
           {person.english_proficiency && (
-            <Pill color="#64748b">{capitalize(person.english_proficiency)}</Pill>
+            <Pill color="#64748b">{ENGLISH_LABEL[person.english_proficiency] ?? person.english_proficiency}</Pill>
           )}
         </div>
       )}

@@ -5,12 +5,14 @@ import { Search, ChevronDown } from 'lucide-react'
 import type { WorkforceRole, WorkforceLocation, WorkforceStatus, WorkforceTier } from '@/lib/workforce/types'
 
 export const ENGLISH_LEVELS = [
-  { id: 'basic',        label: 'Basic' },
-  { id: 'intermediate', label: 'Intermediate' },
-  { id: 'advanced',     label: 'Advanced' },
-  { id: 'fluent',       label: 'Fluent' },
-  { id: 'native',       label: 'Native' },
+  { id: 'no_english', label: 'No English' },
+  { id: 'medium',     label: 'Medium Proficiency' },
+  { id: 'high',       label: 'High Proficiency' },
 ]
+
+export const ENGLISH_LABEL: Record<string, string> = Object.fromEntries(
+  ENGLISH_LEVELS.map(l => [l.id, l.label])
+)
 
 export interface FilterState {
   role_ids: string[]
