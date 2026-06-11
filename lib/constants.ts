@@ -1,10 +1,8 @@
 export const SERVICE_TYPES = [
-  { value: 'local',          label: 'Local' },
-  { value: 'long_distance',  label: 'Long Distance' },
-  { value: 'commercial',     label: 'Commercial' },
-  { value: 'packing',        label: 'Packing' },
-  { value: 'storage',        label: 'Storage' },
-  { value: 'international',  label: 'International' },
+  { value: 'moving',             label: 'Moving' },
+  { value: 'packing',            label: 'Packing' },
+  { value: 'moving_and_packing', label: 'Moving & Packing' },
+  { value: 'storage',            label: 'Storage' },
 ] as const
 
 export const COMPANY_DIVISIONS = [

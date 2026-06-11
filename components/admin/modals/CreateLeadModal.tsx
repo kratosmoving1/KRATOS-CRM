@@ -29,7 +29,7 @@ export default function CreateLeadModal({ onClose }: { onClose: () => void }) {
     customer_name: '', customer_phone: '', customer_phone_type: 'mobile',
     customer_secondary_phone: '', customer_secondary_phone_type: 'mobile',
     customer_email: '', service_date: '', service_date_tbd: false,
-    service_type: 'local', move_size: '', lead_source_id: '',
+    service_type: 'moving', move_size: '', lead_source_id: '',
   })
 
   useEffect(() => {
