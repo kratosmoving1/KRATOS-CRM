@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   X, FileText, MoreHorizontal, Eye, Send,
-  Loader2, RefreshCw,
+  Loader2, RefreshCw, CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,7 @@ export interface DocumentRow {
   rendered_html: string | null
   rendered_at: string | null
   sent_at: string | null
+  sent_to: string | null
   document_number: string | null
   created_at: string
 }
@@ -60,13 +61,17 @@ function DocRowMenu({
   doc,
   onPreview,
   onSend,
+  onMarkSigned,
 }: {
   doc: DocumentRow
   onPreview: () => void
   onSend: () => void
+  onMarkSigned: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const isContract = doc.category === 'job_contract'
   const alreadySent = ['sent', 'viewed', 'signed', 'completed'].includes(doc.status)
+  const isSigned = ['signed', 'completed'].includes(doc.status)
   return (
     <div className="relative">
       <button
@@ -79,7 +84,7 @@ function DocRowMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+          <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
             <button
               type="button"
               onClick={() => { setOpen(false); onPreview() }}
@@ -87,13 +92,23 @@ function DocRowMenu({
             >
               <Eye size={13} /> Preview
             </button>
-            {!alreadySent && (
+            {!isSigned && (
               <button
                 type="button"
                 onClick={() => { setOpen(false); onSend() }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
-                <Send size={13} /> Send Signature Request
+                <Send size={13} />
+                {alreadySent ? 'Resend to Customer' : 'Send Signature Request'}
+              </button>
+            )}
+            {isContract && alreadySent && !isSigned && (
+              <button
+                type="button"
+                onClick={() => { setOpen(false); onMarkSigned() }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50"
+              >
+                <CheckCircle2 size={13} /> Mark as Signed
               </button>
             )}
           </div>
@@ -197,6 +212,22 @@ export default function DocsSidePanel({
     }
   }
 
+  async function handleMarkSigned(doc: DocumentRow) {
+    try {
+      const res = await fetch(`/api/admin/documents/${doc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'signed' }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(j.error ?? 'Failed to update'); return }
+      toast.success('Contract marked as signed.')
+      await fetchDocs()
+    } catch {
+      toast.error('Network error')
+    }
+  }
+
   async function handleDelete(doc: DocumentRow) {
     try {
       const res = await fetch(`/api/admin/documents/${doc.id}`, { method: 'DELETE' })
@@ -265,6 +296,7 @@ export default function DocsSidePanel({
                         doc={doc}
                         onPreview={() => onPreviewDoc?.(doc)}
                         onSend={() => handleSend(doc)}
+                        onMarkSigned={() => handleMarkSigned(doc)}
                       />
                     ))}
                   </div>
@@ -282,6 +314,7 @@ export default function DocsSidePanel({
                         doc={doc}
                         onPreview={() => onPreviewDoc?.(doc)}
                         onSend={() => handleSend(doc)}
+                        onMarkSigned={() => handleMarkSigned(doc)}
                       />
                     ))}
                   </div>
@@ -318,32 +351,86 @@ function DocCard({
   doc,
   onPreview,
   onSend,
+  onMarkSigned,
 }: {
   doc: DocumentRow
   onPreview: () => void
   onSend: () => void
+  onMarkSigned: () => void
 }) {
+  const isContract = doc.category === 'job_contract'
+  const isSigned   = ['signed', 'completed'].includes(doc.status)
+  const alreadySent = ['sent', 'viewed', 'signed', 'completed'].includes(doc.status)
+
+  function fmtDate(iso: string) {
+    return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50 transition-colors">
-      <FileText size={16} className="shrink-0 text-slate-400" />
-      <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          onClick={onPreview}
-          className="block truncate text-sm font-medium text-slate-800 hover:text-kratos text-left w-full"
-        >
-          {doc.name}
-        </button>
-        <p className="text-[10px] text-slate-400 mt-0.5">
-          {CATEGORY_LABELS[doc.category] ?? doc.category}
-        </p>
+    <div className={cn(
+      'rounded-lg border bg-white px-3 py-2.5 transition-colors',
+      isContract
+        ? isSigned
+          ? 'border-green-200 bg-green-50'
+          : alreadySent
+          ? 'border-amber-200 bg-amber-50'
+          : 'border-slate-200 hover:bg-slate-50'
+        : 'border-slate-200 hover:bg-slate-50',
+    )}>
+      <div className="flex items-center gap-3">
+        <FileText size={16} className={cn('shrink-0', isSigned ? 'text-green-500' : 'text-slate-400')} />
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onPreview}
+            className="block truncate text-sm font-medium text-slate-800 hover:text-kratos text-left w-full"
+          >
+            {doc.name}
+          </button>
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            {CATEGORY_LABELS[doc.category] ?? doc.category}
+          </p>
+          {isContract && isSigned && (
+            <p className="text-[10px] font-semibold text-green-700 mt-0.5 flex items-center gap-1">
+              <CheckCircle2 size={10} /> Signed
+            </p>
+          )}
+          {isContract && alreadySent && !isSigned && doc.sent_at && (
+            <p className="text-[10px] text-amber-700 mt-0.5">
+              Sent {fmtDate(doc.sent_at)}{doc.sent_to ? ` → ${doc.sent_to}` : ''}
+            </p>
+          )}
+        </div>
+        <StatusPill status={doc.status} />
+        <DocRowMenu
+          doc={doc}
+          onPreview={onPreview}
+          onSend={onSend}
+          onMarkSigned={onMarkSigned}
+        />
       </div>
-      <StatusPill status={doc.status} />
-      <DocRowMenu
-        doc={doc}
-        onPreview={onPreview}
-        onSend={onSend}
-      />
+      {/* Contract-specific action row */}
+      {isContract && !isSigned && (
+        <div className="mt-2 pt-2 border-t border-slate-100 flex gap-2">
+          <button
+            type="button"
+            onClick={onSend}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-slate-950 px-3 py-1.5 text-[11px] font-bold text-white uppercase tracking-wide hover:bg-slate-800 transition-colors"
+          >
+            <Send size={11} />
+            {alreadySent ? 'Resend to Customer' : 'Send for Signature'}
+          </button>
+          {alreadySent && (
+            <button
+              type="button"
+              onClick={onMarkSigned}
+              className="flex items-center gap-1.5 rounded-md border border-green-300 px-3 py-1.5 text-[11px] font-bold text-green-700 uppercase tracking-wide hover:bg-green-50 transition-colors"
+            >
+              <CheckCircle2 size={11} /> Signed
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
