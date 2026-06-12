@@ -509,6 +509,11 @@ export default function OpportunityDetailPage() {
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
 
+  // Inline docs (shown directly in estimate tab)
+  const [inlineDocs, setInlineDocs] = useState<DocumentRow[]>([])
+  const [inlineDocsLoading, setInlineDocsLoading] = useState(false)
+  const [inlineGenerating, setInlineGenerating] = useState(false)
+
   // Invoice preview
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false)
 
@@ -738,12 +743,26 @@ export default function OpportunityDetailPage() {
     finally { setTripDataLoading(false) }
   }, [id])
 
+  const fetchInlineDocs = useCallback(async () => {
+    setInlineDocsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/opportunities/${id}/documents`)
+      if (res.ok) {
+        const data: DocumentRow[] = await res.json()
+        setInlineDocs(data)
+        setDocumentCount(data.length)
+      }
+    } catch {}
+    finally { setInlineDocsLoading(false) }
+  }, [id])
+
   useEffect(() => {
     if (tab === 'estimate' || tab === 'accounting') {
       fetchCharges()
     }
     if (tab === 'estimate') {
       fetchTripData()
+      fetchInlineDocs()
       // Load profiles for Agent dropdown (only once per tab open)
       if (profiles.length === 0) {
         fetch('/api/admin/profiles')
@@ -753,7 +772,7 @@ export default function OpportunityDetailPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, fetchCharges, fetchTripData])
+  }, [tab, fetchCharges, fetchTripData, fetchInlineDocs])
 
   async function deleteCharge(chargeId: string) {
     setDeletingChargeId(chargeId)
@@ -2538,6 +2557,102 @@ export default function OpportunityDetailPage() {
                     />
                   )}
                   {notesSaving && !savingNoteField && <p className="mt-1 text-xs text-slate-400">Saving...</p>}
+                </div>
+              </div>
+
+              {/* Documents section — inline in estimate tab */}
+              <div className="rounded-xl border border-slate-200 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Documents</h2>
+                  {inlineDocs.length > 0 ? (
+                    <button
+                      type="button"
+                      disabled={inlineGenerating}
+                      onClick={async () => {
+                        setInlineGenerating(true)
+                        try {
+                          const res = await fetch(`/api/admin/opportunities/${id}/documents/generate`, { method: 'POST' })
+                          if (!res.ok) {
+                            const j = await res.json().catch(() => ({}))
+                            toast.error(j.error ?? 'Regenerate failed')
+                            return
+                          }
+                          await fetchInlineDocs()
+                          toast.success('Documents regenerated.')
+                        } catch { toast.error('Network error') }
+                        finally { setInlineGenerating(false) }
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                    >
+                      {inlineGenerating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      Regenerate
+                    </button>
+                  ) : null}
+                </div>
+                <div className="p-4">
+                  {inlineDocsLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="animate-spin text-slate-300" size={20} />
+                    </div>
+                  ) : inlineDocs.length === 0 ? (
+                    <div className="flex flex-col items-center py-6 text-center">
+                      <FileText size={22} className="text-slate-300 mb-2" />
+                      <p className="text-sm text-slate-500 font-medium">No documents yet</p>
+                      <p className="text-xs text-slate-400 mt-0.5 mb-4">Generate documents from your published templates.</p>
+                      <button
+                        type="button"
+                        disabled={inlineGenerating}
+                        onClick={async () => {
+                          setInlineGenerating(true)
+                          try {
+                            const res = await fetch(`/api/admin/opportunities/${id}/documents/generate`, { method: 'POST' })
+                            if (!res.ok) {
+                              const j = await res.json().catch(() => ({}))
+                              toast.error(j.error ?? 'Generate failed')
+                              return
+                            }
+                            await fetchInlineDocs()
+                            toast.success('Documents generated.')
+                          } catch { toast.error('Network error') }
+                          finally { setInlineGenerating(false) }
+                        }}
+                        className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-950 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                      >
+                        {inlineGenerating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                        {inlineGenerating ? 'Generating...' : 'Generate Documents'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {inlineDocs.map(doc => (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => { setPreviewDoc(doc); setPreviewOpen(true) }}
+                          className="flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                        >
+                          <FileText size={15} className="shrink-0 text-slate-400" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-800 truncate">{doc.name}</p>
+                            {doc.document_number && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">{doc.document_number}</p>
+                            )}
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${
+                            doc.status === 'generated' ? 'bg-blue-100 text-blue-700' :
+                            doc.status === 'sent' ? 'bg-amber-100 text-amber-800' :
+                            doc.status === 'signed' ? 'bg-green-100 text-green-700' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
+                            {doc.status === 'generated' ? 'Generated' :
+                             doc.status === 'sent' ? 'Sent' :
+                             doc.status === 'signed' ? 'Signed' :
+                             doc.status}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
