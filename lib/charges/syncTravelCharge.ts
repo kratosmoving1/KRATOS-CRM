@@ -44,13 +44,23 @@ export async function syncTravelCharge(
 ): Promise<TravelSyncResult> {
   const opportunityId = String(opportunity.id)
 
-  const { data: existing } = await supabase
+  const { data: existingRows } = await supabase
     .from('opportunity_charges')
     .select('id, subtotal, total, config')
     .eq('opportunity_id', opportunityId)
     .eq('charge_type', 'trip_and_travel')
     .neq('is_deleted', true)
-    .maybeSingle()
+    .order('created_at', { ascending: true })
+
+  // If duplicates exist, soft-delete all but the first (and use the first as the target to update)
+  const existing = existingRows?.[0] ?? null
+  if (existingRows && existingRows.length > 1) {
+    const duplicateIds = existingRows.slice(1).map(r => r.id)
+    await supabase
+      .from('opportunity_charges')
+      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+      .in('id', duplicateIds)
+  }
 
   const originAddress = buildOriginAddress(opportunity)
   const destAddress = buildDestinationAddress(opportunity)
