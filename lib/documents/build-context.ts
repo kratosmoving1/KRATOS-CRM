@@ -1,13 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { RenderContext } from './render'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 
 /**
  * Builds a RenderContext for document rendering from live DB data.
+ * Uses the admin client so it works from both authenticated API routes and public portal pages.
  * All column names verified against SCHEMA.md.
  */
 export async function buildRenderContext(opportunityId: string): Promise<RenderContext> {
-  const supabase = createClient()
+  const supabase = createAdminClient()
 
   // Opportunity with joins — column names match SCHEMA.md exactly
   const { data: opp, error: oppErr } = await supabase
@@ -31,15 +32,15 @@ export async function buildRenderContext(opportunityId: string): Promise<RenderC
       dest_province,
       dest_postal_code,
       dest_dwelling_type,
-      customer:customers(full_name, email, phone),
-      agent:profiles!opportunities_sales_agent_id_fkey(full_name, email),
-      lead_source:lead_sources(name)
+      customer:customers!customer_id(full_name, email, phone),
+      agent:profiles!sales_agent_id(full_name, email),
+      lead_source:lead_sources!lead_source_id(name)
     `)
     .eq('id', opportunityId)
     .neq('is_deleted', true)
     .maybeSingle()
 
-  if (oppErr || !opp) throw new Error(`Opportunity ${opportunityId} not found`)
+  if (oppErr || !opp) throw new Error(`Opportunity ${opportunityId} not found: ${oppErr?.message ?? 'no data'}`)
 
   // Non-deleted charges, sorted by sort_order
   const { data: rawCharges } = await supabase
