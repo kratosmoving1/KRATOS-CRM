@@ -195,46 +195,44 @@ function buildInvoiceHtml(p: {
 </html>`
 }
 
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  const supabase = createClient()
-  const auth = await requireActiveProfile(supabase)
-  if (auth.response) return auth.response
+// ── Shared data loader ─────────────────────────────────────────────────────────
 
-  const { user, role } = auth.context
-  const normalizedRole = normalizeRole(role)
-  if (!['owner', 'admin', 'manager', 'sales', 'dispatcher'].includes(normalizedRole)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+type InvoicePayload =
+  | { ok: false; error: string; status: number }
+  | {
+      ok: true
+      html: string
+      subject: string
+      text: string
+      customerEmail: string
+      customerId: string
+      customerFirstName: string
+    }
 
+async function buildInvoicePayload(opportunityId: string): Promise<InvoicePayload> {
   const admin = createAdminClient()
-
   const [oppResult, chargesResult, paymentsResult] = await Promise.all([
     admin
       .from('opportunities')
       .select('id, opportunity_number, service_type, service_date, origin_address_line1, origin_city, origin_province, dest_address_line1, dest_city, dest_province, customer:customers!customer_id(id, full_name, email), agent:profiles!sales_agent_id(full_name)')
-      .eq('id', params.id)
+      .eq('id', opportunityId)
       .not('is_deleted', 'is', 'true')
       .single(),
     admin
       .from('opportunity_charges')
       .select('name, subtotal, discount_amount, total')
-      .eq('opportunity_id', params.id)
+      .eq('opportunity_id', opportunityId)
       .not('is_deleted', 'is', 'true')
       .order('created_at', { ascending: true }),
     admin
       .from('payments')
       .select('amount_cents, status')
-      .eq('opportunity_id', params.id)
+      .eq('opportunity_id', opportunityId)
       .not('is_deleted', 'is', 'true'),
   ])
 
   const opp = oppResult.data
-  if (oppResult.error || !opp) {
-    return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 })
-  }
+  if (oppResult.error || !opp) return { ok: false, error: 'Opportunity not found', status: 404 }
 
   type CustomerField = { id: string; full_name: string; email: string | null }[] | { id: string; full_name: string; email: string | null } | null
   type AgentField    = { full_name: string | null }[] | { full_name: string | null } | null
@@ -244,9 +242,7 @@ export async function POST(
   const customerRow = Array.isArray(rawCustomer) ? rawCustomer[0] ?? null : rawCustomer
   const agentRow    = Array.isArray(rawAgent) ? rawAgent[0] ?? null : rawAgent
 
-  if (!customerRow?.email) {
-    return NextResponse.json({ error: 'No email address on file for this customer' }, { status: 422 })
-  }
+  if (!customerRow?.email) return { ok: false, error: 'No email address on file for this customer', status: 422 }
 
   const charges = (chargesResult.data ?? []) as InvoiceCharge[]
   const allPayments = paymentsResult.data ?? []
@@ -254,19 +250,19 @@ export async function POST(
     .filter(p => p.status !== 'failed' && p.status !== 'refunded')
     .reduce((sum, p) => sum + (p.amount_cents ?? 0) / 100, 0)
 
-  const totals = calculateEstimate(charges, 0.13, false)
-  const balanceDue = Math.max(totals.estimate_total - totalPaid, 0)
+  const totals      = calculateEstimate(charges, 0.13, false)
+  const balanceDue  = Math.max(totals.estimate_total - totalPaid, 0)
+  const quoteNumber = formatQuoteNumber(opp.opportunity_number)
 
-  const quoteNumber    = formatQuoteNumber(opp.opportunity_number)
-  const moveDateLabel  = opp.service_date
+  const moveDateLabel    = opp.service_date
     ? new Date(opp.service_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
     : 'To be confirmed'
   const serviceTypeLabel = String(opp.service_type ?? 'Moving').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-  const origin       = [opp.origin_address_line1, opp.origin_city, opp.origin_province].filter(Boolean).join(', ')
-  const destination  = [opp.dest_address_line1, opp.dest_city, opp.dest_province].filter(Boolean).join(', ')
-  const agentParts        = agentRow?.full_name?.trim().split(/\s+/) ?? []
-  const agentFirstName    = agentParts[0] ?? ''
-  const agentLastInitial  = agentParts[1]?.[0] ?? ''
+  const origin           = [opp.origin_address_line1, opp.origin_city, opp.origin_province].filter(Boolean).join(', ')
+  const destination      = [opp.dest_address_line1, opp.dest_city, opp.dest_province].filter(Boolean).join(', ')
+  const agentParts       = agentRow?.full_name?.trim().split(/\s+/) ?? []
+  const agentFirstName   = agentParts[0] ?? ''
+  const agentLastInitial = agentParts[1]?.[0] ?? ''
   const customerFirstName = customerRow.full_name.trim().split(/\s+/)[0] ?? customerRow.full_name
 
   const html = buildInvoiceHtml({
@@ -295,24 +291,72 @@ export async function POST(
 
   const text = `Hi ${customerFirstName}, please find your Kratos Moving invoice for Quote #${quoteNumber}. Balance due: ${balanceDue > 0 ? moneyNum(balanceDue) : '$0.00 (Paid in Full)'}. Questions? Call ${COMPANY_PHONE}.`
 
+  return {
+    ok: true,
+    html,
+    subject,
+    text,
+    customerEmail: customerRow.email,
+    customerId: customerRow.id,
+    customerFirstName,
+  }
+}
+
+// ── GET — invoice preview (no send) ───────────────────────────────────────────
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const supabase = createClient()
+  const auth = await requireActiveProfile(supabase)
+  if (auth.response) return auth.response
+
+  const payload = await buildInvoicePayload(params.id)
+  if (!payload.ok) return NextResponse.json({ error: payload.error }, { status: payload.status })
+
+  return NextResponse.json({ html: payload.html, subject: payload.subject, customerEmail: payload.customerEmail })
+}
+
+// ── POST — build + send ────────────────────────────────────────────────────────
+
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const supabase = createClient()
+  const auth = await requireActiveProfile(supabase)
+  if (auth.response) return auth.response
+
+  const { user, role } = auth.context
+  const normalizedRole = normalizeRole(role)
+  if (!['owner', 'admin', 'manager', 'sales', 'dispatcher'].includes(normalizedRole)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const payload = await buildInvoicePayload(params.id)
+  if (!payload.ok) return NextResponse.json({ error: payload.error }, { status: payload.status })
+
+  const admin = createAdminClient()
+
   try {
     await sendEmail({
-      to: customerRow.email,
-      subject,
-      text,
-      html,
+      to: payload.customerEmail,
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html,
       fromName: 'Kratos Moving',
       fromEmail: process.env.EMAIL_FROM_DEFAULT ?? '',
     })
 
     await admin.from('communications').insert({
       opportunity_id: params.id,
-      customer_id: customerRow.id,
+      customer_id: payload.customerId,
       type: 'email',
       direction: 'outbound',
-      subject,
-      body: html,
-      email_to: customerRow.email,
+      subject: payload.subject,
+      body: payload.html,
+      email_to: payload.customerEmail,
       created_by: user.id,
     })
 

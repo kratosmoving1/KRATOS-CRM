@@ -26,6 +26,8 @@ import ChargeSidePanel from '@/components/admin/charges/ChargeSidePanel'
 import { PackageTierCards } from '@/components/admin/charges/PackageTierCards'
 import DocsSidePanel, { type DocumentRow } from '@/components/admin/documents/DocsSidePanel'
 import DocumentPreviewModal from '@/components/admin/documents/DocumentPreviewModal'
+import InvoicePreviewModal from '@/components/admin/documents/InvoicePreviewModal'
+import FinalizeJobModal from '@/components/admin/modals/FinalizeJobModal'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS, MOVE_SIZE_VOLUME } from '@/lib/constants'
@@ -486,7 +488,6 @@ export default function OpportunityDetailPage() {
   const [savingNoteField, setSavingNoteField] = useState<string | null>(null)
   const [savingMoveSize, setSavingMoveSize] = useState(false)
   const [paymentDrawerOpen, setPaymentDrawerOpen] = useState(false)
-  const [sendingInvoice, setSendingInvoice] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10))
@@ -507,6 +508,12 @@ export default function OpportunityDetailPage() {
   const [documentCount, setDocumentCount] = useState(0)
   const [previewDoc, setPreviewDoc] = useState<DocumentRow | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+
+  // Invoice preview
+  const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false)
+
+  // Finalize
+  const [finalizeOpen, setFinalizeOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -798,29 +805,13 @@ export default function OpportunityDetailPage() {
     }
   }
 
-  async function handleSendInvoice() {
+  function handleSendInvoice() {
     if (!opp) return
     if (!opp.customer?.email) {
       toast.error('No email address on file for this customer')
       return
     }
-    setSendingInvoice(true)
-    try {
-      const res = await fetch(`/api/admin/opportunities/${id}/send-invoice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(json.error ?? 'Failed to send invoice')
-        return
-      }
-      toast.success(`Invoice sent to ${opp.customer.email}`)
-    } catch {
-      toast.error('Network error — please try again')
-    } finally {
-      setSendingInvoice(false)
-    }
+    setInvoicePreviewOpen(true)
   }
 
   async function handleDelete() {
@@ -2677,14 +2668,25 @@ export default function OpportunityDetailPage() {
                 Accounting — #{formatQuoteNumber(opp.opportunity_number)}
               </h2>
               <div className="flex items-center gap-2">
+                {!(opp as { finalized_at?: string | null }).finalized_at && (
+                  <button
+                    onClick={() => setFinalizeOpen(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+                  >
+                    <CheckCircle2 size={14} /> Finalize
+                  </button>
+                )}
+                {(opp as { finalized_at?: string | null }).finalized_at && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700">
+                    <CheckCircle2 size={13} /> Finalized
+                  </span>
+                )}
                 <button
                   onClick={handleSendInvoice}
-                  disabled={sendingInvoice || !opp.customer?.email}
+                  disabled={!opp.customer?.email}
                   className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {sendingInvoice
-                    ? <Loader2 size={14} className="animate-spin" />
-                    : <ReceiptText size={14} />}
+                  <ReceiptText size={14} />
                   Send Invoice
                 </button>
                 <button
@@ -3170,6 +3172,25 @@ export default function OpportunityDetailPage() {
         isOpen={previewOpen}
         onClose={() => setPreviewOpen(false)}
         onRefresh={() => { setPreviewOpen(false); setDocsPanelOpen(true) }}
+      />
+
+      {/* Invoice preview */}
+      <InvoicePreviewModal
+        opportunityId={id}
+        customerEmail={opp?.customer?.email ?? undefined}
+        isOpen={invoicePreviewOpen}
+        onClose={() => setInvoicePreviewOpen(false)}
+        onSent={() => loadTimeline()}
+      />
+
+      {/* Finalize job */}
+      <FinalizeJobModal
+        opportunityId={id}
+        isOpen={finalizeOpen}
+        onClose={() => setFinalizeOpen(false)}
+        onFinalized={() => { load(); loadTimeline() }}
+        defaultCrewCount={2}
+        defaultTrucksCount={1}
       />
 
       {showRescheduleModal && (
