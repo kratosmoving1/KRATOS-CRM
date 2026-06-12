@@ -1,31 +1,18 @@
 import { KRATOS_DISPATCH_ADDRESS } from '@/lib/constants/company'
 
-/** Below this return-drive threshold, door-to-door labor absorbs the travel. No separate charge. */
+/** Below this threshold for either leg, travel is absorbed into labor. No separate charge. */
 export const TRAVEL_THRESHOLD_MINUTES = 30
 
 /**
- * Compute billable travel hours from the return-leg drive time.
+ * Compute billable travel hours from the longer travel leg.
  * Returns 0 if under the threshold.
- * Otherwise floors to the nearest 0.5h (rounds DOWN).
- *
- * Examples:
- *   25 min  → 0     (below threshold)
- *   30 min  → 0.5
- *   45 min  → 0.5
- *   60 min  → 1.0
- *   89 min  → 1.0
- *   90 min  → 1.5
- *   120 min → 2.0
+ * Floors to nearest 0.5h (rounds DOWN).
  */
-export function computeBillableTravelHours(returnDurationMinutes: number): number {
-  if (returnDurationMinutes < TRAVEL_THRESHOLD_MINUTES) return 0
-  return Math.floor(returnDurationMinutes / 30) * 0.5
+export function computeBillableTravelHours(longerLegMinutes: number): number {
+  if (longerLegMinutes < TRAVEL_THRESHOLD_MINUTES) return 0
+  return Math.floor(longerLegMinutes / 30) * 0.5
 }
 
-/**
- * Build a Google Maps-compatible address string from opportunity dest fields.
- * Returns null if no usable address data.
- */
 export function buildDestinationAddress(opp: Record<string, unknown>): string | null {
   if (!opp.dest_address_line1 && !opp.dest_city) return null
   const parts = [
@@ -37,14 +24,18 @@ export function buildDestinationAddress(opp: Record<string, unknown>): string | 
   return parts.join(', ') || null
 }
 
-/**
- * Call Google Maps Distance Matrix directly (server-side only — key never reaches browser).
- * Returns drive time in minutes, or null on any failure.
- *
- * Checks GOOGLE_MAPS_SERVER_API_KEY first, then GOOGLE_MAPS_SERVER_KEY,
- * then falls back to the public key (which may fail for server-to-server calls).
- */
-export async function fetchReturnDriveMinutes(destinationAddress: string): Promise<number | null> {
+export function buildOriginAddress(opp: Record<string, unknown>): string | null {
+  if (!opp.origin_address_line1 && !opp.origin_city) return null
+  const parts = [
+    opp.origin_address_line1,
+    opp.origin_city,
+    opp.origin_province,
+    opp.origin_postal_code,
+  ].filter(Boolean) as string[]
+  return parts.join(', ') || null
+}
+
+async function callDistanceMatrix(origin: string, destination: string): Promise<number | null> {
   const apiKey =
     process.env.GOOGLE_MAPS_SERVER_API_KEY ||
     process.env.GOOGLE_MAPS_SERVER_KEY ||
@@ -56,12 +47,7 @@ export async function fetchReturnDriveMinutes(destinationAddress: string): Promi
   }
 
   try {
-    const params = new URLSearchParams({
-      origins:      destinationAddress,
-      destinations: KRATOS_DISPATCH_ADDRESS,
-      mode:         'driving',
-      key:          apiKey,
-    })
+    const params = new URLSearchParams({ origins: origin, destinations: destination, mode: 'driving', key: apiKey })
     const res = await fetch(
       `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`,
       { cache: 'no-store' },
@@ -76,7 +62,34 @@ export async function fetchReturnDriveMinutes(destinationAddress: string): Promi
     if (!element || element.status !== 'OK') return null
     return Math.round(element.duration.value / 60)
   } catch (err) {
-    console.warn('[travel] fetchReturnDriveMinutes error:', err)
+    console.warn('[travel] callDistanceMatrix error:', err)
     return null
   }
+}
+
+/** Return-leg: destination → dispatch */
+export async function fetchReturnDriveMinutes(destinationAddress: string): Promise<number | null> {
+  return callDistanceMatrix(destinationAddress, KRATOS_DISPATCH_ADDRESS)
+}
+
+/**
+ * Fetch both legs in parallel and return the longer one.
+ * Uses whichever is longer: dispatch→origin (outbound) OR destination→dispatch (return).
+ * This ensures jobs where dest = dispatch still generate a travel charge for the outbound leg.
+ */
+export async function fetchLongerTravelLegMinutes(
+  originAddress: string | null,
+  destinationAddress: string | null,
+): Promise<{ minutes: number | null; leg: 'outbound' | 'return' | null }> {
+  const [outbound, returnLeg] = await Promise.all([
+    originAddress ? callDistanceMatrix(KRATOS_DISPATCH_ADDRESS, originAddress) : Promise.resolve(null),
+    destinationAddress ? callDistanceMatrix(destinationAddress, KRATOS_DISPATCH_ADDRESS) : Promise.resolve(null),
+  ])
+
+  if (outbound == null && returnLeg == null) return { minutes: null, leg: null }
+  if (outbound == null) return { minutes: returnLeg, leg: 'return' }
+  if (returnLeg == null) return { minutes: outbound, leg: 'outbound' }
+  return outbound >= returnLeg
+    ? { minutes: outbound, leg: 'outbound' }
+    : { minutes: returnLeg, leg: 'return' }
 }

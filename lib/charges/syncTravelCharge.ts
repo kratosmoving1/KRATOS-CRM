@@ -1,25 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   buildDestinationAddress,
+  buildOriginAddress,
   computeBillableTravelHours,
-  fetchReturnDriveMinutes,
+  fetchLongerTravelLegMinutes,
 } from './travel'
 
 export type TravelSyncResult =
-  | { action: 'below_threshold';  return_minutes: number; billable_hours: 0 }
-  | { action: 'created' | 'updated'; return_minutes: number; billable_hours: number }
+  | { action: 'below_threshold';  longer_leg_minutes: number; billable_hours: 0 }
+  | { action: 'created' | 'updated'; longer_leg_minutes: number; billable_hours: number; leg: string }
   | { action: 'deleted' }
-  | { action: 'no_destination' }
+  | { action: 'no_addresses' }
   | { action: 'api_unavailable'; warning: string }
 
-/**
- * Read the current Moving Labor charge and return its hourly_rate.
- * Returns null if no Moving Labor charge is applied.
- */
-async function getLaborRate(
-  supabase: SupabaseClient,
-  opportunityId: string,
-): Promise<number | null> {
+async function getLaborRate(supabase: SupabaseClient, opportunityId: string): Promise<number | null> {
   const { data } = await supabase
     .from('opportunity_charges')
     .select('config')
@@ -36,19 +30,12 @@ async function getLaborRate(
 }
 
 /**
- * Sync the trip_and_travel charge for an opportunity based on the
- * return-leg (destination → dispatch) drive time.
+ * Sync the trip_and_travel charge using the LONGER of the two travel legs:
+ *   Outbound: dispatch → origin
+ *   Return:   destination → dispatch
  *
- * Rules:
- *   - No destination address → delete any existing charge
- *   - API unavailable → leave existing charge untouched, return warning
- *   - Return drive < 30 min → delete any existing charge
- *   - Return drive ≥ 30 min → create or update charge at the Moving Labor rate
- *
- * @param supabase   Authenticated supabase client (user or admin)
- * @param opportunity Full or partial opportunity row — must include dest_* fields
- * @param laborRate  Hourly rate from the current Moving Labor charge. If null, falls
- *                   back to reading from the DB. Pass null when calling from rerate.
+ * This ensures jobs where dest = dispatch (storage drops, yard deliveries) still
+ * generate a travel charge for the outbound leg.
  */
 export async function syncTravelCharge(
   supabase: SupabaseClient,
@@ -57,7 +44,6 @@ export async function syncTravelCharge(
 ): Promise<TravelSyncResult> {
   const opportunityId = String(opportunity.id)
 
-  // Find existing trip_and_travel charge (if any)
   const { data: existing } = await supabase
     .from('opportunity_charges')
     .select('id, subtotal, total, config')
@@ -66,38 +52,35 @@ export async function syncTravelCharge(
     .neq('is_deleted', true)
     .maybeSingle()
 
-  // Destination address
+  const originAddress = buildOriginAddress(opportunity)
   const destAddress = buildDestinationAddress(opportunity)
-  if (!destAddress) {
+
+  if (!originAddress && !destAddress) {
     if (existing) {
       await supabase
         .from('opportunity_charges')
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('id', existing.id)
     }
-    return { action: 'no_destination' }
+    return { action: 'no_addresses' }
   }
 
-  // Resolve labor rate
   const rate = laborRate ?? (await getLaborRate(supabase, opportunityId))
   if (!rate) {
-    // No package applied yet — can't compute travel charge without a rate.
-    // Don't delete existing; just skip.
     return { action: 'api_unavailable', warning: 'No Moving Labor charge found — apply a package first to enable travel charge.' }
   }
 
-  // Call Distance Matrix
-  const returnMinutes = await fetchReturnDriveMinutes(destAddress)
-  if (returnMinutes == null) {
+  const { minutes: longerLegMinutes, leg } = await fetchLongerTravelLegMinutes(originAddress, destAddress)
+
+  if (longerLegMinutes == null) {
     return {
       action: 'api_unavailable',
       warning: 'Travel time unavailable — Distance Matrix call failed. Existing Trip & Travel charge (if any) was preserved.',
     }
   }
 
-  const billableHours = computeBillableTravelHours(returnMinutes)
+  const billableHours = computeBillableTravelHours(longerLegMinutes)
 
-  // Below threshold — remove any existing charge
   if (billableHours === 0) {
     if (existing) {
       await supabase
@@ -105,18 +88,20 @@ export async function syncTravelCharge(
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('id', existing.id)
     }
-    return { action: 'below_threshold', return_minutes: returnMinutes, billable_hours: 0 }
+    return { action: 'below_threshold', longer_leg_minutes: longerLegMinutes, billable_hours: 0 }
   }
 
   const subtotal = +(billableHours * rate).toFixed(2)
   const config = {
     source: 'auto_distance_matrix',
-    return_drive_minutes: returnMinutes,
+    longer_leg_minutes: longerLegMinutes,
+    leg,
     billable_hours: billableHours,
     hourly_rate: rate,
     computed_at: new Date().toISOString(),
   }
-  const description = `${billableHours}h @ $${rate.toFixed(2)}/hr (Return: ${returnMinutes} min)`
+  const legLabel = leg === 'outbound' ? 'Dispatch→Origin' : 'Destination→Dispatch'
+  const description = `${billableHours}h @ $${rate.toFixed(2)}/hr (${legLabel}: ${longerLegMinutes} min)`
 
   if (existing) {
     await supabase
@@ -134,10 +119,9 @@ export async function syncTravelCharge(
         override_reason: null,
       })
       .eq('id', existing.id)
-    return { action: 'updated', return_minutes: returnMinutes, billable_hours: billableHours }
+    return { action: 'updated', longer_leg_minutes: longerLegMinutes, billable_hours: billableHours, leg: leg! }
   }
 
-  // Find the max sort_order so the new charge lands at the bottom
   const { data: maxRow } = await supabase
     .from('opportunity_charges')
     .select('sort_order')
@@ -163,5 +147,5 @@ export async function syncTravelCharge(
       is_overridden: false,
       sort_order: (maxRow?.sort_order ?? -1) + 1,
     })
-  return { action: 'created', return_minutes: returnMinutes, billable_hours: billableHours }
+  return { action: 'created', longer_leg_minutes: longerLegMinutes, billable_hours: billableHours, leg: leg! }
 }

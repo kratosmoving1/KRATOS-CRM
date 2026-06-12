@@ -19,10 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: `Unknown tier: ${tier_id}` }, { status: 400 })
   }
 
-  // Fetch opportunity — include move_size and dest address for labor defaults + travel sync
+  // Fetch opportunity — include move_size, origin + dest address for labor defaults + travel sync
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
-    .select('id, service_date, move_size, dest_address_line1, dest_city, dest_province, dest_postal_code')
+    .select('id, service_date, move_size, origin_address_line1, origin_city, origin_province, origin_postal_code, dest_address_line1, dest_city, dest_province, dest_postal_code')
     .eq('id', params.id)
     .neq('is_deleted', true)
     .maybeSingle()
