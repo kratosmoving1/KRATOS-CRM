@@ -59,15 +59,14 @@ function StatusPill({ status }: { status: string }) {
 function DocRowMenu({
   doc,
   onPreview,
-  onMarkSent,
-  onDelete,
+  onSend,
 }: {
   doc: DocumentRow
   onPreview: () => void
-  onMarkSent: () => void
-  onDelete: () => void
+  onSend: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const alreadySent = ['sent', 'viewed', 'signed', 'completed'].includes(doc.status)
   return (
     <div className="relative">
       <button
@@ -80,7 +79,7 @@ function DocRowMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+          <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
             <button
               type="button"
               onClick={() => { setOpen(false); onPreview() }}
@@ -88,22 +87,15 @@ function DocRowMenu({
             >
               <Eye size={13} /> Preview
             </button>
-            {doc.status === 'generated' && (
+            {!alreadySent && (
               <button
                 type="button"
-                onClick={() => { setOpen(false); onMarkSent() }}
+                onClick={() => { setOpen(false); onSend() }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
-                <Send size={13} /> Mark as Sent
+                <Send size={13} /> Send Signature Request
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => { setOpen(false); onDelete() }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-            >
-              <Trash2 size={13} /> Delete
-            </button>
           </div>
         </>
       )}
@@ -198,20 +190,13 @@ export default function DocsSidePanel({
     }
   }
 
-  async function handleMarkSent(doc: DocumentRow) {
+  async function handleSend(doc: DocumentRow) {
     try {
-      const res = await fetch(`/api/admin/documents/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'sent' }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        toast.error(j.error ?? 'Failed to mark as sent')
-        return
-      }
+      const res = await fetch(`/api/admin/documents/${doc.id}/send`, { method: 'POST' })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(j.error ?? 'Failed to send'); return }
+      toast.success(`Sent to ${j.sentTo}`)
       await fetchDocs()
-      toast.success('Marked as sent.')
     } catch {
       toast.error('Network error')
     }
@@ -298,8 +283,7 @@ export default function DocsSidePanel({
                         key={doc.id}
                         doc={doc}
                         onPreview={() => onPreviewDoc?.(doc)}
-                        onMarkSent={() => handleMarkSent(doc)}
-                        onDelete={() => handleDelete(doc)}
+                        onSend={() => handleSend(doc)}
                       />
                     ))}
                   </div>
@@ -316,8 +300,7 @@ export default function DocsSidePanel({
                         key={doc.id}
                         doc={doc}
                         onPreview={() => onPreviewDoc?.(doc)}
-                        onMarkSent={() => handleMarkSent(doc)}
-                        onDelete={() => handleDelete(doc)}
+                        onSend={() => handleSend(doc)}
                       />
                     ))}
                   </div>
@@ -353,13 +336,11 @@ export default function DocsSidePanel({
 function DocCard({
   doc,
   onPreview,
-  onMarkSent,
-  onDelete,
+  onSend,
 }: {
   doc: DocumentRow
   onPreview: () => void
-  onMarkSent: () => void
-  onDelete: () => void
+  onSend: () => void
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50 transition-colors">
@@ -380,8 +361,7 @@ function DocCard({
       <DocRowMenu
         doc={doc}
         onPreview={onPreview}
-        onMarkSent={onMarkSent}
-        onDelete={onDelete}
+        onSend={onSend}
       />
     </div>
   )

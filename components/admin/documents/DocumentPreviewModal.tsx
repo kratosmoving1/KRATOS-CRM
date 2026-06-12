@@ -3,26 +3,7 @@
 import { useEffect, useState } from 'react'
 import { X, Send, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import type { DocumentRow } from './DocsSidePanel'
-
-const STATUS_STYLES: Record<string, string> = {
-  not_started: 'bg-slate-100 text-slate-600',
-  generated:   'bg-blue-100 text-blue-700',
-  sent:        'bg-amber-100 text-amber-800',
-  viewed:      'bg-purple-100 text-purple-700',
-  signed:      'bg-green-100 text-green-700',
-  completed:   'bg-emerald-100 text-emerald-800',
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  not_started: 'Not Started',
-  generated:   'Generated',
-  sent:        'Sent',
-  viewed:      'Viewed',
-  signed:      'Signed',
-  completed:   'Completed',
-}
 
 interface Props {
   doc: DocumentRow | null
@@ -34,14 +15,10 @@ interface Props {
 export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }: Props) {
   const [livDoc, setLivDoc] = useState<DocumentRow | null>(null)
   const [loading, setLoading] = useState(false)
-  const [markingSent, setMarkingSent] = useState(false)
+  const [sending, setSending] = useState(false)
 
-  // Re-fetch fresh rendered HTML every time the modal opens
   useEffect(() => {
-    if (!isOpen || !doc) {
-      setLivDoc(null)
-      return
-    }
+    if (!isOpen || !doc) { setLivDoc(null); return }
     setLoading(true)
     fetch(`/api/admin/documents/${doc.id}`)
       .then(r => r.json())
@@ -53,109 +30,85 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
   if (!isOpen || !doc) return null
 
   const displayed = livDoc ?? doc
+  const alreadySent = ['sent', 'viewed', 'signed', 'completed'].includes(displayed.status)
 
-  async function handleMarkSent() {
+  async function handleSend() {
     if (!doc) return
-    setMarkingSent(true)
+    setSending(true)
     try {
-      const res = await fetch(`/api/admin/documents/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'sent' }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        toast.error(j.error ?? 'Failed to update status')
-        return
-      }
-      toast.success('Marked as sent.')
+      const res = await fetch(`/api/admin/documents/${doc.id}/send`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json.error ?? 'Failed to send'); return }
+      toast.success(`Sent to ${json.sentTo}`)
       onRefresh?.()
       onClose()
     } catch {
       toast.error('Network error')
     } finally {
-      setMarkingSent(false)
+      setSending(false)
     }
   }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      {/* Modal */}
       <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl">
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div className="flex items-center gap-3 min-w-0">
             <h2 className="text-base font-semibold text-slate-900 truncate">{doc.name}</h2>
-            <span className={cn(
-              'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold',
-              STATUS_STYLES[displayed.status] ?? 'bg-slate-100 text-slate-500',
-            )}>
-              {STATUS_LABELS[displayed.status] ?? displayed.status}
-            </span>
+            {doc.document_number && (
+              <span className="text-xs text-slate-400 shrink-0">{doc.document_number}</span>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0"
-          >
+          <button type="button" onClick={onClose}
+            className="ml-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0">
             <X size={18} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-5 bg-slate-50">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="animate-spin text-slate-400" size={22} />
             </div>
           ) : displayed.rendered_html ? (
-            <div
-              className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: displayed.rendered_html }}
-            />
+            <div className="rounded-lg bg-white shadow-sm">
+              <div
+                className="prose prose-sm max-w-none p-6"
+                dangerouslySetInnerHTML={{ __html: displayed.rendered_html }}
+              />
+            </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-sm text-slate-500">
-                This document has not been generated yet.
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Click Regenerate Documents in the panel to generate it.
-              </p>
+            <div className="flex items-center justify-center py-16 text-sm text-slate-400">
+              Document not yet rendered.
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
-          <span className={cn(
-            'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
-            STATUS_STYLES[displayed.status] ?? 'bg-slate-100 text-slate-500',
-          )}>
-            Status: {STATUS_LABELS[displayed.status] ?? displayed.status}
-          </span>
-          <div className="flex items-center gap-2">
-            {displayed.status === 'generated' && (
-              <button
-                type="button"
-                onClick={handleMarkSent}
-                disabled={markingSent}
-                className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
-              >
-                {markingSent ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                Mark as Sent
-              </button>
-            )}
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-6 py-4">
+          <button type="button" onClick={onClose}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Close
+          </button>
+          {!alreadySent ? (
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              onClick={handleSend}
+              disabled={sending || loading}
+              className="flex items-center gap-1.5 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-950 hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              Close
+              {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              {sending ? 'Sending…' : 'Send Signature Request'}
             </button>
-          </div>
+          ) : (
+            <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+              Sent
+            </span>
+          )}
         </div>
       </div>
     </div>

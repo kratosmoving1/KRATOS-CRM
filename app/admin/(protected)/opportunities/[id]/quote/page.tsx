@@ -514,6 +514,8 @@ export default function OpportunityDetailPage() {
   const [inlineDocsLoading, setInlineDocsLoading] = useState(false)
   const [inlineGenerating, setInlineGenerating] = useState(false)
   const [inlineGenError, setInlineGenError] = useState<string | null>(null)
+  const [openDocMenu, setOpenDocMenu] = useState<string | null>(null)
+  const [sendingDocId, setSendingDocId] = useState<string | null>(null)
   const autoGenerateAttempted = useRef(false)
 
   // Invoice preview
@@ -799,6 +801,23 @@ export default function OpportunityDetailPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, fetchCharges, fetchTripData, fetchInlineDocs])
+
+  async function handleSendDoc(docId: string) {
+    setSendingDocId(docId)
+    setOpenDocMenu(null)
+    try {
+      const res = await fetch(`/api/admin/documents/${docId}/send`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json.error ?? 'Failed to send'); return }
+      toast.success(`Document sent to ${json.sentTo}`)
+      autoGenerateAttempted.current = true
+      fetchInlineDocs()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setSendingDocId(null)
+    }
+  }
 
   async function deleteCharge(chargeId: string) {
     setDeletingChargeId(chargeId)
@@ -2639,33 +2658,70 @@ export default function OpportunityDetailPage() {
                     <p className="py-4 text-sm text-slate-400">No published templates found. Go to Settings → Documents to publish templates.</p>
                   ) : (
                     <div className="space-y-2">
-                      {inlineDocs.map(doc => (
-                        <button
-                          key={doc.id}
-                          type="button"
-                          onClick={() => { setPreviewDoc(doc); setPreviewOpen(true) }}
-                          className="flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
-                        >
-                          <FileText size={15} className="shrink-0 text-slate-400" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-800 truncate">{doc.name}</p>
-                            {doc.document_number && (
-                              <p className="text-[10px] text-slate-400 mt-0.5">{doc.document_number}</p>
-                            )}
+                      {inlineDocs.map(doc => {
+                        const alreadySent = ['sent', 'viewed', 'signed', 'completed'].includes(doc.status)
+                        return (
+                          <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 hover:bg-slate-50 transition-colors">
+                            <button
+                              type="button"
+                              onClick={() => { setPreviewDoc(doc); setPreviewOpen(true) }}
+                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            >
+                              <FileText size={15} className="shrink-0 text-slate-400" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-slate-800 truncate">{doc.name}</p>
+                                {doc.document_number && (
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{doc.document_number}</p>
+                                )}
+                              </div>
+                            </button>
+                            <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              alreadySent ? 'bg-green-100 text-green-700' :
+                              doc.status === 'generated' ? 'bg-blue-100 text-blue-700' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {alreadySent ? 'Sent' : 'Ready'}
+                            </span>
+                            {/* ⋮ menu */}
+                            <div className="relative shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setOpenDocMenu(openDocMenu === doc.id ? null : doc.id)}
+                                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <MoreHorizontal size={14} />
+                              </button>
+                              {openDocMenu === doc.id && (
+                                <>
+                                  <div className="fixed inset-0 z-10" onClick={() => setOpenDocMenu(null)} />
+                                  <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setOpenDocMenu(null); setPreviewDoc(doc); setPreviewOpen(true) }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                    >
+                                      <FileText size={13} /> Preview
+                                    </button>
+                                    {!alreadySent && (
+                                      <button
+                                        type="button"
+                                        disabled={sendingDocId === doc.id}
+                                        onClick={() => handleSendDoc(doc.id)}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                      >
+                                        {sendingDocId === doc.id
+                                          ? <Loader2 size={13} className="animate-spin" />
+                                          : <ArrowRight size={13} />}
+                                        Send Signature Request
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${
-                            doc.status === 'generated' ? 'bg-blue-100 text-blue-700' :
-                            doc.status === 'sent' ? 'bg-amber-100 text-amber-800' :
-                            doc.status === 'signed' ? 'bg-green-100 text-green-700' :
-                            'bg-slate-100 text-slate-600'
-                          }`}>
-                            {doc.status === 'generated' ? 'Generated' :
-                             doc.status === 'sent' ? 'Sent' :
-                             doc.status === 'signed' ? 'Signed' :
-                             doc.status}
-                          </span>
-                        </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
