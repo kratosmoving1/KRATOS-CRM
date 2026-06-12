@@ -72,51 +72,259 @@ ${mf('charges_table')}
 `.trim()
 
 const CONTRACT_HTML = `
-<h1>Moving Services Contract</h1>
-<p><strong>Contract Number:</strong> ${mf('document_number')}</p>
-<p><strong>Date:</strong> ${mf('generated_date')}</p>
+<div style="font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #222; max-width: 780px; margin: 0 auto;">
 
-<h2>Parties</h2>
-<p>
-  <strong>Service Provider:</strong> ${mf('company_name')}<br>
-  ${mf('company_address')}<br>
-  ${mf('company_phone')} | ${mf('company_email')}
-</p>
-<p>
-  <strong>Customer:</strong> ${mf('customer_full_name')}<br>
-  ${mf('customer_phone')}<br>
-  ${mf('customer_email')}
-</p>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+    <tr>
+      <td style="vertical-align: middle; width: 50%;">
+        <img src="/logo.png" alt="Kratos Moving" style="height: 56px; object-fit: contain; display: block;">
+      </td>
+      <td style="vertical-align: middle; text-align: right; font-size: 9pt; color: #555; line-height: 1.5;">
+        <strong style="color: #222;">Kratos Moving Inc.</strong><br>
+        27 Roytec Rd, Woodbridge, ON L4L 8E5<br>
+        (800) 321-3222 &nbsp;|&nbsp; info@kratosmoving.ca<br>
+        kratosmoving.ca
+      </td>
+    </tr>
+  </table>
 
-<h2>Move Details</h2>
-<p>
-  <strong>Move Date:</strong> ${mf('move_date')}<br>
-  <strong>Service Type:</strong> ${mf('service_type')}<br>
-  <strong>Move Size:</strong> ${mf('move_size')}
-</p>
-<p><strong>Origin:</strong> ${mf('origin_address')}</p>
-<p><strong>Destination:</strong> ${mf('destination_address')}</p>
+  <div style="background: #ffad33; color: #fff; text-align: center; padding: 9px 0; font-size: 13pt; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px;">
+    Contract for Moving Services
+  </div>
 
-<h2>Package &amp; Pricing</h2>
-<p>
-  ${mf('package_name')}<br>
-  ${mf('num_trucks')} truck(s), ${mf('num_crew')} movers<br>
-  Rate: ${mf('hourly_rate')}
-</p>
-${mf('charges_table')}
-<p>
-  <strong>Estimated Total:</strong> ${mf('estimated_total')}<br>
-  <strong>Deposit Required:</strong> ${mf('deposit_required')}
-</p>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; width: 33.33%;">
+        <div style="font-size: 7.5pt; text-transform: uppercase; color: #888; margin-bottom: 3px;">Date</div>
+        <div style="font-weight: bold;">${mf('move_date')}</div>
+      </td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; width: 33.33%;">
+        <div style="font-size: 7.5pt; text-transform: uppercase; color: #888; margin-bottom: 3px;">Billing Type</div>
+        <div style="font-weight: bold;">Hourly Rate</div>
+      </td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; width: 33.33%;">
+        <div style="font-size: 7.5pt; text-transform: uppercase; color: #888; margin-bottom: 3px;">Job Number</div>
+        <div style="font-weight: bold;">#${mf('quote_number')}</div>
+      </td>
+    </tr>
+  </table>
 
-<h2>Terms &amp; Conditions</h2>
-<p>[Insert contract terms here. Have your legal counsel review before use.]</p>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr style="background: #f7f7f7;">
+      <th style="border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444;">Shipper</th>
+      <th style="border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444;">Origin</th>
+      <th style="border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444;">Stops</th>
+      <th style="border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444;">Destination</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 10px; vertical-align: top; line-height: 1.6;">
+        <strong>${mf('customer_full_name')}</strong><br>
+        ${mf('customer_phone')}<br>
+        ${mf('customer_email')}
+      </td>
+      <td style="border: 1px solid #ccc; padding: 10px; vertical-align: top; line-height: 1.6;">
+        ${mf('origin_address')}<br>
+        <span style="color: #888; font-size: 9pt;">${mf('origin_dwelling_type')}</span>
+      </td>
+      <td style="border: 1px solid #ccc; padding: 10px; vertical-align: top; color: #aaa; font-style: italic;">None</td>
+      <td style="border: 1px solid #ccc; padding: 10px; vertical-align: top; line-height: 1.6;">
+        ${mf('destination_address')}<br>
+        <span style="color: #888; font-size: 9pt;">${mf('destination_dwelling_type')}</span>
+      </td>
+    </tr>
+  </table>
 
-<h2>Agreement</h2>
-<p>By signing below, the customer acknowledges and agrees to the terms stated in this contract.</p>
-${mf('signature_block')}
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 12px; width: 50%; vertical-align: top;">
+        <div style="font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; margin-bottom: 8px;">Form of Payment</div>
+        <table style="border-collapse: collapse; font-size: 9.5pt; width: 100%;">
+          <tr>
+            <td style="padding: 3px 0; width: 50%;">&#9744; Credit Card</td>
+            <td style="padding: 3px 0;">&#9744; Debit</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">&#9744; Cash</td>
+            <td style="padding: 3px 0;">&#9744; E-Transfer</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0 0 0; vertical-align: top;" colspan="2">
+              Card / Auth #: <span style="display: inline-block; width: 160px; border-bottom: 1px solid #aaa;">&nbsp;</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td style="border: 1px solid #ccc; padding: 12px; width: 50%; vertical-align: top;">
+        <div style="font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; margin-bottom: 8px;">Hourly Rate — How It Works</div>
+        <p style="font-size: 9pt; margin: 0; line-height: 1.55; color: #333;">
+          The clock starts when our crew leaves the Kratos facility and ends when they return. Travel time is included.
+          Time is billed to the nearest quarter-hour. A minimum billing period applies. Extra charges may apply for
+          stairs, elevators, long walks, or specialty items. HST (13%) applies to all charges.
+        </p>
+      </td>
+    </tr>
+  </table>
 
-<p><strong>Kratos Moving — Done As Promised.</strong></p>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr>
+      <th colspan="2" style="background: #ffad33; color: #fff; padding: 7px 10px; font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; text-align: left;">
+        Shipper Authorization &mdash; Must Sign Before Loading
+      </th>
+    </tr>
+    <tr>
+      <td colspan="2" style="border: 1px solid #ccc; padding: 12px; font-size: 9pt; line-height: 1.6; color: #333;">
+        I, the undersigned, authorize Kratos Moving Inc. to perform the moving services described in this contract at the
+        hourly rate specified. I understand the billing method, agree to pay in full upon delivery, and confirm that all
+        information provided is accurate. I have read and accept these terms and conditions.
+        <br><br>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="width: 60%; padding-top: 12px; padding-right: 24px;">
+              <div style="border-bottom: 1px solid #222; padding-bottom: 2px; min-height: 32px;">&nbsp;</div>
+              <div style="font-size: 8pt; color: #888; margin-top: 3px;">Customer Signature</div>
+            </td>
+            <td style="width: 40%; padding-top: 12px;">
+              <div style="border-bottom: 1px solid #222; padding-bottom: 2px; min-height: 32px;">&nbsp;</div>
+              <div style="font-size: 8pt; color: #888; margin-top: 3px;">Date</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr style="background: #f7f7f7;">
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Start Time</th>
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">End Time</th>
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Travel Time</th>
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Deductions</th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 24px 10px;">&nbsp;</td>
+      <td style="border: 1px solid #ccc; padding: 24px 10px;">&nbsp;</td>
+      <td style="border: 1px solid #ccc; padding: 24px 10px;">&nbsp;</td>
+      <td style="border: 1px solid #ccc; padding: 24px 10px;">&nbsp;</td>
+    </tr>
+  </table>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr style="background: #f7f7f7;">
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Crew(s)</th>
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Truck(s)</th>
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Pricing Rate</th>
+      <th style="border: 1px solid #ccc; padding: 7px 10px; text-align: center; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444; width: 25%;">Billed Time</th>
+    </tr>
+    <tr style="text-align: center;">
+      <td style="border: 1px solid #ccc; padding: 14px 10px; font-size: 13pt; font-weight: bold;">${mf('num_crew')}</td>
+      <td style="border: 1px solid #ccc; padding: 14px 10px; font-size: 13pt; font-weight: bold;">${mf('num_trucks')}</td>
+      <td style="border: 1px solid #ccc; padding: 14px 10px; font-size: 13pt; font-weight: bold;">${mf('hourly_rate')}</td>
+      <td style="border: 1px solid #ccc; padding: 14px 10px;">&nbsp;</td>
+    </tr>
+  </table>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 32px;">
+    <tr>
+      <th colspan="2" style="background: #ffad33; color: #fff; padding: 7px 10px; font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; text-align: left;">
+        Payment Terms &mdash; Must Sign Before Loading
+      </th>
+    </tr>
+    <tr>
+      <td colspan="2" style="border: 1px solid #ccc; padding: 12px; font-size: 9pt; line-height: 1.6; color: #333;">
+        Full payment is due upon completion of the move before the crew departs the delivery address.
+        Items will not be released until payment is received. All amounts are in Canadian dollars plus applicable taxes.
+        By signing below, I agree to pay the final billed amount calculated at the rate and crew size shown above.
+        <br><br>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="width: 60%; padding-top: 12px; padding-right: 24px;">
+              <div style="border-bottom: 1px solid #222; padding-bottom: 2px; min-height: 32px;">&nbsp;</div>
+              <div style="font-size: 8pt; color: #888; margin-top: 3px;">Customer Signature</div>
+            </td>
+            <td style="width: 40%; padding-top: 12px;">
+              <div style="border-bottom: 1px solid #222; padding-bottom: 2px; min-height: 32px;">&nbsp;</div>
+              <div style="font-size: 8pt; color: #888; margin-top: 3px;">Date</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <div style="page-break-before: always; border-top: 2px dashed #ddd; margin: 0 0 24px 0; padding-top: 24px;"></div>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+    <tr>
+      <td style="vertical-align: middle; width: 50%;">
+        <img src="/logo.png" alt="Kratos Moving" style="height: 56px; object-fit: contain; display: block;">
+      </td>
+      <td style="vertical-align: middle; text-align: right; font-size: 9pt; color: #555; line-height: 1.5;">
+        <strong style="color: #222;">Kratos Moving Inc.</strong><br>
+        27 Roytec Rd, Woodbridge, ON L4L 8E5<br>
+        (800) 321-3222 &nbsp;|&nbsp; info@kratosmoving.ca
+      </td>
+    </tr>
+  </table>
+  <div style="border-top: 3px solid #ffad33; margin-bottom: 12px;"></div>
+  <p style="font-size: 9pt; color: #888; margin: 0 0 16px 0;">
+    Job #${mf('quote_number')} &nbsp;&mdash;&nbsp; ${mf('customer_full_name')} &nbsp;&mdash;&nbsp; ${mf('move_date')}
+  </p>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr>
+      <th colspan="2" style="background: #ffad33; color: #fff; padding: 7px 10px; font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; text-align: left;">
+        Shipper Accepts Delivery of Shipment &mdash; Must Sign After Unloading
+      </th>
+    </tr>
+    <tr>
+      <td colspan="2" style="border: 1px solid #ccc; padding: 12px; font-size: 9pt; line-height: 1.6; color: #333;">
+        I confirm that all items have been delivered to the destination address. All damage claims must be submitted
+        in writing to info@kratosmoving.ca within 24 hours of delivery. No claims will be accepted after this window.
+        <br><br>
+        <strong>Condition at Delivery:</strong><br>
+        <table style="width: 100%; border-collapse: collapse; margin: 8px 0;">
+          <tr><td style="padding: 4px 0;">&#9744; All items delivered in satisfactory condition</td></tr>
+          <tr><td style="padding: 4px 0;">&#9744; Damage noted &mdash; described below</td></tr>
+        </table>
+        <div style="border: 1px solid #ccc; padding: 8px; min-height: 64px; margin: 8px 0; background: #fafafa;">&nbsp;</div>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+          <tr>
+            <td style="width: 60%; padding-top: 12px; padding-right: 24px;">
+              <div style="border-bottom: 1px solid #222; padding-bottom: 2px; min-height: 32px;">&nbsp;</div>
+              <div style="font-size: 8pt; color: #888; margin-top: 3px;">Customer Signature</div>
+            </td>
+            <td style="width: 40%; padding-top: 12px;">
+              <div style="border-bottom: 1px solid #222; padding-bottom: 2px; min-height: 32px;">&nbsp;</div>
+              <div style="font-size: 8pt; color: #888; margin-top: 3px;">Date</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+    <tr style="background: #f7f7f7;">
+      <th colspan="3" style="border: 1px solid #ccc; padding: 7px 10px; text-align: left; font-size: 8pt; text-transform: uppercase; font-weight: bold; color: #444;">
+        Final Billing Summary
+      </th>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; font-size: 9pt; width: 34%;">Billed Hours: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; font-size: 9pt; width: 33%;">Hourly Rate: ${mf('hourly_rate')}</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; font-size: 9pt; width: 33%;">Subtotal: ${mf('subtotal')}</td>
+    </tr>
+    <tr>
+      <td colspan="2" style="border: 1px solid #ccc; padding: 7px 10px; font-size: 9pt;">HST (13%): ${mf('hst')}</td>
+      <td style="border: 1px solid #ccc; padding: 7px 10px; font-size: 9.5pt; font-weight: bold;">Total: ${mf('estimated_total')}</td>
+    </tr>
+  </table>
+
+  <div style="text-align: center; font-size: 8.5pt; color: #aaa; margin-top: 24px; border-top: 1px solid #eee; padding-top: 12px;">
+    Kratos Moving Inc. &mdash; Done As Promised &nbsp;&bull;&nbsp; kratosmoving.ca &nbsp;&bull;&nbsp; (800) 321-3222 &nbsp;&bull;&nbsp; info@kratosmoving.ca
+  </div>
+
+</div>
 `.trim()
 
 const INVOICE_HTML = `
@@ -206,7 +414,7 @@ const WORK_ORDER_HTML = `
 
 const TEMPLATES = [
   { name: 'Estimate for Moving Services', category: 'opportunity_estimate', content_html: ESTIMATE_HTML },
-  { name: 'Contract for Moving Services', category: 'opportunity_contract', content_html: CONTRACT_HTML },
+  { name: 'Contract for Moving Services', category: 'job_contract', content_html: CONTRACT_HTML, status: 'published' },
   { name: 'Invoice', category: 'opportunity_invoice', content_html: INVOICE_HTML },
   { name: 'Damage Waiver', category: 'opportunity_addendum', content_html: WAIVER_HTML },
   { name: 'Work Order', category: 'job_work_order', content_html: WORK_ORDER_HTML },
@@ -236,7 +444,7 @@ async function main() {
       name: t.name,
       category: t.category,
       content_html: t.content_html,
-      status: 'draft',
+      status: (t as { status?: string }).status ?? 'draft',
     })
 
     if (error) {
