@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, type ElementType, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ElementType, type ReactNode } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -513,6 +513,8 @@ export default function OpportunityDetailPage() {
   const [inlineDocs, setInlineDocs] = useState<DocumentRow[]>([])
   const [inlineDocsLoading, setInlineDocsLoading] = useState(false)
   const [inlineGenerating, setInlineGenerating] = useState(false)
+  const [inlineGenError, setInlineGenError] = useState<string | null>(null)
+  const autoGenerateAttempted = useRef(false)
 
   // Invoice preview
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false)
@@ -745,15 +747,39 @@ export default function OpportunityDetailPage() {
 
   const fetchInlineDocs = useCallback(async () => {
     setInlineDocsLoading(true)
+    setInlineGenError(null)
     try {
       const res = await fetch(`/api/admin/opportunities/${id}/documents`)
-      if (res.ok) {
-        const data: DocumentRow[] = await res.json()
+      if (!res.ok) return
+      const data: DocumentRow[] = await res.json()
+
+      if (data.length > 0) {
         setInlineDocs(data)
         setDocumentCount(data.length)
+        return
       }
-    } catch {}
-    finally { setInlineDocsLoading(false) }
+
+      // No docs yet — auto-generate silently on first visit
+      if (autoGenerateAttempted.current) return
+      autoGenerateAttempted.current = true
+      setInlineGenerating(true)
+
+      const genRes = await fetch(`/api/admin/opportunities/${id}/documents/generate`, { method: 'POST' })
+      if (genRes.ok) {
+        const genData = await genRes.json()
+        const generated: DocumentRow[] = genData.documents ?? []
+        setInlineDocs(generated)
+        setDocumentCount(generated.length)
+      } else {
+        const j = await genRes.json().catch(() => ({}))
+        setInlineGenError(j.error ?? 'Failed to generate documents')
+      }
+    } catch {
+      setInlineGenError('Network error loading documents')
+    } finally {
+      setInlineDocsLoading(false)
+      setInlineGenerating(false)
+    }
   }, [id])
 
   useEffect(() => {
@@ -2564,22 +2590,25 @@ export default function OpportunityDetailPage() {
               <div className="rounded-xl border border-slate-200 bg-white">
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
                   <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Documents</h2>
-                  {inlineDocs.length > 0 ? (
+                  {inlineDocs.length > 0 && (
                     <button
                       type="button"
                       disabled={inlineGenerating}
                       onClick={async () => {
                         setInlineGenerating(true)
+                        setInlineGenError(null)
                         try {
                           const res = await fetch(`/api/admin/opportunities/${id}/documents/generate`, { method: 'POST' })
-                          if (!res.ok) {
+                          if (res.ok) {
+                            const genData = await res.json()
+                            const generated: DocumentRow[] = genData.documents ?? []
+                            setInlineDocs(generated)
+                            setDocumentCount(generated.length)
+                          } else {
                             const j = await res.json().catch(() => ({}))
-                            toast.error(j.error ?? 'Regenerate failed')
-                            return
+                            setInlineGenError(j.error ?? 'Regenerate failed')
                           }
-                          await fetchInlineDocs()
-                          toast.success('Documents regenerated.')
-                        } catch { toast.error('Network error') }
+                        } catch { setInlineGenError('Network error') }
                         finally { setInlineGenerating(false) }
                       }}
                       className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
@@ -2587,41 +2616,27 @@ export default function OpportunityDetailPage() {
                       {inlineGenerating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                       Regenerate
                     </button>
-                  ) : null}
+                  )}
                 </div>
                 <div className="p-4">
-                  {inlineDocsLoading ? (
-                    <div className="flex items-center justify-center py-6">
-                      <Loader2 className="animate-spin text-slate-300" size={20} />
+                  {(inlineDocsLoading || inlineGenerating) ? (
+                    <div className="flex items-center gap-2 py-4 text-sm text-slate-400">
+                      <Loader2 className="animate-spin" size={16} />
+                      Preparing documents…
                     </div>
-                  ) : inlineDocs.length === 0 ? (
-                    <div className="flex flex-col items-center py-6 text-center">
-                      <FileText size={22} className="text-slate-300 mb-2" />
-                      <p className="text-sm text-slate-500 font-medium">No documents yet</p>
-                      <p className="text-xs text-slate-400 mt-0.5 mb-4">Generate documents from your published templates.</p>
+                  ) : inlineGenError ? (
+                    <div className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+                      <p className="text-xs text-red-600">{inlineGenError}</p>
                       <button
                         type="button"
-                        disabled={inlineGenerating}
-                        onClick={async () => {
-                          setInlineGenerating(true)
-                          try {
-                            const res = await fetch(`/api/admin/opportunities/${id}/documents/generate`, { method: 'POST' })
-                            if (!res.ok) {
-                              const j = await res.json().catch(() => ({}))
-                              toast.error(j.error ?? 'Generate failed')
-                              return
-                            }
-                            await fetchInlineDocs()
-                            toast.success('Documents generated.')
-                          } catch { toast.error('Network error') }
-                          finally { setInlineGenerating(false) }
-                        }}
-                        className="flex items-center gap-2 rounded-lg bg-kratos px-5 py-2 text-sm font-semibold text-slate-950 hover:opacity-90 disabled:opacity-50 transition-opacity"
+                        onClick={() => { autoGenerateAttempted.current = false; fetchInlineDocs() }}
+                        className="ml-3 shrink-0 text-xs font-medium text-red-700 underline hover:no-underline"
                       >
-                        {inlineGenerating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                        {inlineGenerating ? 'Generating...' : 'Generate Documents'}
+                        Retry
                       </button>
                     </div>
+                  ) : inlineDocs.length === 0 ? (
+                    <p className="py-4 text-sm text-slate-400">No published templates found. Go to Settings → Documents to publish templates.</p>
                   ) : (
                     <div className="space-y-2">
                       {inlineDocs.map(doc => (
