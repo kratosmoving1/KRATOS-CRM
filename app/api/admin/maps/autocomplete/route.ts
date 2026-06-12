@@ -12,18 +12,43 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.GOOGLE_MAPS_SERVER_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'Maps API key not configured' }, { status: 500 })
 
-  const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json')
-  url.searchParams.set('input', input)
-  url.searchParams.set('key', apiKey)
-  url.searchParams.set('components', 'country:ca')
-  url.searchParams.set('types', 'address')
+  const res = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+    },
+    body: JSON.stringify({
+      input,
+      includedRegionCodes: ['ca'],
+      includedPrimaryTypes: ['street_address', 'route'],
+    }),
+  })
 
-  const res = await fetch(url.toString())
   const data = await res.json()
 
-  if (data.status === 'REQUEST_DENIED') {
-    return NextResponse.json({ error: `Places API denied: ${data.error_message ?? data.status}` }, { status: 500 })
+  if (!res.ok) {
+    return NextResponse.json({ error: data.error?.message ?? 'Places API error' }, { status: 500 })
   }
 
-  return NextResponse.json({ predictions: data.predictions ?? [] })
+  // Normalize to the shape the client expects
+  const predictions = (data.suggestions ?? []).map((s: {
+    placePrediction: {
+      placeId: string
+      text: { text: string }
+      structuredFormat: { mainText: { text: string }; secondaryText?: { text: string } }
+    }
+  }) => {
+    const p = s.placePrediction
+    return {
+      place_id: p.placeId,
+      description: p.text.text,
+      structured_formatting: {
+        main_text: p.structuredFormat.mainText.text,
+        secondary_text: p.structuredFormat.secondaryText?.text ?? '',
+      },
+    }
+  })
+
+  return NextResponse.json({ predictions })
 }

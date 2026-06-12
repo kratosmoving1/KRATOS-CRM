@@ -12,17 +12,32 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.GOOGLE_MAPS_SERVER_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'Maps API key not configured' }, { status: 500 })
 
-  const url = new URL('https://maps.googleapis.com/maps/api/place/details/json')
-  url.searchParams.set('place_id', placeId)
-  url.searchParams.set('key', apiKey)
-  url.searchParams.set('fields', 'address_components,formatted_address')
+  const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+    headers: {
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'id,formattedAddress,addressComponents',
+    },
+  })
 
-  const res = await fetch(url.toString())
   const data = await res.json()
 
-  if (data.status === 'REQUEST_DENIED') {
-    return NextResponse.json({ error: `Places API denied: ${data.error_message ?? data.status}` }, { status: 500 })
+  if (!res.ok) {
+    return NextResponse.json({ error: data.error?.message ?? 'Places API error' }, { status: 500 })
   }
 
-  return NextResponse.json(data.result ?? null)
+  // Normalize to legacy shape that AddressAutocomplete expects
+  const address_components = (data.addressComponents ?? []).map((c: {
+    longText: string
+    shortText: string
+    types: string[]
+  }) => ({
+    long_name: c.longText,
+    short_name: c.shortText,
+    types: c.types,
+  }))
+
+  return NextResponse.json({
+    formatted_address: data.formattedAddress ?? '',
+    address_components,
+  })
 }
