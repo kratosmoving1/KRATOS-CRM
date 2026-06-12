@@ -79,6 +79,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }
 
+  // When manually marking as signed from the CRM, capture the timestamp
+  if (cleaned.status === 'signed') {
+    cleaned.signed_at = new Date().toISOString()
+  }
+
   // When marking as sent, capture the current rendered HTML as a frozen snapshot
   if (cleaned.status === 'sent') {
     cleaned.sent_at = new Date().toISOString()
