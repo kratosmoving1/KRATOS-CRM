@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   X, FileText, MoreHorizontal, Eye, Send,
-  Loader2, RefreshCw, CheckCircle2,
+  Loader2, RefreshCw, CheckCircle2, Copy, Link,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -142,6 +142,7 @@ export default function DocsSidePanel({
   const [docs, setDocs] = useState<DocumentRow[]>([])
   const [loading, setLoading] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [portalLink, setPortalLink] = useState<{ docName: string; url: string } | null>(null)
   const autoGenerateAttempted = useRef(false)
 
   const fetchDocs = useCallback(async () => {
@@ -205,10 +206,15 @@ export default function DocsSidePanel({
       const res = await fetch(`/api/admin/documents/${doc.id}/send`, { method: 'POST' })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(j.error ?? 'Failed to send'); return }
-      toast.success(`Sent to ${j.sentTo}`)
       await fetchDocs()
+      if (j.emailSent) {
+        toast.success(`Email sent to ${j.sentTo}`)
+      } else {
+        // Email not configured — show the portal link so admin can share manually
+        setPortalLink({ docName: doc.name, url: j.portalUrl })
+      }
     } catch {
-      toast.error('Network error')
+      toast.error('Network error — please try again')
     }
   }
 
@@ -251,6 +257,50 @@ export default function DocsSidePanel({
 
   return (
     <>
+      {/* Portal link modal — shown when email isn't configured */}
+      {portalLink && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setPortalLink(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <Link size={18} className="text-amber-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Share Portal Link</h3>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  Email sending is not configured. Copy this link and send it to the customer directly (email, SMS, WhatsApp, etc).
+                </p>
+              </div>
+            </div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">{portalLink.docName}</p>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <span className="flex-1 truncate text-sm text-slate-700 font-mono">{portalLink.url}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(portalLink.url)
+                  toast.success('Link copied!')
+                }}
+                className="shrink-0 rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+              >
+                <Copy size={12} /> Copy
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-slate-400">
+              The document has been saved and is ready for the customer to view and sign at this link.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPortalLink(null)}
+              className="mt-4 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-40 bg-black/30"

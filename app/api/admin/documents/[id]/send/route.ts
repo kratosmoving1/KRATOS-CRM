@@ -2,65 +2,89 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildRenderContext } from '@/lib/documents/build-context'
 import { renderDocument, buildDocumentNumber } from '@/lib/documents/render'
-import { sendEmail } from '@/lib/email/sendEmail'
+import { sendEmail, isEmailConfigured } from '@/lib/email/sendEmail'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://kratos-crm.vercel.app'
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: doc, error: docErr } = await supabase
-    .from('documents')
-    .select('*, template:document_templates(content_html)')
-    .eq('id', params.id)
-    .neq('is_deleted', true)
-    .maybeSingle()
-
-  if (docErr || !doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
-
-  const ctx = await buildRenderContext(doc.opportunity_id)
-  const docNumber = doc.document_number ?? buildDocumentNumber(ctx.opportunity_number, doc.category)
-
-  const templateHtml = (doc.template as { content_html?: string } | null)?.content_html
-  const renderedHtml = templateHtml
-    ? renderDocument(templateHtml, ctx, docNumber)
-    : (doc.rendered_html ?? '')
-
-  const customerEmail = ctx.customer?.email
-  if (!customerEmail) {
-    return NextResponse.json({ error: 'Customer has no email address on file' }, { status: 422 })
-  }
-
-  const customerName = ctx.customer?.full_name ?? 'Valued Customer'
-  const firstName = customerName.split(' ')[0] || customerName
-  const portalUrl = `${APP_URL}/portal/documents/${params.id}`
-
   try {
-    await sendEmail({
-      to: customerEmail,
-      subject: `Action Required: Review ${doc.name}`,
-      html: buildSignatureRequestEmail({ firstName, docName: doc.name as string, portalUrl }),
-      text: `Hi ${firstName},\n\nWe kindly request your attention to review the following document related to your upcoming move with Kratos Moving Inc.\n\nDocument: ${doc.name}\n\nView and sign here:\n${portalUrl}\n\nThank you,\nKratos Moving Inc.`,
-    })
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data: doc, error: docErr } = await supabase
+      .from('documents')
+      .select('*, template:document_templates(content_html)')
+      .eq('id', params.id)
+      .neq('is_deleted', true)
+      .maybeSingle()
+
+    if (docErr || !doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
+    const ctx = await buildRenderContext(doc.opportunity_id)
+    const docNumber = doc.document_number ?? buildDocumentNumber(ctx.opportunity_number, doc.category)
+
+    const templateHtml = (doc.template as { content_html?: string } | null)?.content_html
+    const renderedHtml = templateHtml
+      ? renderDocument(templateHtml, ctx, docNumber)
+      : (doc.rendered_html ?? '')
+
+    const customerEmail = ctx.customer?.email
+    if (!customerEmail) {
+      return NextResponse.json({ error: 'Customer has no email address on file' }, { status: 422 })
+    }
+
+    const customerName = ctx.customer?.full_name ?? 'Valued Customer'
+    const firstName = customerName.split(' ')[0] || customerName
+    const portalUrl = `${APP_URL}/portal/documents/${params.id}`
+
+    // Always freeze the snapshot and mark sent — regardless of whether email works
+    await supabase
+      .from('documents')
+      .update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        sent_to: customerEmail,
+        rendered_html: renderedHtml,
+        rendered_at: new Date().toISOString(),
+      })
+      .eq('id', params.id)
+
+    // Try to send email — if not configured, return the portal link so admin can share manually
+    if (!isEmailConfigured()) {
+      return NextResponse.json({
+        ok: true,
+        sentTo: customerEmail,
+        emailSent: false,
+        portalUrl,
+        warning: 'Email is not configured on this server. Share the portal link below with the customer manually.',
+      })
+    }
+
+    try {
+      await sendEmail({
+        to: customerEmail,
+        subject: `Action Required: Review ${doc.name}`,
+        html: buildSignatureRequestEmail({ firstName, docName: doc.name as string, portalUrl }),
+        text: `Hi ${firstName},\n\nWe kindly request your attention to review the following document related to your upcoming move with Kratos Moving Inc.\n\nDocument: ${doc.name}\n\nView and sign here:\n${portalUrl}\n\nThank you,\nKratos Moving Inc.`,
+      })
+    } catch (emailErr) {
+      const msg = emailErr instanceof Error ? emailErr.message : 'Email send failed'
+      return NextResponse.json({
+        ok: true,
+        sentTo: customerEmail,
+        emailSent: false,
+        portalUrl,
+        warning: `Email failed: ${msg}. Share the portal link below with the customer manually.`,
+      })
+    }
+
+    return NextResponse.json({ ok: true, sentTo: customerEmail, emailSent: true, portalUrl })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Email send failed'
+    const msg = err instanceof Error ? err.message : 'Unexpected error'
+    console.error('[documents/send]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  await supabase
-    .from('documents')
-    .update({
-      status: 'sent',
-      sent_at: new Date().toISOString(),
-      sent_to: customerEmail,
-      rendered_html: renderedHtml,
-      rendered_at: new Date().toISOString(),
-    })
-    .eq('id', params.id)
-
-  return NextResponse.json({ ok: true, sentTo: customerEmail })
 }
 
 function escapeHtml(str: string) {
