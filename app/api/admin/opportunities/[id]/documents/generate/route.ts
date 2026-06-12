@@ -16,8 +16,8 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       id, opportunity_number, service_type, service_date, move_size, deposit_amount,
       origin_address_line1, origin_address_line2, origin_city, origin_province, origin_postal_code, origin_dwelling_type,
       dest_address_line1, dest_address_line2, dest_city, dest_province, dest_postal_code, dest_dwelling_type,
-      customer:customers(id, full_name, email, phone),
-      agent:profiles!opportunities_sales_agent_id_fkey(id, full_name, email),
+      customer:customers!customer_id(id, full_name, email, phone),
+      agent:profiles!sales_agent_id(id, full_name, email),
       lead_source:lead_sources(id, name)
     `)
     .eq('id', params.id)
@@ -25,7 +25,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     .maybeSingle()
 
   if (oppErr || !opp) {
-    return NextResponse.json({ error: `Opportunity ${params.id} not found` }, { status: 404 })
+    return NextResponse.json({ error: oppErr?.message ?? `Opportunity ${params.id} not found` }, { status: 404 })
   }
 
   // 2. Load non-deleted charges for this opportunity
@@ -125,7 +125,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         .eq('id', existing.id)
       upserted.push(existing.id)
     } else {
-      const { data: created } = await supabase
+      const { data: created, error: insertErr } = await supabase
         .from('documents')
         .insert({
           opportunity_id: params.id,
@@ -140,6 +140,10 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
         })
         .select('id')
         .single()
+      if (insertErr) {
+        console.error('[generate-documents] insert error:', insertErr.message)
+        return NextResponse.json({ error: insertErr.message }, { status: 500 })
+      }
       if (created) upserted.push(created.id)
     }
   }
