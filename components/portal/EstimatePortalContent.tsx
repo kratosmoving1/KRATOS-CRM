@@ -3,9 +3,11 @@
 import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import {
-  CheckCircle2, ChevronDown, ChevronUp, Download, Loader2,
-  Minus, Phone, Plus, Shield, X,
+  Calendar, CheckCircle2, ChevronDown, ChevronUp, Clock, Download,
+  Home, Hourglass, Loader2, Minus, Phone, Plus, Shield,
+  Tag, Truck, Users, Warehouse, X,
 } from 'lucide-react'
+import { MoveRoute } from './MoveRoute'
 import { formatCurrency, formatCurrencyFull } from '@/lib/format'
 import { PORTAL_MATERIALS, type PortalMaterial } from '@/lib/portal/materials'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
@@ -147,6 +149,9 @@ function renderRichNotes(text: string, vars: Record<string, string>): React.Reac
   })
 }
 
+// TODO: Replace with actual 30-day storage pricing from portal settings or opportunity config
+const STORAGE_30_DAY_PRICE = 299.00
+
 const DEFAULT_PHONE   = '(800) 321-3222'
 const DEFAULT_COMPANY = 'Kratos Moving Inc.'
 
@@ -216,19 +221,13 @@ export default function EstimatePortalContent({
   const numCrew       = Number(lc.num_crew ?? 2)
   const supplementaryCharges = charges.filter(c => c.charge_type !== 'moving_labor')
 
-  // Hero right-side info lines
-  const heroInfoLines: string[] = []
-  if (moveSize)     heroInfoLines.push(moveSize)
-  if (laborHours > 0)  heroInfoLines.push(`${laborHours}h minimum`)
-  if (numTrucks > 0 && numCrew > 0) {
-    heroInfoLines.push(`Estimate for ${numTrucks} truck & ${numCrew} crew`)
-  }
-  heroInfoLines.push('Non-Binding Estimate')
-  heroInfoLines.push('Released Value Protection')
+  // Hero right-side info lines — move facts now appear as chips in Estimate Breakdown
+  const heroInfoLines = ['Non-Binding Estimate', 'Released Value Protection']
 
-  // Materials state
+  // Materials + add-on state
   const [materialQty, setMaterialQty] = useState<Record<string, number>>({})
   const [materialsOpen, setMaterialsOpen] = useState(false)
+  const [storageAdded, setStorageAdded] = useState(false)
   const [protection, setProtection] = useState<ProtectionId>('basic')
 
   // Accept flow state
@@ -244,8 +243,10 @@ export default function EstimatePortalContent({
     () => PORTAL_MATERIALS.reduce((sum, m) => sum + (materialQty[m.id] ?? 0) * m.unitPrice, 0),
     [materialQty],
   )
-  const grandTotal = total + materialsSubtotal
-  const grandHst   = hst + materialsSubtotal * 0.13
+  const addonsSubtotal = materialsSubtotal + (storageAdded ? STORAGE_30_DAY_PRICE : 0)
+  const grandTotal     = total + addonsSubtotal
+  const grandHst       = hst + addonsSubtotal * 0.13
+  const liveEarnedPoints = Math.floor((subtotal + addonsSubtotal) * 0.5)
 
   function setQty(id: string, qty: number) {
     setMaterialQty(prev => ({ ...prev, [id]: Math.max(0, qty) }))
@@ -391,8 +392,6 @@ export default function EstimatePortalContent({
                 <span className="block text-kratos">is in motion.</span>
               </h1>
 
-              <p className="text-sm text-slate-400 mt-2">Starting on: {dateLabel(opp.service_date)}</p>
-              <p className="text-sm text-slate-400">Arrival window: TBD</p>
             </div>
 
             {/* Right: hourly rate + info lines */}
@@ -460,6 +459,16 @@ export default function EstimatePortalContent({
           </div>
         </div>
 
+        {/* ── Move route band ──────────────────────────────────────────────── */}
+        <MoveRoute
+          originAddress={opp.origin_address_line1}
+          originCity={opp.origin_city}
+          originProvince={opp.origin_province}
+          destAddress={opp.dest_address_line1}
+          destCity={opp.dest_city}
+          destProvince={opp.dest_province}
+        />
+
         {/* ── Header notes (rich rendered) ─────────────────────────────────── */}
         {cfg?.header_notes && (
           <div className="rounded-xl bg-white px-7 py-7 shadow-sm text-[15px] leading-relaxed text-slate-800">
@@ -492,7 +501,29 @@ export default function EstimatePortalContent({
 
         {/* ── Estimate breakdown ───────────────────────────────────────────── */}
         <section className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-900 mb-4">Estimate Breakdown</h2>
+          <h2 className="text-sm font-bold text-slate-900 mb-3">Estimate Breakdown</h2>
+
+          {/* Fact chips — one authoritative source for all key job facts */}
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {opp.service_date && (
+              <FactChip icon={<Calendar size={11} />} label={dateLabel(opp.service_date)} />
+            )}
+            <FactChip icon={<Clock size={11} />} label="Arrival: TBD" />
+            {numCrew > 0 && (
+              <FactChip icon={<Users size={11} />} label={`${numCrew} mover${numCrew !== 1 ? 's' : ''}`} />
+            )}
+            {numTrucks > 0 && (
+              <FactChip icon={<Truck size={11} />} label={`${numTrucks} truck${numTrucks !== 1 ? 's' : ''}`} />
+            )}
+            {moveSize && <FactChip icon={<Home size={11} />} label={moveSize} />}
+            {billableHours > 0 && (
+              <FactChip icon={<Hourglass size={11} />} label={`${billableHours}h minimum`} />
+            )}
+            {hourlyRate > 0 && (
+              <FactChip icon={<Tag size={11} />} label={`${formatCurrencyFull(hourlyRate)}/hr`} />
+            )}
+          </div>
+
           <div className="space-y-1.5 text-sm">
             {laborCharge && hourlyRate > 0 ? (
               <>
@@ -523,8 +554,9 @@ export default function EstimatePortalContent({
             ))}
             <div className="border-t border-slate-100 mt-3 pt-3 space-y-1.5">
               <SummaryRow label="Subtotal"          value={formatCurrencyFull(subtotal)} />
-              {discounts > 0 && <SummaryRow label="Discounts"     value={`− ${formatCurrencyFull(discounts)}`} />}
+              {discounts > 0 && <SummaryRow label="Discounts"       value={`− ${formatCurrencyFull(discounts)}`} />}
               {materialsSubtotal > 0 && <SummaryRow label="Moving materials" value={formatCurrencyFull(materialsSubtotal)} />}
+              {storageAdded && <SummaryRow label="30 Days Storage" value={formatCurrencyFull(STORAGE_30_DAY_PRICE)} />}
               <SummaryRow label="HST (13%)"         value={formatCurrencyFull(grandHst)} />
               <div className="border-t border-slate-100 pt-2">
                 <SummaryRow label="Estimated total" value={formatCurrencyFull(grandTotal)} bold />
@@ -540,48 +572,96 @@ export default function EstimatePortalContent({
           </div>
         )}
 
-        {/* ── Moving materials ─────────────────────────────────────────────── */}
+        {/* ── Add to your move ─────────────────────────────────────────────── */}
         {showMaterials && (
           <section className="overflow-hidden rounded-lg bg-white shadow-sm">
-            <button
-              className="flex w-full items-center justify-between px-6 py-4 text-left"
-              onClick={() => setMaterialsOpen(o => !o)}
-            >
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Moving Materials</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {materialsSubtotal > 0
-                    ? `${formatCurrencyFull(materialsSubtotal)} in selected materials`
-                    : 'Optional boxes, tape, and packing supplies'}
-                </p>
-              </div>
-              {materialsOpen
-                ? <ChevronUp size={18} className="text-slate-400" />
-                : <ChevronDown size={18} className="text-slate-400" />}
-            </button>
-            {materialsOpen && (
-              <div className="border-t border-slate-100 px-6 pb-5">
-                <div className="mt-4 space-y-4">
-                  {PORTAL_MATERIALS.map(m => (
-                    <MaterialRow
-                      key={m.id}
-                      material={m}
-                      qty={materialQty[m.id] ?? 0}
-                      onChange={qty => setQty(m.id, qty)}
-                    />
-                  ))}
+
+            {/* Section header */}
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-bold text-slate-900">Add to your move</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Optional services and supplies</p>
+            </div>
+
+            {/* Moving Materials sub-section */}
+            <div className="border-b border-slate-100">
+              <button
+                className="flex w-full items-center justify-between px-6 py-3.5 text-left"
+                onClick={() => setMaterialsOpen(o => !o)}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Moving Materials</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {materialsSubtotal > 0
+                      ? `${formatCurrencyFull(materialsSubtotal)} in selected materials`
+                      : 'Boxes, tape, and packing supplies'}
+                  </p>
                 </div>
-                {materialsSubtotal > 0 && (
-                  <div className="mt-4 flex justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm font-semibold">
-                    <span>Materials subtotal</span>
-                    <span>{formatCurrency(materialsSubtotal)}</span>
+                {materialsOpen
+                  ? <ChevronUp size={18} className="text-slate-400 shrink-0" />
+                  : <ChevronDown size={18} className="text-slate-400 shrink-0" />}
+              </button>
+              {materialsOpen && (
+                <div className="border-t border-slate-100 px-6 pb-5">
+                  <div className="mt-4 space-y-4">
+                    {PORTAL_MATERIALS.map(m => (
+                      <MaterialRow
+                        key={m.id}
+                        material={m}
+                        qty={materialQty[m.id] ?? 0}
+                        onChange={qty => setQty(m.id, qty)}
+                      />
+                    ))}
                   </div>
-                )}
-                <p className="mt-3 text-[10px] text-slate-400">
-                  Materials pricing does not include HST. Final invoice reflects confirmed quantities.
-                </p>
-              </div>
-            )}
+                  {materialsSubtotal > 0 && (
+                    <div className="mt-4 flex justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm font-semibold">
+                      <span>Materials subtotal</span>
+                      <span>{formatCurrency(materialsSubtotal)}</span>
+                    </div>
+                  )}
+                  <p className="mt-3 text-[10px] text-slate-400">
+                    Materials pricing does not include HST. Final invoice reflects confirmed quantities.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 30 Days Storage add-on */}
+            <div className="px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setStorageAdded(v => !v)}
+                className={`w-full rounded-lg border p-4 text-left transition-all ${
+                  storageAdded
+                    ? 'border-kratos ring-1 ring-kratos bg-kratos/5'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 shrink-0">
+                      <Warehouse size={18} className="text-slate-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">30 Days Storage</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Climate-controlled &amp; secure</p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {storageAdded ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-kratos px-2.5 py-1 text-[11px] font-bold text-slate-950">
+                        <CheckCircle2 size={11} /> Added
+                      </span>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{formatCurrencyFull(STORAGE_30_DAY_PRICE)}</p>
+                        <p className="text-[11px] font-semibold text-kratos">Add +</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            </div>
+
           </section>
         )}
 
@@ -672,7 +752,7 @@ export default function EstimatePortalContent({
                 className="text-6xl font-black leading-none tabular-nums"
                 style={{ color: '#ffad33', textShadow: '0 0 48px rgba(255,173,51,0.35)' }}
               >
-                {earnedPoints.toLocaleString()}
+                {liveEarnedPoints.toLocaleString()}
               </span>
               {totalPoints > 0 && (
                 <span className="mb-1.5 text-base font-medium" style={{ color: '#475569' }}>
@@ -899,6 +979,15 @@ export default function EstimatePortalContent({
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function FactChip({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+      <span className="text-kratos">{icon}</span>
+      {label}
+    </span>
+  )
+}
 
 function SummaryRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
