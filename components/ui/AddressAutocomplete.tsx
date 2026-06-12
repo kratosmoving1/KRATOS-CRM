@@ -11,6 +11,15 @@ export type ParsedAddress = {
   placeId: string;
 };
 
+interface PlacePrediction {
+  description: string;
+  place_id: string;
+  structured_formatting: {
+    main_text: string;
+    secondary_text: string;
+  };
+}
+
 interface Props {
   value: string;
   onChange: (value: string) => void;
@@ -18,36 +27,6 @@ interface Props {
   placeholder?: string;
   className?: string;
   hasSelected?: boolean;
-}
-
-// Module-level singleton so we only inject the script tag once
-let scriptStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
-const readyCallbacks: Array<(ok: boolean) => void> = [];
-
-function loadMapsScript(apiKey: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (scriptStatus === 'ready') { resolve(true); return; }
-    if (scriptStatus === 'error') { resolve(false); return; }
-
-    readyCallbacks.push(resolve);
-
-    if (scriptStatus === 'loading') return; // already injected, just wait
-
-    scriptStatus = 'loading';
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=quarterly`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      scriptStatus = 'ready';
-      readyCallbacks.splice(0).forEach(cb => cb(true));
-    };
-    script.onerror = () => {
-      scriptStatus = 'error';
-      readyCallbacks.splice(0).forEach(cb => cb(false));
-    };
-    document.head.appendChild(script);
-  });
 }
 
 export function AddressAutocomplete({
@@ -58,43 +37,13 @@ export function AddressAutocomplete({
   className = '',
   hasSelected = false,
 }: Props) {
-  const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [suggestions, setSuggestions] = useState<PlacePrediction[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const autocompleteRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const placesRef = useRef<google.maps.places.PlacesService | null>(null);
-  const dummyRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reqSeqRef = useRef(0);
-
-  useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      setLoadStatus('error');
-      setErrorMessage('Google Maps API key is not configured.');
-      return;
-    }
-    loadMapsScript(apiKey).then(ok => {
-      if (!ok) {
-        setLoadStatus('error');
-        setErrorMessage('Google Maps failed to load. Check the API key in Google Cloud Console.');
-        return;
-      }
-      try {
-        autocompleteRef.current = new google.maps.places.AutocompleteService();
-        if (!dummyRef.current) dummyRef.current = document.createElement('div');
-        placesRef.current = new google.maps.places.PlacesService(dummyRef.current);
-        setLoadStatus('ready');
-      } catch (e) {
-        setLoadStatus('error');
-        setErrorMessage(`Maps init failed: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -106,25 +55,22 @@ export function AddressAutocomplete({
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  const fetchSuggestions = useCallback((query: string) => {
-    const service = autocompleteRef.current;
+  const fetchSuggestions = useCallback(async (query: string) => {
     const seq = ++reqSeqRef.current;
-    if (!service || !query || query.length < 2) { setSuggestions([]); setIsOpen(false); return; }
+    if (!query || query.length < 2) { setSuggestions([]); setIsOpen(false); return; }
 
-    service.getPlacePredictions(
-      { input: query, componentRestrictions: { country: 'ca' }, types: ['address'] },
-      (predictions, status) => {
-        if (seq !== reqSeqRef.current) return;
-        if (status === google.maps.places.PlacesServiceStatus.OK && predictions?.length) {
-          setSuggestions(predictions);
-          setIsOpen(true);
-          setHighlightedIndex(0);
-        } else {
-          setSuggestions([]);
-          setIsOpen(false);
-        }
-      }
-    );
+    try {
+      const res = await fetch(`/api/admin/maps/autocomplete?input=${encodeURIComponent(query)}`);
+      if (!res.ok || seq !== reqSeqRef.current) return;
+      const data = await res.json();
+      if (seq !== reqSeqRef.current) return;
+      const preds: PlacePrediction[] = data.predictions ?? [];
+      setSuggestions(preds);
+      setIsOpen(preds.length > 0);
+      setHighlightedIndex(0);
+    } catch {
+      // silent — don't block typing
+    }
   }, []);
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -134,37 +80,36 @@ export function AddressAutocomplete({
     debounceRef.current = setTimeout(() => fetchSuggestions(v), 250);
   }
 
-  function handleSelect(prediction: google.maps.places.AutocompletePrediction) {
+  async function handleSelect(prediction: PlacePrediction) {
     const description = prediction.description;
     setIsOpen(false);
     setSuggestions([]);
     onChange(description);
 
-    const service = placesRef.current;
-    if (!service) {
-      onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
-      return;
-    }
-
-    service.getDetails(
-      { placeId: prediction.place_id, fields: ['address_components', 'formatted_address'] },
-      (place, status) => {
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
-          onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
-          return;
-        }
-        const comps = place.address_components ?? [];
-        const get = (type: string, short = false) => {
-          const c = comps.find(x => x.types.includes(type));
-          return c ? (short ? c.short_name : c.long_name) : '';
-        };
-        const addressLine1 = [get('street_number'), get('route')].filter(Boolean).join(' ') || prediction.structured_formatting.main_text || '';
-        const city = get('locality') || get('sublocality_level_1') || get('sublocality') || get('postal_town');
-        const province = get('administrative_area_level_1', true);
-        const postalCode = get('postal_code');
-        onSelect({ fullAddress: place.formatted_address || description, addressLine1, city, province, postalCode, placeId: prediction.place_id });
+    try {
+      const res = await fetch(`/api/admin/maps/place-details?place_id=${encodeURIComponent(prediction.place_id)}`);
+      if (!res.ok) {
+        onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
+        return;
       }
-    );
+      const place = await res.json();
+      if (!place?.address_components) {
+        onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
+        return;
+      }
+      const comps: Array<{ long_name: string; short_name: string; types: string[] }> = place.address_components;
+      const get = (type: string, short = false) => {
+        const c = comps.find(x => x.types.includes(type));
+        return c ? (short ? c.short_name : c.long_name) : '';
+      };
+      const addressLine1 = [get('street_number'), get('route')].filter(Boolean).join(' ') || prediction.structured_formatting.main_text || '';
+      const city = get('locality') || get('sublocality_level_1') || get('sublocality') || get('postal_town');
+      const province = get('administrative_area_level_1', true);
+      const postalCode = get('postal_code');
+      onSelect({ fullAddress: place.formatted_address || description, addressLine1, city, province, postalCode, placeId: prediction.place_id });
+    } catch {
+      onSelect({ fullAddress: description, addressLine1: prediction.structured_formatting.main_text || description, city: '', province: '', postalCode: '', placeId: prediction.place_id });
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -184,8 +129,7 @@ export function AddressAutocomplete({
           onChange={handleInputChange}
           onFocus={() => { if (suggestions.length > 0) setIsOpen(true); }}
           onKeyDown={handleKeyDown}
-          placeholder={loadStatus === 'loading' ? 'Loading address autocomplete…' : placeholder}
-          disabled={loadStatus === 'error'}
+          placeholder={placeholder}
           className={className}
           autoComplete="off"
           autoCorrect="off"
@@ -211,10 +155,6 @@ export function AddressAutocomplete({
             </li>
           ))}
         </ul>
-      )}
-
-      {errorMessage && (
-        <p className="text-xs text-red-500 mt-1 font-medium">{errorMessage}</p>
       )}
     </div>
   );
