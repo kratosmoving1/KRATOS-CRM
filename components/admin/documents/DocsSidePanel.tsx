@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  X, FileText, MoreHorizontal, Trash2, Eye, Send,
-  Loader2, RefreshCw, Plus,
+  X, FileText, MoreHorizontal, Eye, Send,
+  Loader2, RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -126,18 +126,33 @@ export default function DocsSidePanel({
 }: Props) {
   const [docs, setDocs] = useState<DocumentRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [generating, setGenerating] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const autoGenerateAttempted = useRef(false)
 
   const fetchDocs = useCallback(async () => {
     if (!opportunityId) return
     setLoading(true)
     try {
       const res = await fetch(`/api/admin/opportunities/${opportunityId}/documents`)
-      if (res.ok) {
-        const data: DocumentRow[] = await res.json()
+      if (!res.ok) return
+      const data: DocumentRow[] = await res.json()
+
+      if (data.length > 0) {
         setDocs(data)
         onCountChange?.(data.length)
+        return
+      }
+
+      // Auto-generate on first open if no docs exist
+      if (autoGenerateAttempted.current) return
+      autoGenerateAttempted.current = true
+
+      const genRes = await fetch(`/api/admin/opportunities/${opportunityId}/documents/generate`, { method: 'POST' })
+      if (genRes.ok) {
+        const genData = await genRes.json()
+        const generated: DocumentRow[] = genData.documents ?? []
+        setDocs(generated)
+        onCountChange?.(generated.length)
       }
     } catch {
       // silent
@@ -149,26 +164,6 @@ export default function DocsSidePanel({
   useEffect(() => {
     if (isOpen) fetchDocs()
   }, [isOpen, fetchDocs])
-
-  async function handleGenerate() {
-    setGenerating(true)
-    try {
-      const res = await fetch(`/api/admin/opportunities/${opportunityId}/documents/generate`, {
-        method: 'POST',
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        toast.error(j.error ?? 'Generate failed')
-        return
-      }
-      await fetchDocs()
-      toast.success('Documents generated.')
-    } catch {
-      toast.error('Network error')
-    } finally {
-      setGenerating(false)
-    }
-  }
 
   async function handleRegenerate() {
     setRegenerating(true)
@@ -251,26 +246,12 @@ export default function DocsSidePanel({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="animate-spin text-slate-400" size={22} />
+            <div className="flex items-center gap-2 py-8 text-sm text-slate-400 px-1">
+              <Loader2 className="animate-spin" size={16} />
+              Preparing documents…
             </div>
           ) : docs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                <FileText size={22} className="text-slate-400" />
-              </div>
-              <p className="text-sm font-medium text-slate-700">No documents generated yet</p>
-              <p className="mt-1 text-xs text-slate-400">Click Generate Documents to create documents from your published templates.</p>
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={generating}
-                className="mt-5 flex items-center gap-2 rounded-lg bg-kratos px-5 py-2.5 text-sm font-semibold text-slate-950 hover:opacity-90 disabled:opacity-50 transition-opacity"
-              >
-                {generating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                {generating ? 'Generating...' : 'Generate Documents'}
-              </button>
-            </div>
+            <p className="py-8 text-sm text-slate-400 px-1">No published templates found. Go to Settings → Documents to publish templates.</p>
           ) : (
             <>
               {/* Opportunity group */}
