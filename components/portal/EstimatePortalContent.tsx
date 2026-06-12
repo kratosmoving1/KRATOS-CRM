@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import {
   Calendar, CheckCircle2, ChevronDown, ChevronUp, Clock, Download,
-  Home, Hourglass, Loader2, Minus, Phone, Plus, Shield,
+  Home, Loader2, Minus, Phone, Plus, Shield,
   Tag, Truck, Users, Warehouse, X,
 } from 'lucide-react'
 import { MoveRoute } from './MoveRoute'
@@ -501,7 +501,7 @@ export default function EstimatePortalContent({
 
         {/* ── Estimate breakdown ───────────────────────────────────────────── */}
         <section className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-900 mb-3">Estimate Breakdown</h2>
+          <h2 className="text-base font-bold text-slate-900 mb-3">Estimate Breakdown</h2>
 
           {/* Fact chips — one authoritative source for all key job facts */}
           <div className="flex flex-wrap gap-1.5 mb-4">
@@ -516,15 +516,12 @@ export default function EstimatePortalContent({
               <FactChip icon={<Truck size={11} />} label={`${numTrucks} truck${numTrucks !== 1 ? 's' : ''}`} />
             )}
             {moveSize && <FactChip icon={<Home size={11} />} label={moveSize} />}
-            {billableHours > 0 && (
-              <FactChip icon={<Hourglass size={11} />} label={`${billableHours}h minimum`} />
-            )}
             {hourlyRate > 0 && (
               <FactChip icon={<Tag size={11} />} label={`${formatCurrencyFull(hourlyRate)}/hr`} />
             )}
           </div>
 
-          <div className="space-y-1.5 text-sm">
+          <div className="space-y-2 text-[15px]">
             {laborCharge && hourlyRate > 0 ? (
               <>
                 {/* Package name + composition as the primary line item */}
@@ -749,8 +746,8 @@ export default function EstimatePortalContent({
 
             <div className="flex items-end gap-4 mb-2">
               <span
-                className="text-6xl font-black leading-none tabular-nums"
-                style={{ color: '#ffad33', textShadow: '0 0 48px rgba(255,173,51,0.35)' }}
+                className="text-5xl font-black leading-none tabular-nums"
+                style={{ color: '#ffad33', textShadow: '0 0 36px rgba(255,173,51,0.3)' }}
               >
                 {liveEarnedPoints.toLocaleString()}
               </span>
@@ -761,15 +758,15 @@ export default function EstimatePortalContent({
               )}
             </div>
             <p className="text-sm font-medium mb-3" style={{ color: '#94a3b8' }}>points earned from this estimate</p>
-            <p className="text-xs" style={{ color: '#2d3748' }}>
-              <em style={{ color: '#475569', fontStyle: 'italic' }}>Κράτος</em>
+            <p className="text-xs" style={{ color: '#94a3b8' }}>
+              <em style={{ color: '#cbd5e1', fontStyle: 'italic' }}>Κράτος</em>
               {' '}— 0.5 pts per $1 subtotal · redeem at every Kratos Group company
             </p>
           </div>
 
           {/* Company cards */}
           <div className="px-7 pt-6 pb-7">
-            <p className="text-[10px] font-black tracking-[0.2em] uppercase mb-5" style={{ color: '#2d3748' }}>Explore Kratos Group</p>
+            <p className="text-[10px] font-black tracking-[0.2em] uppercase mb-5" style={{ color: '#64748b' }}>Explore Kratos Group</p>
             <div className="grid grid-cols-3 gap-3">
               {KGC_COMPANIES.map(co => (
                 <a
@@ -781,8 +778,8 @@ export default function EstimatePortalContent({
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
                 >
                   <div
-                    className="flex items-center justify-center rounded-xl overflow-hidden"
-                    style={{ width: 56, height: 56, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,173,51,0.15)' }}
+                    className="flex items-center justify-center rounded-xl overflow-hidden bg-white"
+                    style={{ width: 56, height: 56, border: '1px solid rgba(255,255,255,0.2)' }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -798,7 +795,7 @@ export default function EstimatePortalContent({
                 </a>
               ))}
             </div>
-            <p className="text-[11px] mt-5 text-center" style={{ color: '#1e293b' }}>
+            <p className="text-[11px] mt-5 text-center" style={{ color: '#64748b' }}>
               Redeem Kratos Points across every company in the Kratos Group.
             </p>
           </div>
