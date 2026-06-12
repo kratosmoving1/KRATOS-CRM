@@ -46,7 +46,7 @@ const CONTRACT_HTML = `
   <div style="border-top:3px solid #ffad33;margin-bottom:14px;"></div>
 
   <!-- ── Title banner ── -->
-  <div style="background:#ffad33;color:#fff;text-align:center;padding:9px 0;font-size:13pt;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;">
+  <div style="background:#111111;color:#ffffff;text-align:center;padding:9px 0;font-size:13pt;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;">
     Contract for Moving Services
   </div>
 
