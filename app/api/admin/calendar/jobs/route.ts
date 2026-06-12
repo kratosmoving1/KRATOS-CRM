@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireActiveProfile } from '@/lib/auth/server'
 
-const JOB_STATUSES = ['booked', 'completed'] as const
+const JOB_STATUSES = ['booked', 'completed', 'opportunity'] as const
 
 function isDate(value: string | null) {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))

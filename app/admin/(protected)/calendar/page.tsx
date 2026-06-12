@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Briefcase, CalendarDays, ChevronLeft, ChevronRight,
-  Clock3, ListChecks, MapPin, Plus, Settings2,
+  CalendarDays, ChevronLeft, ChevronRight,
+  ExternalLink, ListChecks, MapPin, Plus, Settings2, X,
 } from 'lucide-react'
 import { formatQuoteNumber } from '@/lib/opportunityDisplay'
+import { MOVE_SIZE_LABELS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import OfficeEventModal, {
   EVENT_TYPE_COLORS,
@@ -22,9 +23,14 @@ type CalendarJob = {
   service_date: string | null
   status: string
   service_type: string
+  move_size: string | null
   total_amount: number
   origin_city: string | null
+  origin_address_line1: string | null
+  origin_province: string | null
   dest_city: string | null
+  dest_address_line1: string | null
+  dest_province: string | null
   pickup_city: string | null
   dropoff_city: string | null
   customer: { id: string; full_name: string; phone: string | null; email: string | null } | null
@@ -32,8 +38,8 @@ type CalendarJob = {
 }
 
 type CalendarDay = { date: Date; key: string; inMonth: boolean }
-
 type Tab = 'jobs' | 'office' | 'rate-overrides'
+type StatusFilter = 'summary' | 'booked' | 'opportunity'
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -75,10 +81,15 @@ function serviceLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
+function moveSizeLabel(ms: string | null | undefined) {
+  if (!ms) return null
+  return MOVE_SIZE_LABELS[ms] ?? ms.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
 function routeLabel(job: CalendarJob) {
   const from = job.origin_city ?? job.pickup_city
   const to = job.dest_city ?? job.dropoff_city
-  if (from && to) return `${from} to ${to}`
+  if (from && to) return `${from} → ${to}`
   return from ?? to ?? 'Route pending'
 }
 
@@ -91,6 +102,22 @@ function eventDateKey(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function formatDateLong(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-CA', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  })
+}
+
+function statusBadgeClasses(status: string) {
+  switch (status) {
+    case 'booked':     return 'bg-green-100 text-green-700'
+    case 'completed':  return 'bg-emerald-100 text-emerald-700'
+    case 'opportunity': return 'bg-amber-100 text-amber-700'
+    case 'cancelled':  return 'bg-red-100 text-red-600'
+    default:           return 'bg-slate-100 text-slate-600'
+  }
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
@@ -99,6 +126,8 @@ export default function CalendarPage() {
   const [tab, setTab]                     = useState<Tab>('jobs')
   const [month, setMonth]                 = useState(() => monthStart(new Date()))
   const [selectedDate, setSelectedDate]   = useState(() => toDateKey(new Date()))
+  const [statusFilter, setStatusFilter]   = useState<StatusFilter>('booked')
+  const [showDayDetail, setShowDayDetail] = useState(false)
 
   // Job calendar state
   const [jobs, setJobs]                   = useState<CalendarJob[]>([])
@@ -158,16 +187,24 @@ export default function CalendarPage() {
   }, [tab, loadJobs, loadOfficeEvents])
 
   // ── Derived ─────────────────────────────────────────────────────────────────
+
+  // Client-side filter based on statusFilter
+  const filteredJobs = useMemo(() => {
+    if (statusFilter === 'booked') return jobs.filter(j => j.status === 'booked' || j.status === 'completed')
+    if (statusFilter === 'opportunity') return jobs.filter(j => j.status === 'opportunity')
+    return jobs // 'summary' = all
+  }, [jobs, statusFilter])
+
   const jobsByDate = useMemo(() => {
     const map = new Map<string, CalendarJob[]>()
-    for (const j of jobs) {
+    for (const j of filteredJobs) {
       if (!j.service_date) continue
       const list = map.get(j.service_date) ?? []
       list.push(j)
       map.set(j.service_date, list)
     }
     return map
-  }, [jobs])
+  }, [filteredJobs])
 
   const officeByDate = useMemo(() => {
     const map = new Map<string, OfficeEvent[]>()
@@ -183,7 +220,7 @@ export default function CalendarPage() {
   const selectedJobs   = jobsByDate.get(selectedDate) ?? []
   const selectedEvents = officeByDate.get(selectedDate) ?? []
 
-  const monthJobs = jobs.filter(j => {
+  const monthFilteredJobs = filteredJobs.filter(j => {
     if (!j.service_date) return false
     const d = new Date(`${j.service_date}T00:00:00`)
     return d.getMonth() === month.getMonth() && d.getFullYear() === month.getFullYear()
@@ -207,22 +244,16 @@ export default function CalendarPage() {
     setSelectedDate(toDateKey(today))
   }
 
-  function openAddEvent() {
-    setEditingEvent(null)
-    setShowEventModal(true)
-  }
-  function openEditEvent(ev: OfficeEvent) {
-    setEditingEvent(ev)
-    setShowEventModal(true)
-  }
-  function closeModal() {
-    setShowEventModal(false)
-    setEditingEvent(null)
-  }
-  function afterSave() {
-    closeModal()
-    loadOfficeEvents()
-  }
+  function openAddEvent() { setEditingEvent(null); setShowEventModal(true) }
+  function openEditEvent(ev: OfficeEvent) { setEditingEvent(ev); setShowEventModal(true) }
+  function closeModal() { setShowEventModal(false); setEditingEvent(null) }
+  function afterSave() { closeModal(); loadOfficeEvents() }
+
+  const summaryLabel = statusFilter === 'booked'
+    ? `Total Booked Moves for ${MONTHS[month.getMonth()]}`
+    : statusFilter === 'opportunity'
+    ? `Opportunities for ${MONTHS[month.getMonth()]}`
+    : `Total Jobs for ${MONTHS[month.getMonth()]}`
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -260,6 +291,15 @@ export default function CalendarPage() {
                 <select className="rounded-md border-0 bg-transparent px-2 py-2 text-sm text-blue-600 outline-none">
                   <option>All Distances</option>
                 </select>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                  className="rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-700 outline-none hover:bg-slate-50"
+                >
+                  <option value="summary">Summary</option>
+                  <option value="booked">Booked</option>
+                  <option value="opportunity">Opportunity</option>
+                </select>
               </>
             )}
             {tab === 'office' && (
@@ -281,7 +321,7 @@ export default function CalendarPage() {
             <TabButton active={tab === 'rate-overrides'} onClick={() => setTab('rate-overrides')}>Rate Overrides</TabButton>
           </div>
           <p className="text-sm text-slate-700">
-            {tab === 'jobs' && <>Total Booked Moves for {MONTHS[month.getMonth()]}: <span className="font-semibold">{monthJobs.length}</span></>}
+            {tab === 'jobs' && <>{summaryLabel}: <span className="font-semibold">{monthFilteredJobs.length}</span></>}
             {tab === 'office' && <>Office Events in {MONTHS[month.getMonth()]}: <span className="font-semibold">{monthEvents.length}</span></>}
           </p>
         </div>
@@ -304,13 +344,15 @@ export default function CalendarPage() {
           {jobsError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{jobsError}</div>
           )}
-          <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+          <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <CalendarGridHeader />
               <div className="grid grid-cols-7">
                 {days.map(day => {
                   const dayJobs = jobsByDate.get(day.key) ?? []
-                  const percent = Math.min(100, Math.round((dayJobs.length / DAILY_CAPACITY) * 100))
+                  const bookedCount = dayJobs.filter(j => j.status === 'booked' || j.status === 'completed').length
+                  const oppCount = dayJobs.filter(j => j.status === 'opportunity').length
+                  const percent = Math.min(100, Math.round((bookedCount / DAILY_CAPACITY) * 100))
                   const isSelected = day.key === selectedDate
                   const isToday = day.key === toDateKey(new Date())
                   return (
@@ -318,15 +360,26 @@ export default function CalendarPage() {
                       key={day.key}
                       onClick={() => setSelectedDate(day.key)}
                       className={cn(
-                        'min-h-[132px] border-b border-r border-slate-200 p-3 text-left transition-colors hover:bg-blue-50/40',
+                        'min-h-[120px] border-b border-r border-slate-200 p-2.5 text-left transition-colors hover:bg-blue-50/40',
                         !day.inMonth && 'bg-slate-50/70',
                         isSelected && 'bg-blue-50',
                       )}
                     >
                       <DayNumber date={day.date} inMonth={day.inMonth} isToday={isToday} />
-                      <div className="mt-4 space-y-1.5 text-xs text-slate-500">
-                        <p className="flex items-center gap-1.5"><CalendarDays size={12} className="text-blue-400" /> {dayJobs.length} job{dayJobs.length !== 1 ? 's' : ''}</p>
-                        <p className="flex items-center gap-1.5"><Clock3 size={12} /> {dayJobs.length} AM · 0 PM</p>
+                      <div className="mt-3 space-y-1 text-xs text-slate-500">
+                        {dayJobs.length > 0 ? (
+                          <>
+                            <p className="flex items-center gap-1.5">
+                              <CalendarDays size={11} className="text-blue-400" />
+                              <span>{dayJobs.length} job{dayJobs.length !== 1 ? 's' : ''}</span>
+                            </p>
+                            {statusFilter === 'summary' && bookedCount > 0 && oppCount > 0 && (
+                              <p className="text-[10px] text-slate-400">{bookedCount} booked · {oppCount} opp</p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-[11px] text-slate-300">—</p>
+                        )}
                       </div>
                       <CapacityBar percent={percent} />
                     </button>
@@ -335,14 +388,30 @@ export default function CalendarPage() {
               </div>
             </section>
 
+            {/* Day Detail Panel */}
             <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <SelectedDayHeader selectedDate={selectedDate} />
-              <div className="grid grid-cols-3 border-b border-slate-200">
-                <StatCell label="Jobs" value={selectedJobs.length} />
-                <StatCell label="Morning" value={selectedJobs.length} />
-                <StatCell label="Capacity" value={`${Math.min(100, Math.round((selectedJobs.length / DAILY_CAPACITY) * 100))}%`} />
+              {/* Header */}
+              <div className="border-b border-slate-200 px-4 py-4">
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {formatDateLong(selectedDate)}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {selectedJobs.length} job{selectedJobs.length !== 1 ? 's' : ''} found
+                  {statusFilter !== 'summary' && (
+                    <span className="ml-1 capitalize">({statusFilter})</span>
+                  )}
+                </p>
               </div>
-              <div className="max-h-[620px] overflow-y-auto p-3">
+
+              {/* Stats strip */}
+              <div className="grid grid-cols-3 border-b border-slate-100">
+                <StatCell label="Jobs" value={selectedJobs.length} />
+                <StatCell label="Booked" value={selectedJobs.filter(j => j.status === 'booked' || j.status === 'completed').length} />
+                <StatCell label="Capacity" value={`${Math.min(100, Math.round((selectedJobs.filter(j => j.status === 'booked' || j.status === 'completed').length / DAILY_CAPACITY) * 100))}%`} />
+              </div>
+
+              {/* Job cards */}
+              <div className="max-h-[520px] overflow-y-auto p-3">
                 {jobsLoading ? (
                   <SkeletonList />
                 ) : selectedJobs.length === 0 ? (
@@ -353,23 +422,60 @@ export default function CalendarPage() {
                       <button
                         key={job.id}
                         onClick={() => router.push(`/admin/opportunities/${job.id}/quote`)}
-                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-blue-200 hover:bg-blue-50/40 transition-colors"
+                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-mono text-xs font-semibold text-blue-600">{formatQuoteNumber(job.opportunity_number)}</p>
-                            <p className="mt-0.5 text-sm font-semibold text-slate-900">{job.customer?.full_name ?? 'Unnamed customer'}</p>
+                        {/* Row 1: quote# + type + status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={cn(
+                              'h-2 w-2 shrink-0 rounded-full',
+                              job.status === 'booked' || job.status === 'completed' ? 'bg-green-500' : 'bg-amber-400',
+                            )} />
+                            <p className="truncate text-xs font-semibold text-slate-900">
+                              #{formatQuoteNumber(job.opportunity_number)} · {serviceLabel(job.service_type)}
+                            </p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold capitalize text-green-700">{job.status}</span>
+                          <span className={cn(
+                            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize',
+                            statusBadgeClasses(job.status),
+                          )}>
+                            {job.status}
+                          </span>
                         </div>
-                        <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500"><Briefcase size={12} /> {serviceLabel(job.service_type)}</p>
-                        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><MapPin size={12} /> {routeLabel(job)}</p>
-                        <p className="mt-1.5 text-xs text-slate-400">{job.agent?.full_name ?? 'Unassigned'}</p>
+
+                        {/* Row 2: customer */}
+                        <p className="mt-1.5 text-sm font-semibold text-slate-900 truncate">
+                          {job.customer?.full_name ?? 'Unnamed customer'}
+                        </p>
+
+                        {/* Row 3: move size */}
+                        {job.move_size && (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {moveSizeLabel(job.move_size)}
+                          </p>
+                        )}
+
+                        {/* Row 4: route */}
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+                          <MapPin size={11} /> {routeLabel(job)}
+                        </p>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* View Details button */}
+              {selectedJobs.length > 0 && (
+                <div className="border-t border-slate-100 p-3">
+                  <button
+                    onClick={() => setShowDayDetail(true)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <ExternalLink size={14} /> View Details
+                  </button>
+                </div>
+              )}
             </aside>
           </div>
         </>
@@ -423,7 +529,12 @@ export default function CalendarPage() {
             </section>
 
             <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <SelectedDayHeader selectedDate={selectedDate} />
+              <div className="border-b border-slate-200 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Selected Day</p>
+                <h2 className="mt-0.5 text-base font-semibold text-slate-900">
+                  {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </h2>
+              </div>
               <div className="grid grid-cols-2 border-b border-slate-200">
                 <StatCell label="Events" value={selectedEvents.length} />
                 <div className="flex items-center border-l border-slate-200 px-4 py-3">
@@ -494,6 +605,72 @@ export default function CalendarPage() {
           onSaved={afterSave}
         />
       )}
+
+      {/* Day Detail Modal */}
+      {showDayDetail && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-slate-950/50 p-4 pt-16 backdrop-blur-[2px]">
+          <div className="w-full max-w-5xl rounded-xl bg-white shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">{formatDateLong(selectedDate)}</h2>
+                <p className="mt-0.5 text-xs text-slate-400">{selectedJobs.length} job{selectedJobs.length !== 1 ? 's' : ''} · {statusFilter === 'summary' ? 'All statuses' : statusFilter === 'booked' ? 'Booked only' : 'Opportunities only'}</p>
+              </div>
+              <button onClick={() => setShowDayDetail(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Job #</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Status</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Job Type</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Move Size</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Customer</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Route</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400">Agent</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedJobs.map(job => (
+                    <tr
+                      key={job.id}
+                      onClick={() => { router.push(`/admin/opportunities/${job.id}/quote`); setShowDayDetail(false) }}
+                      className="cursor-pointer hover:bg-blue-50/40"
+                    >
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-blue-600">
+                        #{formatQuoteNumber(job.opportunity_number)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                          statusBadgeClasses(job.status),
+                        )}>
+                          {job.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{serviceLabel(job.service_type)}</td>
+                      <td className="px-4 py-3 text-slate-600">{moveSizeLabel(job.move_size) ?? '—'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{job.customer?.full_name ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className="flex items-center gap-1">
+                          <MapPin size={11} className="shrink-0 text-slate-400" />
+                          {routeLabel(job)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{job.agent?.full_name ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -544,7 +721,7 @@ function DayNumber({ date, inMonth, isToday }: { date: Date; inMonth: boolean; i
 
 function CapacityBar({ percent }: { percent: number }) {
   return (
-    <div className="mt-4 flex items-center gap-2">
+    <div className="mt-3 flex items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
         <div
           className={cn('h-full rounded-full', percent >= 80 ? 'bg-red-400' : percent >= 50 ? 'bg-amber-400' : 'bg-blue-500')}
@@ -552,17 +729,6 @@ function CapacityBar({ percent }: { percent: number }) {
         />
       </div>
       <span className="w-8 text-right text-[11px] text-slate-400">{percent}%</span>
-    </div>
-  )
-}
-
-function SelectedDayHeader({ selectedDate }: { selectedDate: string }) {
-  return (
-    <div className="border-b border-slate-200 px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Selected Day</p>
-      <h2 className="mt-0.5 text-base font-semibold text-slate-900">
-        {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' })}
-      </h2>
     </div>
   )
 }
