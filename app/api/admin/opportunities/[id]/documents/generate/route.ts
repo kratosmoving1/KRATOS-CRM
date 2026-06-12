@@ -13,7 +13,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const { data: opp, error: oppErr } = await supabase
     .from('opportunities')
     .select(`
-      id, opportunity_number, service_type, service_date, move_size, deposit_amount,
+      id, opportunity_number, service_type, service_date, move_size,
       origin_address_line1, origin_address_line2, origin_city, origin_province, origin_postal_code, origin_dwelling_type,
       dest_address_line1, dest_address_line2, dest_city, dest_province, dest_postal_code, dest_dwelling_type,
       customer:customers!customer_id(id, full_name, email, phone),
@@ -68,7 +68,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     service_date: opp.service_date,
     move_size: opp.move_size,
     service_type: opp.service_type,
-    deposit_amount: opp.deposit_amount ?? null,
+    deposit_amount: null,
     customer: customerData ? {
       full_name: customerData.full_name,
       email: customerData.email ?? null,
