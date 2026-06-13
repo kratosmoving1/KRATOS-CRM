@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound } from 'next/navigation'
 import DocumentSignPortal from '@/components/portal/DocumentSignPortal'
+import { buildRenderContext } from '@/lib/documents/build-context'
+import { renderDocument, buildDocumentNumber } from '@/lib/documents/render'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -35,7 +37,7 @@ export default async function DocumentPortalPage({ params }: { params: { id: str
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('id, name, category, status, rendered_html, signed_at, signature_data')
+    .select('id, name, category, status, rendered_html, signed_at, signature_data, opportunity_id, document_number, template:document_templates(content_html)')
     .eq('id', params.id)
     .eq('is_deleted', false)
     .maybeSingle()
@@ -54,11 +56,33 @@ export default async function DocumentPortalPage({ params }: { params: { id: str
   const isSigned = ['signed', 'completed'].includes(doc.status)
   const sigData  = doc.signature_data as Record<string, string> | null
 
+  // Self-heal: if the frozen snapshot still contains unrendered {{tokens}}
+  // (rendered by an older code version), re-render it now — stamping the
+  // signature back in if already signed — and persist the repair.
+  let renderedHtml = doc.rendered_html ?? ''
+  const templateHtml = (doc.template as { content_html?: string } | null)?.content_html
+  if (/\{\{[a-z_]+\}\}/.test(renderedHtml) && templateHtml && doc.opportunity_id) {
+    try {
+      const ctx = await buildRenderContext(doc.opportunity_id)
+      const docNumber = doc.document_number ?? buildDocumentNumber(ctx.opportunity_number, doc.category)
+      const signature = (isSigned && sigData?.signer_name && sigData?.signature_image && doc.signed_at)
+        ? { signerName: sigData.signer_name, signatureImage: sigData.signature_image, signedAt: doc.signed_at }
+        : undefined
+      renderedHtml = renderDocument(templateHtml, ctx, docNumber, signature)
+      await supabase
+        .from('documents')
+        .update({ rendered_html: renderedHtml, rendered_at: new Date().toISOString() })
+        .eq('id', doc.id)
+    } catch {
+      // keep the stored snapshot — never block the customer from viewing
+    }
+  }
+
   return (
     <DocumentSignPortal
       documentId={doc.id}
       documentName={doc.name}
-      renderedHtml={doc.rendered_html ?? ''}
+      renderedHtml={renderedHtml}
       isSigned={isSigned}
       signedAt={isSigned ? (doc.signed_at ?? null) : null}
       signedBy={isSigned ? (sigData?.signer_name ?? null) : null}

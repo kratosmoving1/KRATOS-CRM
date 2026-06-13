@@ -23,9 +23,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Frozen statuses: return stored snapshot unchanged — unless caller requests a fresh preview
+  // Frozen statuses: return stored snapshot unchanged — unless caller requests a
+  // fresh preview, or the snapshot is broken (contains unrendered {{tokens}} from
+  // a render that ran against an older code version). Broken snapshots fall
+  // through to a repair re-render below and get persisted.
   const fresh = req.nextUrl.searchParams.get('fresh') === 'true'
-  if (FROZEN_STATUSES.has(doc.status) && !fresh) {
+  const isFrozen = FROZEN_STATUSES.has(doc.status)
+  const snapshotBroken = /\{\{[a-z_]+\}\}/.test(doc.rendered_html ?? '')
+  if (isFrozen && !fresh && !snapshotBroken) {
     return NextResponse.json(doc)
   }
 
@@ -59,6 +64,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ? { signerName: sigData.signer_name, signatureImage: sigData.signature_image, signedAt: doc.signed_at }
       : undefined
     const freshHtml = renderDocument(template.content_html ?? '', ctx, docNumber, signature)
+
+    // Persist the repair so the customer portal (which serves the snapshot
+    // directly) shows the same fixed document
+    if (isFrozen && snapshotBroken) {
+      await supabase
+        .from('documents')
+        .update({ rendered_html: freshHtml, rendered_at: new Date().toISOString() })
+        .eq('id', params.id)
+    }
+
     return NextResponse.json({ ...doc, rendered_html: freshHtml })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)

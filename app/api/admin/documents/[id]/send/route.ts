@@ -37,6 +37,8 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     const customerName = ctx.customer?.full_name ?? 'Valued Customer'
     const firstName = customerName.split(' ')[0] || customerName
     const portalUrl = `${APP_URL}/portal/documents/${params.id}`
+    const emailSubject = `Action Required: Review ${doc.name}`
+    const emailHtml = buildSignatureRequestEmail({ firstName, docName: doc.name as string, portalUrl })
 
     // Always freeze the snapshot and mark sent — regardless of whether email works
     await supabase
@@ -50,14 +52,22 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       })
       .eq('id', params.id)
 
-    // Log to the sales timeline — anything sent to the customer should appear there
+    // Log to the sales timeline — the exact email sent to the customer,
+    // same pattern as estimate emails (full HTML body renders inline on the Sales tab)
     if (doc.opportunity_id) {
+      const { data: oppRow } = await supabase
+        .from('opportunities')
+        .select('customer_id')
+        .eq('id', doc.opportunity_id)
+        .maybeSingle()
+
       await supabase.from('communications').insert({
         opportunity_id: doc.opportunity_id,
+        customer_id: oppRow?.customer_id ?? null,
         type: 'email',
         direction: 'outbound',
-        subject: `Document sent: ${doc.name}`,
-        body: `Sent "${doc.name}" to ${customerEmail} for review and signature.`,
+        subject: emailSubject,
+        body: emailHtml,
         email_to: customerEmail,
         created_by: user.id,
       })
@@ -77,8 +87,8 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     try {
       await sendEmail({
         to: customerEmail,
-        subject: `Action Required: Review ${doc.name}`,
-        html: buildSignatureRequestEmail({ firstName, docName: doc.name as string, portalUrl }),
+        subject: emailSubject,
+        html: emailHtml,
         text: `Hi ${firstName},\n\nWe kindly request your attention to review the following document related to your upcoming move with Kratos Moving Inc.\n\nDocument: ${doc.name}\n\nView and sign here:\n${portalUrl}\n\nThank you,\nKratos Moving Inc.`,
       })
     } catch (emailErr) {
