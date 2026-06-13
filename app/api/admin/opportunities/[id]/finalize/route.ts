@@ -25,21 +25,36 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     actual_tips_cents,
   } = body as Record<string, unknown>
 
+  const now = new Date().toISOString()
+
+  // Fetch current status to decide whether to auto-transition to 'completed'
+  const { data: current } = await supabase
+    .from('opportunities')
+    .select('status')
+    .eq('id', params.id)
+    .neq('is_deleted', true)
+    .maybeSingle()
+
+  const statusUpdate = current?.status === 'booked'
+    ? { status: 'completed', completed_at: now }
+    : {}
+
   const { error } = await supabase
     .from('opportunities')
     .update({
-      finalized_at: new Date().toISOString(),
-      actual_labor_hours:       actual_labor_hours       ?? null,
-      actual_travel_hours:      actual_travel_hours      ?? null,
-      actual_deduction_hours:   actual_deduction_hours   ?? null,
-      actual_minimum_hours:     actual_minimum_hours     ?? null,
-      actual_billable_hours:    actual_billable_hours    ?? null,
-      actual_crew_count:        actual_crew_count        ?? null,
-      actual_trucks_count:      actual_trucks_count      ?? null,
+      finalized_at: now,
+      actual_labor_hours:         actual_labor_hours       ?? null,
+      actual_travel_hours:        actual_travel_hours      ?? null,
+      actual_deduction_hours:     actual_deduction_hours   ?? null,
+      actual_minimum_hours:       actual_minimum_hours     ?? null,
+      actual_billable_hours:      actual_billable_hours    ?? null,
+      actual_crew_count:          actual_crew_count        ?? null,
+      actual_trucks_count:        actual_trucks_count      ?? null,
       include_travel_in_billable: include_travel_in_billable ?? false,
-      invoiced_volume_cuft:     invoiced_volume_cuft     ?? null,
-      invoiced_weight_lbs:      invoiced_weight_lbs      ?? null,
-      actual_tips_cents:        actual_tips_cents        ?? null,
+      invoiced_volume_cuft:       invoiced_volume_cuft     ?? null,
+      invoiced_weight_lbs:        invoiced_weight_lbs      ?? null,
+      actual_tips_cents:          actual_tips_cents        ?? null,
+      ...statusUpdate,
     })
     .eq('id', params.id)
     .neq('is_deleted', true)

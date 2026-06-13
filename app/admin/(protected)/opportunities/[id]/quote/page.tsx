@@ -28,6 +28,7 @@ import DocsSidePanel, { type DocumentRow } from '@/components/admin/documents/Do
 import DocumentPreviewModal from '@/components/admin/documents/DocumentPreviewModal'
 import InvoicePreviewModal from '@/components/admin/documents/InvoicePreviewModal'
 import FinalizeJobModal from '@/components/admin/modals/FinalizeJobModal'
+import CustomerCommunicationModal from '@/components/admin/modals/CustomerCommunicationModal'
 import type { OpportunityCharge } from '@/components/admin/charges/types'
 import { calculateEstimate } from '@/lib/charges/calculate'
 import { OPP_STATUSES, MOVE_SIZE_LABELS, MOVE_SIZE_VOLUME } from '@/lib/constants'
@@ -160,6 +161,19 @@ interface OppDetail {
   dest_stairs_count: number | null; dest_long_carry: boolean | null
   dest_parking_notes: string | null
   created_at: string; updated_at: string
+  // Finalization / accounting columns (exist in DB, not yet in types/database.ts)
+  finalized_at: string | null
+  actual_labor_hours: number | null
+  actual_travel_hours: number | null
+  actual_deduction_hours: number | null
+  actual_minimum_hours: number | null
+  actual_billable_hours: number | null
+  actual_crew_count: number | null
+  actual_trucks_count: number | null
+  include_travel_in_billable: boolean | null
+  invoiced_volume_cuft: number | null
+  invoiced_weight_lbs: number | null
+  actual_tips_cents: number | null
   customer: {
     id: string; full_name: string; email: string | null; phone: string | null
     phone_type: string | null; secondary_phone: string | null
@@ -523,6 +537,7 @@ export default function OpportunityDetailPage() {
 
   // Finalize
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  const [commsModalOpen, setCommsModalOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -2725,206 +2740,395 @@ export default function OpportunityDetailPage() {
           </div>
         )}
 
-        {tab === 'accounting' && (
-          <div className="space-y-4">
-            {/* Header row */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                Accounting — #{formatQuoteNumber(opp.opportunity_number)}
-              </h2>
-              <div className="flex items-center gap-2">
-                {!(opp as { finalized_at?: string | null }).finalized_at && (
-                  <button
-                    onClick={() => setFinalizeOpen(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
-                  >
-                    <CheckCircle2 size={14} /> Finalize
-                  </button>
-                )}
-                {(opp as { finalized_at?: string | null }).finalized_at && (
-                  <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700">
-                    <CheckCircle2 size={13} /> Finalized
-                  </span>
-                )}
-                <button
-                  onClick={handleSendInvoice}
-                  disabled={!opp.customer?.email}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <ReceiptText size={14} />
-                  Send Invoice
-                </button>
-                <button
-                  onClick={() => setPaymentDrawerOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg bg-kratos px-4 py-2 text-sm font-semibold text-slate-950"
-                >
-                  <CreditCard size={14} /> Add Payment
-                </button>
-              </div>
-            </div>
+        {tab === 'accounting' && (() => {
+          const laborCharge = charges.find(c => c.charge_type === 'moving_labor')
+          const lc = (laborCharge?.config ?? {}) as Record<string, unknown>
+          const estNumTrucks   = Number(lc.num_trucks   || 0) || null
+          const estNumCrew     = Number(lc.num_crew     || 0) || null
+          const estHourlyRate  = Number(lc.hourly_rate  || 0) || null
+          const estBillableHrs = Number(lc.billable_hours ?? lc.labor_hours ?? 0) || null
+          const estMinHrs      = Number(lc.minimum_hours   || 0) || null
+          const finalized = Boolean(opp.finalized_at)
+          const originCity = [opp.origin_city, opp.origin_province].filter(Boolean).join(', ')
+          const destCity   = [opp.dest_city,   opp.dest_province].filter(Boolean).join(', ')
 
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Left 2/3: Charge Summary + Payment History */}
-              <div className="space-y-4 lg:col-span-2">
+          return (
+            <div className="space-y-4">
 
-                {/* Charge Summary */}
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                    <p className="text-sm font-semibold text-slate-900">Charge Summary</p>
-                    {chargesLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
-                  </div>
-                  {charges.length === 0 && !chargesLoading ? (
-                    <div className="px-5 py-8 text-center">
-                      <p className="text-sm text-slate-400">No charges added yet</p>
-                      <p className="mt-1 text-xs text-slate-300">Build your estimate on the Estimate tab first.</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50">
-                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Charge</th>
-                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Subtotal</th>
-                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Discount</th>
-                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {charges.map(c => (
-                            <tr key={c.id} className="hover:bg-slate-50/60">
-                              <td className="px-5 py-3.5 font-medium text-slate-900">{c.name}</td>
-                              <td className="px-5 py-3.5 text-right text-slate-600">{formatCurrency(c.subtotal)}</td>
-                              <td className="px-5 py-3.5 text-right">
-                                {c.discount_amount > 0
-                                  ? <span className="text-emerald-600">− {formatCurrency(c.discount_amount)}</span>
-                                  : <span className="text-slate-300">—</span>}
-                              </td>
-                              <td className="px-5 py-3.5 text-right font-semibold text-slate-950">{formatCurrency(c.total)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t border-slate-200 bg-slate-50">
-                            <td colSpan={3} className="px-5 py-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Subtotal</td>
-                            <td className="px-5 py-3 text-right font-semibold text-slate-950">{formatCurrency(subtotal)}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
+              {/* Action header */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  Accounting &mdash; #{formatQuoteNumber(opp.opportunity_number)}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!finalized && (
+                    <button
+                      onClick={() => setFinalizeOpen(true)}
+                      className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition-colors"
+                    >
+                      <CheckCircle2 size={14} /> Finalize Job
+                    </button>
                   )}
+                  {finalized && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 size={12} /> Finalized
+                    </span>
+                  )}
+                  <button
+                    onClick={handleSendInvoice}
+                    disabled={!opp.customer?.email}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ReceiptText size={14} /> Send Invoice
+                  </button>
+                  <button
+                    onClick={() => setPaymentDrawerOpen(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-kratos px-4 py-2 text-sm font-semibold text-slate-950"
+                  >
+                    <CreditCard size={14} /> Add Payment
+                  </button>
+                </div>
+              </div>
+
+              {/* Finalized banner */}
+              {finalized && (
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <CheckCircle2 size={16} className="flex-shrink-0 text-emerald-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">Job finalized</p>
+                    <p className="text-xs text-emerald-600 mt-0.5">
+                      {new Date(opp.finalized_at!).toLocaleDateString('en-CA', {
+                        month: 'long', day: 'numeric', year: 'numeric',
+                      })}
+                      {opp.actual_billable_hours ? ` · ${opp.actual_billable_hours}h billable` : ''}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                {/* Left 2/3: main content */}
+                <div className="lg:col-span-2 space-y-4">
+
+                  {/* Job Overview */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="bg-slate-800 px-5 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-white">Job Overview</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 px-5 py-4 text-sm">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Date</p>
+                        <p className="font-medium text-slate-900">{opp.service_date ? formatDateShort(opp.service_date) : 'TBD'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Service Type</p>
+                        <p className="font-medium text-slate-900">{SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Move Size</p>
+                        <p className="font-medium text-slate-900">{opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g, ' ')) : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Rate</p>
+                        <p className="font-medium text-slate-900">{estHourlyRate ? `$${estHourlyRate.toFixed(2)}/hr` : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Origin</p>
+                        <p className="font-medium text-slate-900">{originCity || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Destination</p>
+                        <p className="font-medium text-slate-900">{destCity || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Crew</p>
+                        <p className="font-medium text-slate-900">{finalized ? (opp.actual_crew_count ?? estNumCrew ?? '—') : (estNumCrew ?? '—')}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Trucks</p>
+                        <p className="font-medium text-slate-900">{finalized ? (opp.actual_trucks_count ?? estNumTrucks ?? '—') : (estNumTrucks ?? '—')}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Job Time */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="flex items-center justify-between bg-slate-800 px-5 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-white">Job Time</p>
+                      {!finalized && <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Estimated</span>}
+                    </div>
+                    {finalized ? (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 p-4">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Labor</p>
+                          <p className="mt-0.5 text-base font-bold text-slate-800">{opp.actual_labor_hours != null ? `${opp.actual_labor_hours}h` : '—'}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Travel</p>
+                          <p className="mt-0.5 text-base font-bold text-slate-800">{opp.actual_travel_hours != null ? `${opp.actual_travel_hours}h` : '—'}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Deductions</p>
+                          <p className="mt-0.5 text-base font-bold text-slate-800">{opp.actual_deduction_hours != null ? `${opp.actual_deduction_hours}h` : '—'}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Min Hours</p>
+                          <p className="mt-0.5 text-base font-bold text-slate-800">{opp.actual_minimum_hours != null ? `${opp.actual_minimum_hours}h` : '—'}</p>
+                        </div>
+                        <div className="col-span-2 rounded-xl border-2 border-kratos/40 bg-amber-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Billable Time</p>
+                          <p className="mt-0.5 text-2xl font-bold text-slate-900">{opp.actual_billable_hours != null ? `${opp.actual_billable_hours}h` : '—'}</p>
+                        </div>
+                        {opp.actual_tips_cents != null && opp.actual_tips_cents > 0 && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tips</p>
+                            <p className="mt-0.5 text-base font-bold text-slate-800">{formatCurrency(opp.actual_tips_cents / 100)}</p>
+                          </div>
+                        )}
+                        {opp.invoiced_volume_cuft != null && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Volume</p>
+                            <p className="mt-0.5 text-base font-bold text-slate-800">{opp.invoiced_volume_cuft} cu ft</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="px-5 py-4">
+                        {laborCharge ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Est. Labor</p>
+                              <p className="mt-0.5 text-base font-bold text-slate-700">{estBillableHrs ? `${estBillableHrs}h` : '—'}</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Min Hours</p>
+                              <p className="mt-0.5 text-base font-bold text-slate-700">{estMinHrs ? `${estMinHrs}h` : '—'}</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Crew</p>
+                              <p className="mt-0.5 text-base font-bold text-slate-700">{estNumCrew ?? '—'}</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Trucks</p>
+                              <p className="mt-0.5 text-base font-bold text-slate-700">{estNumTrucks ?? '—'}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="py-2 text-center text-sm text-slate-400">No labor charge on estimate — add one on the Estimate tab.</p>
+                        )}
+                        <p className="mt-3 text-xs text-slate-400">
+                          Based on quoted estimate. Click <strong className="text-slate-600">Finalize Job</strong> to record actual values.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Charge Summary */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="flex items-center justify-between bg-slate-800 px-5 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-white">Charges</p>
+                      {chargesLoading && <Loader2 size={13} className="animate-spin text-slate-300" />}
+                    </div>
+                    {charges.length === 0 && !chargesLoading ? (
+                      <div className="px-5 py-8 text-center">
+                        <p className="text-sm text-slate-400">No charges added yet.</p>
+                        <p className="mt-1 text-xs text-slate-300">Build your estimate on the Estimate tab first.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50">
+                              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Charge</th>
+                              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Subtotal</th>
+                              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Discount</th>
+                              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {charges.map(c => (
+                              <tr key={c.id} className="hover:bg-slate-50/60">
+                                <td className="px-5 py-3 font-medium text-slate-900">{c.name}</td>
+                                <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(c.subtotal)}</td>
+                                <td className="px-5 py-3 text-right">
+                                  {c.discount_amount > 0
+                                    ? <span className="text-emerald-600">&#8722; {formatCurrency(c.discount_amount)}</span>
+                                    : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="px-5 py-3 text-right font-semibold text-slate-950">{formatCurrency(c.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-slate-200 bg-slate-50">
+                              <td colSpan={3} className="px-5 py-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Subtotal</td>
+                              <td className="px-5 py-3 text-right font-semibold text-slate-950">{formatCurrency(subtotal)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Collapsed stub sections */}
+                  {(['Crew Payroll', 'Sales Payroll', 'Truck Summary'] as const).map(title => (
+                    <details key={title} className="group overflow-hidden rounded-xl border border-slate-200 bg-white">
+                      <summary className="flex cursor-pointer list-none select-none items-center justify-between bg-slate-800 px-5 py-3">
+                        <p className="text-xs font-bold uppercase tracking-widest text-white">{title}</p>
+                        <ChevronDown size={14} className="text-slate-400 transition-transform group-open:rotate-180" />
+                      </summary>
+                      <div className="px-5 py-6 text-center">
+                        <p className="text-sm text-slate-400">Coming soon.</p>
+                      </div>
+                    </details>
+                  ))}
+
                 </div>
 
-                {/* Payment History */}
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <ReceiptText size={15} className="text-slate-400" />
-                      <p className="text-sm font-semibold text-slate-900">Payments</p>
+                {/* Right sidebar 1/3 */}
+                <div className="space-y-4">
+
+                  {/* Information */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="bg-slate-800 px-5 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-white">Information</p>
                     </div>
-                    {paymentsLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
-                  </div>
-                  {!paymentsLoading && payments.length === 0 ? (
-                    <div className="px-5 py-10 text-center">
-                      <CreditCard size={28} className="mx-auto mb-3 text-slate-200" />
-                      <p className="text-sm text-slate-400">No payments recorded yet</p>
-                      <p className="mt-1 text-xs text-slate-300">Click &ldquo;Add Payment&rdquo; to record a deposit or payment.</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="grid grid-cols-4 border-b border-slate-100 bg-slate-50 px-5 py-2.5">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Method</p>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Date</p>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Reference</p>
-                        <p className="text-right text-xs font-semibold uppercase tracking-widest text-slate-400">Amount</p>
-                      </div>
-                      <div className="divide-y divide-slate-100">
-                        {payments.map(p => (
-                          <div key={p.id} className="grid grid-cols-4 items-center px-5 py-3.5">
-                            <div>
-                              <p className="text-sm font-medium text-slate-900">
-                                {METHOD_LABELS[p.method] ?? p.method.replace(/_/g, ' ')}
-                              </p>
-                              <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                p.status === 'received' ? 'bg-emerald-100 text-emerald-700' :
-                                p.status === 'pending'  ? 'bg-amber-100 text-amber-700' :
-                                p.status === 'refunded' ? 'bg-red-100 text-red-600' :
-                                'bg-slate-100 text-slate-500'
-                              }`}>{p.status}</span>
-                            </div>
-                            <p className="text-sm text-slate-600">
-                              {new Date(p.payment_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                            <p className="text-sm text-slate-500">{p.reference_number ?? '—'}</p>
-                            <p className="text-right text-sm font-bold text-slate-950">{formatCurrency(p.amount_cents / 100)}</p>
+                    <div className="space-y-3 px-5 py-4 text-sm">
+                      {opp.customer && (
+                        <>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Customer</p>
+                            <p className="font-medium text-slate-900">{opp.customer.full_name}</p>
                           </div>
-                        ))}
-                        <div className="grid grid-cols-4 items-center rounded-b-xl bg-slate-50 px-5 py-3.5">
-                          <p className="col-span-3 text-sm font-semibold text-slate-700">Total Received</p>
-                          <p className="text-right text-sm font-bold text-slate-950">{formatCurrency(totalPaid)}</p>
+                          {opp.customer.email && (
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Email</p>
+                              <p className="truncate text-slate-700">{opp.customer.email}</p>
+                            </div>
+                          )}
+                          {opp.customer.phone && (
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Phone</p>
+                              <p className="text-slate-700">{opp.customer.phone}</p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {opp.lead_source && (
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Lead Source</p>
+                          <p className="text-slate-700">{opp.lead_source.name}</p>
+                        </div>
+                      )}
+                      {opp.agent && (
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Sales Agent</p>
+                          <p className="text-slate-700">{opp.agent.full_name}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Created</p>
+                        <p className="text-slate-700">
+                          {new Date(opp.created_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quote Total */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="bg-slate-800 px-5 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-white">Quote Total</p>
+                    </div>
+                    <div className="space-y-2.5 px-5 py-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-500">Subtotal</span>
+                        <span className="text-sm font-medium text-slate-900">{formatCurrency(subtotal)}</span>
+                      </div>
+                      {discounts > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500">Discounts</span>
+                          <span className="text-sm font-medium text-emerald-600">&#8722; {formatCurrency(discounts)}</span>
+                        </div>
+                      )}
+                      {discounts > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500">After Discounts</span>
+                          <span className="text-sm font-medium text-slate-900">{formatCurrency(subtotal - discounts)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-500">HST (13%)</span>
+                        <span className="text-sm font-medium text-slate-900">{formatCurrency(salesTax)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-slate-200 pt-2.5">
+                        <span className="text-sm font-semibold text-slate-900">Grand Total</span>
+                        <span className="text-sm font-bold text-slate-950">{formatCurrency(estimateTotal)}</span>
+                      </div>
+                      <div className="space-y-2 border-t border-slate-200 pt-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500">Received</span>
+                          <span className="text-sm font-medium text-emerald-600">
+                            {totalPaid > 0 ? `− ${formatCurrency(totalPaid)}` : formatCurrency(0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-slate-900">Balance Due</span>
+                          <span className={`text-base font-bold ${balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid in full'}
+                          </span>
                         </div>
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
 
-              {/* Right 1/3: Quote Totals */}
-              <div className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <div className="border-b border-slate-100 px-5 py-4">
-                  <p className="text-sm font-semibold text-slate-900">Quote Total</p>
-                </div>
-                <div className="space-y-2.5 px-5 py-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">Subtotal</span>
-                    <span className="text-sm font-medium text-slate-900">{formatCurrency(subtotal)}</span>
-                  </div>
-                  {discounts > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-500">Discounts</span>
-                      <span className="text-sm font-medium text-emerald-600">− {formatCurrency(discounts)}</span>
+                  {/* Payments */}
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="flex items-center justify-between bg-slate-800 px-5 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-white">Payments</p>
+                      {paymentsLoading && <Loader2 size={12} className="animate-spin text-slate-400" />}
                     </div>
-                  )}
-                  {discounts > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-500">Subtotal (Less Discounts)</span>
-                      <span className="text-sm font-medium text-slate-900">{formatCurrency(subtotal - discounts)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">HST (13%)</span>
-                    <span className="text-sm font-medium text-slate-900">{formatCurrency(salesTax)}</span>
-                  </div>
-                  <div className="border-t border-slate-200 pt-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-900">Grand Total</span>
-                      <span className="text-sm font-bold text-slate-950">{formatCurrency(estimateTotal)}</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2.5 border-t border-slate-200 pt-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-500">Payments Received</span>
-                      <span className="text-sm font-medium text-emerald-600">{totalPaid > 0 ? `− ${formatCurrency(totalPaid)}` : formatCurrency(0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-900">Balance Due</span>
-                      <span className={`text-base font-bold ${balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                        {balanceDue > 0 ? formatCurrency(balanceDue) : 'Paid in full'}
-                      </span>
+                    {!paymentsLoading && payments.length === 0 ? (
+                      <div className="px-5 py-6 text-center">
+                        <p className="text-sm text-slate-400">No payments recorded.</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="divide-y divide-slate-100">
+                          {payments.map(p => (
+                            <div key={p.id} className="flex items-center justify-between gap-2 px-5 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{METHOD_LABELS[p.method] ?? p.method.replace(/_/g, ' ')}</p>
+                                <p className="text-xs text-slate-500">
+                                  {new Date(p.payment_date + 'T12:00:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+                                  {p.reference_number ? ` · ${p.reference_number}` : ''}
+                                </p>
+                              </div>
+                              <p className="flex-shrink-0 text-sm font-bold text-slate-950">{formatCurrency(p.amount_cents / 100)}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
+                          <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Total Received</span>
+                          <span className="text-sm font-bold text-slate-950">{formatCurrency(totalPaid)}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="border-t border-slate-100 px-5 py-3">
+                      <button
+                        onClick={() => setPaymentDrawerOpen(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-kratos px-4 py-2 text-sm font-semibold text-slate-950"
+                      >
+                        <CreditCard size={14} /> Add Payment
+                      </button>
                     </div>
                   </div>
-                </div>
-                <div className="border-t border-slate-100 px-5 py-4">
-                  <button
-                    onClick={() => setPaymentDrawerOpen(true)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-kratos px-4 py-2.5 text-sm font-semibold text-slate-950"
-                  >
-                    <CreditCard size={16} /> Add Payment
-                  </button>
+
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {tab === 'profitability' && opp.can_view_profitability && (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -3253,9 +3457,30 @@ export default function OpportunityDetailPage() {
         opportunityId={id}
         isOpen={finalizeOpen}
         onClose={() => setFinalizeOpen(false)}
-        onFinalized={() => { load(); loadTimeline() }}
-        defaultCrewCount={2}
-        defaultTrucksCount={1}
+        onFinalized={() => { load(); loadTimeline(); setCommsModalOpen(true) }}
+        jobInfo={(() => {
+          const lc = (charges.find(c => c.charge_type === 'moving_labor')?.config ?? {}) as Record<string, unknown>
+          return {
+            jobNumber: formatQuoteNumber(opp.opportunity_number),
+            customerName: opp.customer?.full_name ?? null,
+            serviceDate: opp.service_date,
+            serviceType: opp.service_type,
+            estHourlyRate:   Number(lc.hourly_rate  || 0) || null,
+            estCrewCount:    Number(lc.num_crew      || 0) || null,
+            estTrucksCount:  Number(lc.num_trucks    || 0) || null,
+            estMinimumHours: Number(lc.minimum_hours || 0) || null,
+            estBillableHours: Number(lc.billable_hours ?? lc.labor_hours ?? 0) || null,
+            estTotal: estimateTotal,
+          }
+        })()}
+      />
+
+      <CustomerCommunicationModal
+        customerName={opp.customer?.full_name ?? null}
+        customerEmail={opp.customer?.email ?? null}
+        isOpen={commsModalOpen}
+        onClose={() => setCommsModalOpen(false)}
+        onSendInvoice={() => { setCommsModalOpen(false); handleSendInvoice() }}
       />
 
       {showRescheduleModal && (

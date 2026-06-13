@@ -160,6 +160,23 @@ Core record for every move job. One customer can have many opportunities.
 | `estimate_sent_by` | `uuid \| null` | FK to `profiles.id` — who sent the estimate |
 | `is_deleted` | `boolean` | Soft delete flag — never hard-delete |
 
+### Accounting / finalization (added via Supabase SQL Editor — not yet in types/database.ts)
+
+| Column | Type | Description |
+|---|---|---|
+| `finalized_at` | `timestamptz \| null` | When the job was finalized (null = not yet finalized) |
+| `actual_labor_hours` | `numeric \| null` | Actual hours crew worked on the job |
+| `actual_travel_hours` | `numeric \| null` | Actual travel time (to/from job) |
+| `actual_deduction_hours` | `numeric \| null` | Hours deducted (breaks, packing materials time, etc.) |
+| `actual_minimum_hours` | `numeric \| null` | Minimum billable hours enforced for this job |
+| `actual_billable_hours` | `numeric \| null` | Final billable hours = max(labor − deductions [+ travel], minimum) |
+| `actual_crew_count` | `integer \| null` | Actual number of crew on the job |
+| `actual_trucks_count` | `integer \| null` | Actual number of trucks on the job |
+| `include_travel_in_billable` | `boolean` | Whether travel time was included in billable calculation |
+| `invoiced_volume_cuft` | `numeric \| null` | Invoiced volume in cubic feet (optional) |
+| `invoiced_weight_lbs` | `numeric \| null` | Invoiced weight in pounds (optional) |
+| `actual_tips_cents` | `integer \| null` | Tips received in cents (divide by 100 for dollars) |
+
 ---
 
 ## Table: `audit_log`
