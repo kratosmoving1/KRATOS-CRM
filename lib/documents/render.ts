@@ -216,5 +216,7 @@ export function renderDocument(
 
 export function buildDocumentNumber(quoteNumber: string, category: string): string {
   const categoryCode = category.replace(/^(opportunity_|job_)/, '').toUpperCase().slice(0, 3)
-  return `DOC-${quoteNumber}-${categoryCode}`
+  // Strip year segment from legacy KM-YYYY-NNNNN format (e.g. KM-2026-00003 → KM-00003)
+  const shortNumber = quoteNumber.replace(/-\d{4}-/, '-')
+  return `DOC-${shortNumber}-${categoryCode}`
 }

@@ -20,7 +20,7 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
   useEffect(() => {
     if (!isOpen || !doc) { setLivDoc(null); return }
     setLoading(true)
-    fetch(`/api/admin/documents/${doc.id}`)
+    fetch(`/api/admin/documents/${doc.id}?fresh=true`)
       .then(r => r.json())
       .then(data => setLivDoc(data))
       .catch(() => setLivDoc(doc))

@@ -8,7 +8,7 @@ const ALLOWED = new Set(['status', 'sent_to'])
 // Documents at these statuses have a frozen snapshot — return as-is without re-rendering
 const FROZEN_STATUSES = new Set(['sent', 'viewed', 'signed', 'completed'])
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -23,8 +23,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Frozen statuses: return stored snapshot unchanged
-  if (FROZEN_STATUSES.has(doc.status)) {
+  // Frozen statuses: return stored snapshot unchanged — unless caller requests a fresh preview
+  const fresh = req.nextUrl.searchParams.get('fresh') === 'true'
+  if (FROZEN_STATUSES.has(doc.status) && !fresh) {
     return NextResponse.json(doc)
   }
 

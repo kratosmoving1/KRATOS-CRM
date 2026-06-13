@@ -178,7 +178,11 @@ export default function DocsSidePanel({
   }, [opportunityId, onCountChange])
 
   useEffect(() => {
-    if (isOpen) fetchDocs()
+    if (!isOpen) return
+    fetchDocs()
+    // Poll every 15 s while panel is open to reflect customer signing in real time
+    const iv = setInterval(() => fetchDocs(), 15_000)
+    return () => clearInterval(iv)
   }, [isOpen, fetchDocs])
 
   async function handleRegenerate() {

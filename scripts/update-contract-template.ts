@@ -32,18 +32,12 @@ const CONTRACT_HTML = `
 <div style="font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #222; max-width: 780px; margin: 0 auto;">
 
   <!-- ── Header ── -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-    <tr>
-      <td style="vertical-align:middle;width:50%;">
-        <img src="/logo.png" alt="Kratos Moving" style="height:56px;object-fit:contain;display:block;">
-      </td>
-      <td style="vertical-align:middle;text-align:right;font-size:9pt;color:#555;line-height:1.5;">
-        <strong style="color:#222;">Kratos Moving Inc.</strong>&nbsp;|&nbsp;1 (800) 321-3222<br>
-        27 Roytec Rd #8B Woodbridge, ON L4L 8E3
-      </td>
-    </tr>
-  </table>
-  <div style="border-top:3px solid #ffad33;margin-bottom:14px;"></div>
+  <div style="text-align:center;margin-bottom:4px;">
+    <img src="/logo.png" alt="Kratos Moving" style="height:64px;object-fit:contain;display:block;margin:0 auto 6px;">
+    <div style="font-size:11pt;font-weight:bold;color:#222;letter-spacing:-0.2px;">Kratos Moving Inc.</div>
+    <div style="font-size:8.5pt;color:#555;margin-top:2px;">27 Roytec Rd #8B Woodbridge, ON L4L 8E3 &nbsp;&bull;&nbsp; (800) 321-3222 &nbsp;&bull;&nbsp; info@kratosmoving.ca</div>
+  </div>
+  <div style="border-top:3px solid #ffad33;margin-bottom:14px;margin-top:10px;"></div>
 
   <!-- ── Title banner ── -->
   <div style="background:#111111;color:#ffffff;text-align:center;padding:9px 0;font-size:13pt;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;">
@@ -147,6 +141,12 @@ const CONTRACT_HTML = `
         <br><br>
         <div style="border-bottom:1px solid #222;padding-bottom:2px;min-height:32px;">&nbsp;</div>
         <div style="font-size:8pt;color:#888;margin-top:3px;">Shipper or Carrier*</div>
+        <div style="text-align:center;margin-top:14px;">
+          <a href="#sign-section" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:11px 28px;border-radius:7px;font-size:10pt;font-weight:bold;letter-spacing:0.2px;">
+            Sign This Document &rarr;
+          </a>
+          <div style="font-size:8pt;color:#94a3b8;margin-top:5px;">Scroll down to complete your electronic signature</div>
+        </div>
       </td>
     </tr>
   </table>
@@ -244,17 +244,12 @@ const CONTRACT_HTML = `
   <div style="page-break-before:always;padding-top:24px;"></div>
 
   <!-- ── Page 2 header ── -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-    <tr>
-      <td style="vertical-align:middle;width:50%;">
-        <img src="/logo.png" alt="Kratos Moving" style="height:56px;object-fit:contain;display:block;">
-      </td>
-      <td style="vertical-align:middle;text-align:right;font-size:9pt;color:#555;line-height:1.5;">
-        <strong style="color:#222;">Kratos Moving Inc.</strong>&nbsp;|&nbsp;1 (800) 321-3222<br>
-        27 Roytec Rd #8B Woodbridge, ON L4L 8E3
-      </td>
-    </tr>
-  </table>
+  <div style="text-align:center;margin-bottom:4px;">
+    <img src="/logo.png" alt="Kratos Moving" style="height:64px;object-fit:contain;display:block;margin:0 auto 6px;">
+    <div style="font-size:11pt;font-weight:bold;color:#222;letter-spacing:-0.2px;">Kratos Moving Inc.</div>
+    <div style="font-size:8.5pt;color:#555;margin-top:2px;">27 Roytec Rd #8B Woodbridge, ON L4L 8E3 &nbsp;&bull;&nbsp; (800) 321-3222 &nbsp;&bull;&nbsp; info@kratosmoving.ca</div>
+  </div>
+  <div style="border-top:3px solid #ffad33;margin-bottom:14px;margin-top:10px;"></div>
 
   <h2 style="color:#111111;font-size:12pt;margin:8px 0 4px 0;">Inventory Declared</h2>
   <div style="border-top:2px solid #e2e8f0;margin-bottom:16px;"></div>
