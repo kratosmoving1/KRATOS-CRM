@@ -72,6 +72,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
+
+  // Special action: clear signature and revert to sent
+  if (body.reset_signature === true) {
+    const { data: updated, error: resetErr } = await supabase
+      .from('documents')
+      .update({ status: 'sent', signed_at: null, signature_data: null })
+      .eq('id', params.id)
+      .select()
+      .single()
+    if (resetErr) return NextResponse.json({ error: resetErr.message }, { status: 500 })
+    return NextResponse.json(updated)
+  }
+
   const cleaned: Record<string, unknown> = Object.fromEntries(
     Object.entries(body).filter(([k]) => ALLOWED.has(k)),
   )

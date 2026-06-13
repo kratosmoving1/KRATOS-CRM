@@ -220,7 +220,7 @@ export default function DocumentSignPortal({
         {/* Signing state */}
         <div id="sign-section">
         {signed ? (
-          <SignedConfirmation signedAt={signedAt} signedBy={signedBy} sigImage={sigImage} />
+          <SignedConfirmation signedAt={signedAt} signedBy={signedBy} sigImage={sigImage} documentId={documentId} />
         ) : (
           <SignForm
             name={name}
@@ -254,10 +254,12 @@ function SignedConfirmation({
   signedAt,
   signedBy,
   sigImage,
+  documentId,
 }: {
   signedAt: string | null
   signedBy: string | null
   sigImage: string | null
+  documentId: string
 }) {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleString('en-CA', {
@@ -320,13 +322,27 @@ function SignedConfirmation({
           )}
         </div>
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-          <p style={{ margin: 0, fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               width: 18, height: 18, borderRadius: 4, background: '#0f172a', color: '#fff', fontSize: 10, flexShrink: 0,
-            }}>✓</span>
+            }}>&#10003;</span>
             Signed electronically — A copy has been saved to your file.
           </p>
+          <a
+            href={`/portal/documents/${documentId}/print`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block', width: '100%', boxSizing: 'border-box',
+              background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 8,
+              padding: '12px 0', textAlign: 'center',
+              fontSize: 13, fontWeight: 700, color: '#0f172a', textDecoration: 'none',
+              letterSpacing: '-0.1px',
+            }}
+          >
+            Download PDF Copy
+          </a>
         </div>
       </div>
     </div>

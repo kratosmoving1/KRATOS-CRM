@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   X, FileText, MoreHorizontal, Eye, Send,
-  Loader2, RefreshCw, CheckCircle2, Copy, Link,
+  Loader2, RefreshCw, CheckCircle2, Copy, Link, RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -62,11 +62,13 @@ function DocRowMenu({
   onPreview,
   onSend,
   onMarkSigned,
+  onResetSignature,
 }: {
   doc: DocumentRow
   onPreview: () => void
   onSend: () => void
   onMarkSigned: () => void
+  onResetSignature: () => void
 }) {
   const [open, setOpen] = useState(false)
   const isContract = doc.category === 'job_contract'
@@ -109,6 +111,15 @@ function DocRowMenu({
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50"
               >
                 <CheckCircle2 size={13} /> Mark as Signed
+              </button>
+            )}
+            {isSigned && (
+              <button
+                type="button"
+                onClick={() => { setOpen(false); onResetSignature() }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
+                <RotateCcw size={13} /> Reset Signature
               </button>
             )}
           </div>
@@ -238,6 +249,23 @@ export default function DocsSidePanel({
     }
   }
 
+  async function handleResetSignature(doc: DocumentRow) {
+    if (!window.confirm(`Clear the signature on "${doc.name}" and reset it to Sent? This cannot be undone.`)) return
+    try {
+      const res = await fetch(`/api/admin/documents/${doc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset_signature: true }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(j.error ?? 'Reset failed'); return }
+      toast.success('Signature cleared — document reset to Sent.')
+      await fetchDocs()
+    } catch {
+      toast.error('Network error')
+    }
+  }
+
   async function handleDelete(doc: DocumentRow) {
     try {
       const res = await fetch(`/api/admin/documents/${doc.id}`, { method: 'DELETE' })
@@ -351,6 +379,7 @@ export default function DocsSidePanel({
                         onPreview={() => onPreviewDoc?.(doc)}
                         onSend={() => handleSend(doc)}
                         onMarkSigned={() => handleMarkSigned(doc)}
+                        onResetSignature={() => handleResetSignature(doc)}
                       />
                     ))}
                   </div>
@@ -369,6 +398,7 @@ export default function DocsSidePanel({
                         onPreview={() => onPreviewDoc?.(doc)}
                         onSend={() => handleSend(doc)}
                         onMarkSigned={() => handleMarkSigned(doc)}
+                        onResetSignature={() => handleResetSignature(doc)}
                       />
                     ))}
                   </div>
@@ -406,11 +436,13 @@ function DocCard({
   onPreview,
   onSend,
   onMarkSigned,
+  onResetSignature,
 }: {
   doc: DocumentRow
   onPreview: () => void
   onSend: () => void
   onMarkSigned: () => void
+  onResetSignature: () => void
 }) {
   const isContract = doc.category === 'job_contract'
   const isSigned   = ['signed', 'completed'].includes(doc.status)
@@ -461,6 +493,7 @@ function DocCard({
           onPreview={onPreview}
           onSend={onSend}
           onMarkSigned={onMarkSigned}
+          onResetSignature={onResetSignature}
         />
       </div>
       {/* Contract-specific action row */}
