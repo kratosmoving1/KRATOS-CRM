@@ -29,6 +29,7 @@ interface Props {
 type TimeMode = 'labor' | 'startend'
 
 const SERVICE_LABELS: Record<string, string> = {
+  moving: 'Moving', moving_and_packing: 'Moving & Packing',
   local: 'Local Move', long_distance: 'Long Distance', commercial: 'Commercial',
   packing: 'Packing Only', storage: 'Storage', international: 'International',
 }

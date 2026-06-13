@@ -38,6 +38,7 @@ import { formatQuoteNumber } from '@/lib/opportunityDisplay'
 import { cn } from '@/lib/utils'
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {
+  moving: 'Moving', moving_and_packing: 'Moving & Packing',
   local: 'Local', long_distance: 'Long Distance', commercial: 'Commercial',
   packing: 'Packing', storage: 'Storage', international: 'International',
 }

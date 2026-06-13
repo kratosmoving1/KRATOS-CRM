@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { STATUS_TIMESTAMP_MAP } from '@/lib/constants'
+import { STATUS_TIMESTAMP_MAP, SERVICE_TYPES as SERVICE_TYPE_OPTIONS } from '@/lib/constants'
 import type { OppStatus } from '@/lib/constants'
 import { normalizeMoveSizeForDb, stripUnknownOpportunityColumns } from '@/lib/opportunityColumns'
 import { hasPermission, isAdminRole } from '@/lib/auth/permissions'
@@ -9,7 +9,12 @@ import { logAuditEvent } from '@/lib/audit/logAuditEvent'
 import { findOrCreateCustomer } from '@/lib/customers/matching'
 import type { Json } from '@/types/database'
 
-const SERVICE_TYPES = ['local', 'long_distance', 'commercial', 'packing', 'storage', 'international'] as const
+// Accept the service types the UI offers (lib/constants) plus legacy values
+// that already exist in the DB, so older records and the live dropdown both validate.
+const SERVICE_TYPES: readonly string[] = [
+  ...SERVICE_TYPE_OPTIONS.map(s => s.value),
+  'local', 'long_distance', 'commercial', 'international',
+]
 const OPP_STATUSES = ['opportunity', 'booked', 'completed', 'closed', 'cancelled'] as const
 
 function isString(value: unknown): value is string {
