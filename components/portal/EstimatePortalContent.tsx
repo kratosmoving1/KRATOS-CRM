@@ -30,6 +30,8 @@ export interface PortalPageData {
     status: string
     service_type: string
     service_date: string | null
+    arrival_window_start: string | null
+    arrival_window_end: string | null
     move_size: string | null
     deposit_amount: number | null
     origin_address_line1: string | null
@@ -96,6 +98,22 @@ function dateLabel(value: string | null | undefined) {
   return new Date(y, m - 1, d).toLocaleDateString('en-CA', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
+}
+
+function time12(t: string | null | undefined): string | null {
+  if (!t) return null
+  const [h, m] = t.split(':').map(Number)
+  if (Number.isNaN(h)) return null
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 === 0 ? 12 : h % 12
+  return `${hour12}:${String(m ?? 0).padStart(2, '0')} ${period}`
+}
+
+function arrivalWindowLabel(start: string | null | undefined, end: string | null | undefined): string {
+  const s = time12(start)
+  const e = time12(end)
+  if (s && e) return `${s} – ${e}`
+  return s ?? e ?? 'TBD'
 }
 
 function addr(parts: Array<string | null | undefined>) {
@@ -364,19 +382,22 @@ export default function EstimatePortalContent({
       {/* ── Dark hero ────────────────────────────────────────────────────────── */}
       <div className="bg-[#0a0a0a] text-white pb-10">
         <div className="mx-auto max-w-5xl px-6 pt-10 sm:pt-14">
+
+          {/* Logo on its own row */}
+          <Image
+            src={cfg?.logo_url ?? '/logo.png'}
+            alt={companyName}
+            width={88}
+            height={88}
+            className="object-contain mb-6"
+          />
+
+          {/* Title block (left) + price block (right), top-aligned */}
           <div className="flex items-start justify-between gap-8">
 
-            {/* Left: logo + quote info */}
+            {/* Left: quote info + date + arrival window */}
             <div className="flex-1 min-w-0">
-              <Image
-                src={cfg?.logo_url ?? '/logo.png'}
-                alt={companyName}
-                width={96}
-                height={96}
-                className="object-contain mb-4"
-              />
-
-              <div className="flex items-center gap-3 mb-1.5">
+              <div className="flex items-center gap-3 mb-2">
                 <span className="text-sm text-slate-400">
                   Estimate #{formatQuoteNumber(opp.opportunity_number)}
                 </span>
@@ -387,11 +408,20 @@ export default function EstimatePortalContent({
                 </span>
               </div>
 
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-1">
-                Your Kratos move
-                <span className="block text-kratos">is in motion.</span>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
+                Your Moving Estimate
               </h1>
 
+              <div className="space-y-0.5 text-sm">
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Starting on:</span>{' '}
+                  <span className="font-medium text-white">{opp.service_date ? dateLabel(opp.service_date) : 'TBD'}</span>
+                </p>
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Arrival window:</span>{' '}
+                  <span className="font-medium text-white">{arrivalWindowLabel(opp.arrival_window_start, opp.arrival_window_end)}</span>
+                </p>
+              </div>
             </div>
 
             {/* Right: hourly rate + info lines */}
@@ -409,7 +439,7 @@ export default function EstimatePortalContent({
             )}
           </div>
 
-          {/* Mobile: hourly rate below logo/title */}
+          {/* Mobile: hourly rate below title */}
           {hourlyRate > 0 && (
             <div className="mt-6 sm:hidden">
               <p className="text-3xl font-semibold text-white">
@@ -508,7 +538,7 @@ export default function EstimatePortalContent({
             {opp.service_date && (
               <FactChip icon={<Calendar size={11} />} label={dateLabel(opp.service_date)} />
             )}
-            <FactChip icon={<Clock size={11} />} label="Arrival: TBD" />
+            <FactChip icon={<Clock size={11} />} label={`Arrival: ${arrivalWindowLabel(opp.arrival_window_start, opp.arrival_window_end)}`} />
             {numCrew > 0 && (
               <FactChip icon={<Users size={11} />} label={`${numCrew} mover${numCrew !== 1 ? 's' : ''}`} />
             )}

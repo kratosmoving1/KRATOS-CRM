@@ -68,12 +68,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const sendEmailFlag: boolean = body.sendEmail !== false
   const newDate = tbd ? null : (serviceDate || null)
 
+  // Arrival window (movers' arrival time). Normalize "HH:MM" → "HH:MM:00" or null.
+  const normalizeTime = (v: unknown): string | null => {
+    if (typeof v !== 'string' || !v.trim()) return null
+    const m = v.trim().match(/^(\d{1,2}):(\d{2})/)
+    if (!m) return null
+    return `${m[1].padStart(2, '0')}:${m[2]}:00`
+  }
+  // If the date is cleared (TBD), also clear the arrival window
+  const arrivalStart = tbd ? null : normalizeTime(body.arrivalStart)
+  const arrivalEnd   = tbd ? null : normalizeTime(body.arrivalEnd)
+
   // Only send reschedule email if the date actually changed
   const dateChanged = newDate !== opp.service_date
 
   const { data: updated, error } = await admin
     .from('opportunities')
-    .update({ service_date: newDate })
+    .update({
+      service_date: newDate,
+      arrival_window_start: arrivalStart,
+      arrival_window_end: arrivalEnd,
+    })
     .eq('id', params.id)
     .select()
     .single()
@@ -174,5 +189,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
-  return NextResponse.json({ ok: true, service_date: newDate, opportunity: updated })
+  return NextResponse.json({
+    ok: true,
+    service_date: newDate,
+    arrival_window_start: arrivalStart,
+    arrival_window_end: arrivalEnd,
+    opportunity: updated,
+  })
 }

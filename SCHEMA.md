@@ -86,6 +86,8 @@ Core record for every move job. One customer can have many opportunities.
 | `service_type` | `text` | Free-text. UI offers `moving`, `packing`, `moving_and_packing`, `storage` (see `SERVICE_TYPES` in `lib/constants.ts`). Legacy rows also use `local`, `long_distance`, `commercial`, `international`. The create API (`POST /api/admin/opportunities`) validates against the UI set + legacy values. |
 | `move_size` | `text \| null` | e.g. `studio`, `1_bedroom`, `2_bedroom`, `3_bedroom`, `4_bedroom`, `5_bedroom_plus`, `office`, `storage` |
 | `service_date` | `date \| null` | Scheduled move date; null = TBD |
+| `arrival_window_start` | `time \| null` | Start of the movers' arrival window (e.g. `08:00`); null = TBD |
+| `arrival_window_end` | `time \| null` | End of the movers' arrival window (e.g. `10:00`); null = TBD |
 
 ### Financials
 

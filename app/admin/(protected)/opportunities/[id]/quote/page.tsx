@@ -138,6 +138,22 @@ function formatDateShort(d: string) {
 function formatDatetime(d: string) {
   return new Date(d).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
+// Formats a "HH:MM[:SS]" time string to "8:00 AM"
+function formatTime12(t: string | null | undefined): string | null {
+  if (!t) return null
+  const [h, m] = t.split(':').map(Number)
+  if (Number.isNaN(h)) return null
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 === 0 ? 12 : h % 12
+  return `${hour12}:${String(m ?? 0).padStart(2, '0')} ${period}`
+}
+// "8:00 AM – 10:00 AM", or just one side, or null
+function formatArrivalWindow(start: string | null | undefined, end: string | null | undefined): string | null {
+  const s = formatTime12(start)
+  const e = formatTime12(end)
+  if (s && e) return `${s} – ${e}`
+  return s ?? e ?? null
+}
 
 interface AuditEntry {
   id: string; action: string; diff: Record<string, unknown> | null; created_at: string
@@ -147,6 +163,7 @@ interface AuditEntry {
 interface OppDetail {
   id: string; opportunity_number: string; status: OppStatus
   service_type: string; service_date: string | null; move_size: string | null
+  arrival_window_start: string | null; arrival_window_end: string | null
   total_amount: number; estimated_cost: number; deposit_amount?: number | null
   notes: string | null; customer_notes: string | null; crew_notes: string | null; dispatcher_notes: string | null
   origin_address_line1: string | null; origin_address_line2: string | null
@@ -447,6 +464,8 @@ export default function OpportunityDetailPage() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [editingDate, setEditingDate] = useState('')
   const [editingTbd, setEditingTbd] = useState(false)
+  const [editingArrivalStart, setEditingArrivalStart] = useState('')
+  const [editingArrivalEnd, setEditingArrivalEnd] = useState('')
   const [sendRescheduleNotif, setSendRescheduleNotif] = useState(true)
   const [savingDate, setSavingDate] = useState(false)
 
@@ -654,6 +673,8 @@ export default function OpportunityDetailPage() {
     if (!opp) return
     setEditingDate(opp.service_date ?? '')
     setEditingTbd(!opp.service_date)
+    setEditingArrivalStart(opp.arrival_window_start ? opp.arrival_window_start.slice(0, 5) : '')
+    setEditingArrivalEnd(opp.arrival_window_end ? opp.arrival_window_end.slice(0, 5) : '')
     setSendRescheduleNotif(true)
     setShowRescheduleModal(true)
   }
@@ -668,12 +689,19 @@ export default function OpportunityDetailPage() {
         body: JSON.stringify({
           serviceDate: editingTbd ? null : editingDate,
           tbd: editingTbd,
+          arrivalStart: editingArrivalStart || null,
+          arrivalEnd: editingArrivalEnd || null,
           sendEmail: sendRescheduleNotif,
         }),
       })
       const json = await res.json()
       if (!res.ok) { toast.error(json.error ?? 'Failed to save date'); return }
-      setOpp(p => p ? { ...p, service_date: json.service_date } : p)
+      setOpp(p => p ? {
+        ...p,
+        service_date: json.service_date,
+        arrival_window_start: json.arrival_window_start ?? null,
+        arrival_window_end: json.arrival_window_end ?? null,
+      } : p)
       setShowRescheduleModal(false)
       toast.success('Move date updated.')
     } catch {
@@ -2353,7 +2381,9 @@ export default function OpportunityDetailPage() {
                           className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-700 transition-colors"
                         >
                           <Calendar size={12} />
-                          {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'} @ TBD
+                          {opp.service_date ? formatDateShort(opp.service_date) : 'Set date'}
+                          {' @ '}
+                          {formatArrivalWindow(opp.arrival_window_start, opp.arrival_window_end) ?? 'TBD'}
                         </button>
                       </div>
                       <span className="text-xs font-semibold text-slate-700">
@@ -2661,6 +2691,7 @@ export default function OpportunityDetailPage() {
                   <InfoRow label="Source" value={opp.lead_source?.name ?? '—'} />
                   <InfoRow label="Service" value={SERVICE_TYPE_LABELS[opp.service_type] ?? opp.service_type} />
                   <InfoRow label="Move date" value={opp.service_date ? formatDateShort(opp.service_date) : 'TBD'} editable onClick={openDateEdit} />
+                  <InfoRow label="Arrival window" value={formatArrivalWindow(opp.arrival_window_start, opp.arrival_window_end) ?? 'TBD'} editable onClick={openDateEdit} />
                   <InfoRow label="Move size" value={opp.move_size ? (MOVE_SIZE_LABELS[opp.move_size] ?? opp.move_size.replace(/_/g,' ')) : '—'} />
                 </div>
 
@@ -3522,7 +3553,42 @@ export default function OpportunityDetailPage() {
                 />
                 <span className="text-sm text-slate-700">Set to TBD (no confirmed date)</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+
+              {/* Arrival window */}
+              <div className="border-t border-slate-100 pt-3">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  Arrival Window <span className="font-normal normal-case tracking-normal text-slate-400">— when movers arrive</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    step={900}
+                    value={editingArrivalStart}
+                    disabled={savingDate}
+                    onChange={e => setEditingArrivalStart(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-kratos focus:outline-none focus:ring-1 focus:ring-kratos disabled:bg-slate-50"
+                  />
+                  <span className="text-sm text-slate-400">to</span>
+                  <input
+                    type="time"
+                    step={900}
+                    value={editingArrivalEnd}
+                    disabled={savingDate}
+                    onChange={e => setEditingArrivalEnd(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-kratos focus:outline-none focus:ring-1 focus:ring-kratos disabled:bg-slate-50"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setEditingArrivalStart(''); setEditingArrivalEnd('') }}
+                  disabled={savingDate || (!editingArrivalStart && !editingArrivalEnd)}
+                  className="mt-1.5 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-40"
+                >
+                  Clear window (set to TBD)
+                </button>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer border-t border-slate-100 pt-3">
                 <input
                   type="checkbox"
                   checked={sendRescheduleNotif}

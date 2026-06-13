@@ -331,7 +331,7 @@ export default function PortalSettingsPage() {
             value={settings.header_notes ?? ''}
             onChange={v => update('header_notes', v || null)}
             rows={5}
-            placeholder={"{{customer_name}} — your Kratos move portal is ready. Review your estimate below. When you're ready to lock it in, click Accept Estimate. We'll handle the rest.\n\n——————————\nΚράτος · Done As Promised."}
+            placeholder={"{{customer_name}} — your Kratos move is in motion. Review your estimate below. When you're ready to lock it in, click Accept Estimate. We'll handle the rest.\n\n——————————\nΚράτος · Done As Promised."}
           />
         </Field>
         <Field label="Footer message (shown below estimate breakdown)">

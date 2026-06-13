@@ -146,6 +146,8 @@ export default async function EstimatePortalPage({ params, searchParams }: PageP
       status: opp.status,
       service_type: opp.service_type,
       service_date: opp.service_date ?? null,
+      arrival_window_start: opp.arrival_window_start ?? null,
+      arrival_window_end: opp.arrival_window_end ?? null,
       move_size: opp.move_size ?? null,
       deposit_amount: opp.deposit_amount ?? null,
       origin_address_line1: opp.origin_address_line1 ?? null,
