@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, Send, Loader2 } from 'lucide-react'
+import { X, Send, Loader2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { DocumentRow } from './DocsSidePanel'
 
@@ -20,7 +20,13 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
   useEffect(() => {
     if (!isOpen || !doc) { setLivDoc(null); return }
     setLoading(true)
-    fetch(`/api/admin/documents/${doc.id}?fresh=true`)
+    // For already-sent/signed docs, show the frozen snapshot (which carries the
+    // customer's stamped signature). Only force a fresh live render for drafts.
+    const frozen = ['sent', 'viewed', 'signed', 'completed'].includes(doc.status)
+    const url = frozen
+      ? `/api/admin/documents/${doc.id}`
+      : `/api/admin/documents/${doc.id}?fresh=true`
+    fetch(url)
       .then(r => r.json())
       .then(data => setLivDoc(data))
       .catch(() => setLivDoc(doc))
@@ -31,6 +37,12 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
 
   const displayed = livDoc ?? doc
   const alreadySent = ['sent', 'viewed', 'signed', 'completed'].includes(displayed.status)
+  const isSigned = ['signed', 'completed'].includes(displayed.status)
+  const sigData = displayed.signature_data ?? null
+  const signedAt = displayed.signed_at ?? null
+  const fmtSignedAt = signedAt
+    ? new Date(signedAt).toLocaleString('en-CA', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : null
 
   async function handleSend() {
     if (!doc) return
@@ -70,6 +82,40 @@ export default function DocumentPreviewModal({ doc, isOpen, onClose, onRefresh }
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 bg-slate-50">
+          {/* Signature record banner — shown once the customer has signed */}
+          {isSigned && sigData?.signer_name && (
+            <div className="mb-4 overflow-hidden rounded-lg border border-emerald-200 bg-white">
+              <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50 px-4 py-2.5">
+                <CheckCircle2 size={15} className="text-emerald-600" />
+                <p className="text-sm font-semibold text-emerald-800">Signed by customer</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-4 py-3">
+                {sigData.signature_image && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Signature</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={sigData.signature_image} alt="Signature" className="h-12 w-auto rounded border border-slate-200 bg-slate-50 px-2" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Signed by</p>
+                  <p className="text-sm font-semibold text-slate-900">{sigData.signer_name}</p>
+                </div>
+                {fmtSignedAt && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">Date &amp; time</p>
+                    <p className="text-sm text-slate-700">{fmtSignedAt}</p>
+                  </div>
+                )}
+                {sigData.ip_address && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-0.5">IP address</p>
+                    <p className="text-sm text-slate-700">{sigData.ip_address}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="animate-spin text-slate-400" size={22} />

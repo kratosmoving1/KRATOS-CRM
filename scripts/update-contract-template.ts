@@ -139,14 +139,8 @@ const CONTRACT_HTML = `
       <td colspan="2" style="border:1px solid #ccc;padding:12px;font-size:9pt;line-height:1.6;color:#333;">
         Shipper hereby authorizes the moving services listed below and accepts the terms and conditions of this contract and any addendum(s).
         <br><br>
-        <div style="border-bottom:1px solid #222;padding-bottom:2px;min-height:32px;">&nbsp;</div>
-        <div style="font-size:8pt;color:#888;margin-top:3px;">Shipper or Carrier*</div>
-        <div style="text-align:center;margin-top:14px;">
-          <a href="#sign-section" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:11px 28px;border-radius:7px;font-size:10pt;font-weight:bold;letter-spacing:0.2px;">
-            Sign This Document &rarr;
-          </a>
-          <div style="font-size:8pt;color:#94a3b8;margin-top:5px;">Scroll down to complete your electronic signature</div>
-        </div>
+        {{signature_before_loading}}
+        {{sign_button}}
       </td>
     </tr>
   </table>
@@ -196,8 +190,7 @@ const CONTRACT_HTML = `
         The billing department is open from 9:00 AM - 7:30 PM on weekdays and from 9:00 AM - 6:00 PM on weekends.
         If the billing department is closed, we reserve the right to receive payment in advance.
         <br><br>
-        <div style="border-bottom:1px solid #222;padding-bottom:2px;min-height:32px;">&nbsp;</div>
-        <div style="font-size:8pt;color:#888;margin-top:3px;">Shipper or Carrier*</div>
+        {{signature_before_loading}}
       </td>
     </tr>
   </table>
@@ -211,8 +204,7 @@ const CONTRACT_HTML = `
     </tr>
     <tr>
       <td colspan="2" style="border:1px solid #ccc;padding:12px;font-size:9pt;line-height:1.6;color:#333;">
-        <div style="border-bottom:1px solid #222;padding-bottom:2px;min-height:32px;">&nbsp;</div>
-        <div style="font-size:8pt;color:#888;margin-top:3px;">Shipper or Carrier*</div>
+        {{signature_after_unloading}}
       </td>
     </tr>
   </table>
@@ -303,8 +295,7 @@ const CONTRACT_HTML = `
     </tr>
     <tr>
       <td colspan="2" style="border:1px solid #ccc;padding:20px 12px 12px;font-size:9pt;line-height:1.6;color:#333;">
-        <div style="border-bottom:1px solid #222;padding-bottom:2px;min-height:32px;">&nbsp;</div>
-        <div style="font-size:8pt;color:#888;margin-top:3px;">Shipper or Carrier*</div>
+        {{signature_before_loading}}
       </td>
     </tr>
   </table>

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buildRenderContext } from '@/lib/documents/build-context'
+import { renderDocument, buildDocumentNumber } from '@/lib/documents/render'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createAdminClient()
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('id, status')
+    .select('id, status, opportunity_id, document_number, category, rendered_html, template:document_templates(content_html)')
     .eq('id', params.id)
     .eq('is_deleted', false)
     .maybeSingle()
@@ -37,11 +39,31 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const signedAt = new Date().toISOString()
 
+  // Re-render the contract with the signature stamped into the "before loading"
+  // signature slots, so the signed snapshot (and admin/PDF view) shows it inline.
+  let signedHtml = doc.rendered_html as string | null
+  const templateHtml = (doc.template as { content_html?: string } | null)?.content_html
+  if (templateHtml && doc.opportunity_id) {
+    try {
+      const ctx = await buildRenderContext(doc.opportunity_id)
+      const docNumber = doc.document_number ?? buildDocumentNumber(ctx.opportunity_number, doc.category)
+      signedHtml = renderDocument(templateHtml, ctx, docNumber, {
+        signerName,
+        signatureImage,
+        signedAt,
+      })
+    } catch (e) {
+      console.error('[documents/sign render]', e instanceof Error ? e.message : e)
+      // Fall back to the existing frozen snapshot — don't block signing
+    }
+  }
+
   const { error } = await supabase
     .from('documents')
     .update({
       status: 'signed',
       signed_at: signedAt,
+      ...(signedHtml ? { rendered_html: signedHtml } : {}),
       signature_data: {
         signer_name:      signerName,
         signature_image:  signatureImage,

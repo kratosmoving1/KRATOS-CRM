@@ -45,6 +45,43 @@ export interface RenderContext {
   charges: OpportunityCharge[]
 }
 
+// ── Signature support ─────────────────────────────────────────────────────────
+
+export interface SignatureInfo {
+  signerName: string
+  signatureImage: string  // data:image/png;base64 URL
+  signedAt: string        // ISO timestamp
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// An unsigned signature line (blank line + caption)
+function emptySignatureLine(caption: string): string {
+  return `<div style="margin-top:6px;">`
+    + `<div style="border-bottom:1px solid #222;min-height:34px;">&nbsp;</div>`
+    + `<div style="font-size:8pt;color:#888;margin-top:3px;">${caption}</div>`
+    + `</div>`
+}
+
+// A stamped signature (drawn image + name + date)
+function signedSignatureBlock(sig: SignatureInfo): string {
+  const date = new Date(sig.signedAt).toLocaleDateString('en-CA', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  })
+  return `<div style="margin-top:6px;">`
+    + `<img src="${sig.signatureImage}" alt="Signature" style="height:48px;object-fit:contain;display:block;margin-bottom:1px;" />`
+    + `<div style="border-bottom:1px solid #222;"></div>`
+    + `<div style="font-size:8pt;color:#555;margin-top:3px;">`
+    + `${escapeHtml(sig.signerName)} &mdash; signed electronically on ${date}`
+    + `</div></div>`
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(n: number): string {
@@ -123,7 +160,7 @@ function buildMovingLaborInfo(charges: OpportunityCharge[]) {
 
 // ── Build the token → value map ───────────────────────────────────────────────
 
-function buildTokenMap(ctx: RenderContext, docNumber: string): Record<string, string> {
+function buildTokenMap(ctx: RenderContext, docNumber: string, signature?: SignatureInfo): Record<string, string> {
   const customer = ctx.customer
   const agent = ctx.agent
   const charges = ctx.charges
@@ -197,7 +234,23 @@ function buildTokenMap(ctx: RenderContext, docNumber: string): Record<string, st
     // Document
     generated_date: new Date().toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' }),
     document_number: docNumber,
-    signature_block: '<div style="margin-top:32px;border-top:1px solid #334155;padding-top:8px;color:#64748b;font-size:0.85em">Customer Signature _________________________ &nbsp; Date _____________</div>',
+    // Signature slots — stamped with the customer's drawn signature once signed.
+    // "Before loading" slots capture the customer's pre-move authorization.
+    // The "after unloading" slot is signed on-site at delivery, so it stays blank here.
+    signature_before_loading: signature
+      ? signedSignatureBlock(signature)
+      : emptySignatureLine('Shipper or Carrier* &mdash; signature required'),
+    signature_after_unloading: emptySignatureLine('Shipper or Carrier* &mdash; to be signed on delivery'),
+    signature_block: signature
+      ? signedSignatureBlock(signature)
+      : emptySignatureLine('Customer Signature &mdash; signature required'),
+    // Jump-to-sign button: only shown while the document is unsigned.
+    sign_button: signature
+      ? ''
+      : `<div style="text-align:center;margin-top:14px;">`
+        + `<a href="#sign-section" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:11px 28px;border-radius:7px;font-size:10pt;font-weight:bold;letter-spacing:0.2px;">Sign This Document &rarr;</a>`
+        + `<div style="font-size:8pt;color:#94a3b8;margin-top:5px;">Scroll down to complete your electronic signature</div>`
+        + `</div>`,
   }
 }
 
@@ -207,8 +260,9 @@ export function renderDocument(
   contentHtml: string,
   ctx: RenderContext,
   docNumber: string,
+  signature?: SignatureInfo,
 ): string {
-  const tokens = buildTokenMap(ctx, docNumber)
+  const tokens = buildTokenMap(ctx, docNumber, signature)
   return contentHtml.replace(/\{\{([a-z_]+)\}\}/g, (_, token) => {
     return tokens[token] ?? `{{${token}}}`
   })

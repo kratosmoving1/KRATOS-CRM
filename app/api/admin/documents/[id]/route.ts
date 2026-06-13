@@ -54,7 +54,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const ctx = await buildRenderContext(doc.opportunity_id)
     const docNumber = doc.document_number ?? buildDocumentNumber(ctx.opportunity_number, doc.category)
-    const freshHtml = renderDocument(template.content_html ?? '', ctx, docNumber)
+    const sigData = doc.signature_data as Record<string, string> | null
+    const signature = (sigData?.signer_name && sigData?.signature_image && doc.signed_at)
+      ? { signerName: sigData.signer_name, signatureImage: sigData.signature_image, signedAt: doc.signed_at }
+      : undefined
+    const freshHtml = renderDocument(template.content_html ?? '', ctx, docNumber, signature)
     return NextResponse.json({ ...doc, rendered_html: freshHtml })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)

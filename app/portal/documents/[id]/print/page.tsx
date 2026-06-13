@@ -16,6 +16,8 @@ export default async function PrintDocumentPage({ params }: { params: { id: stri
 
   if (!doc) notFound()
 
+  const sigData = doc.signature_data as Record<string, string> | null
+
   let renderedHtml = doc.rendered_html ?? ''
 
   const templateHtml = (doc.template as { content_html?: string } | null)?.content_html
@@ -23,13 +25,14 @@ export default async function PrintDocumentPage({ params }: { params: { id: stri
     try {
       const ctx = await buildRenderContext(doc.opportunity_id)
       const docNumber = doc.document_number ?? buildDocumentNumber(ctx.opportunity_number, doc.category)
-      renderedHtml = renderDocument(templateHtml, ctx, docNumber)
+      const signature = (sigData?.signer_name && sigData?.signature_image && doc.signed_at)
+        ? { signerName: sigData.signer_name, signatureImage: sigData.signature_image, signedAt: doc.signed_at }
+        : undefined
+      renderedHtml = renderDocument(templateHtml, ctx, docNumber, signature)
     } catch {
       // fall back to stored snapshot
     }
   }
-
-  const sigData = doc.signature_data as Record<string, string> | null
 
   return (
     <PrintDocument

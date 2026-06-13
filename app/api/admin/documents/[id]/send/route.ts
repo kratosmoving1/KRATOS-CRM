@@ -50,6 +50,19 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       })
       .eq('id', params.id)
 
+    // Log to the sales timeline — anything sent to the customer should appear there
+    if (doc.opportunity_id) {
+      await supabase.from('communications').insert({
+        opportunity_id: doc.opportunity_id,
+        type: 'email',
+        direction: 'outbound',
+        subject: `Document sent: ${doc.name}`,
+        body: `Sent "${doc.name}" to ${customerEmail} for review and signature.`,
+        email_to: customerEmail,
+        created_by: user.id,
+      })
+    }
+
     // Try to send email — if not configured, return the portal link so admin can share manually
     if (!isEmailConfigured()) {
       return NextResponse.json({

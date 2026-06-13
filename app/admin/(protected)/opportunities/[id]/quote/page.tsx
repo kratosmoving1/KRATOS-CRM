@@ -817,6 +817,15 @@ export default function OpportunityDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, fetchCharges, fetchTripData, fetchInlineDocs])
 
+  // Poll inline document status while the estimate tab is open, so a customer's
+  // signature (signed elsewhere) shows up here without a manual refresh.
+  useEffect(() => {
+    if (tab !== 'estimate') return
+    const iv = setInterval(() => { fetchInlineDocs() }, 15_000)
+    return () => clearInterval(iv)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, fetchInlineDocs])
+
   async function handleSendDoc(docId: string) {
     setSendingDocId(docId)
     setOpenDocMenu(null)

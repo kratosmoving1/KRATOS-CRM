@@ -460,3 +460,19 @@ This means agents can change addresses, charges, etc. and the next preview will 
 **Anti-patterns confirmed NOT in scope for B1.5:** time-of-day on assignments, multi-truck per crew, seeded crew rows, filtering workforce dropdowns by role.
 
 ## (Append new decisions below as they happen)
+
+## 2026-06-12 — Multi-slot e-signature stamping for contracts
+
+**Problem:** Contract has 4 signature blocks (3 "Must Sign Before Loading", 1 "Must Sign After Unloading"), but the portal captured a single signature that wasn't placed into any block, and the admin couldn't see the customer's signature after signing.
+
+**Decision — token-based signature slots, stamped at sign time by re-rendering from the template:**
+- Template uses tokens `{{signature_before_loading}}` (×3), `{{signature_after_unloading}}` (×1), and `{{sign_button}}`.
+- `renderDocument()` takes an optional `SignatureInfo` 4th arg. When absent → renders blank signature lines + the jump-to-sign button. When present → stamps the drawn signature image + name + date into every *before loading* slot; the *after unloading* slot stays blank (signed on-site at delivery); the sign button is hidden.
+- On signing, the sign route (`/api/portal/documents/[id]/sign`) re-renders the contract from the current template WITH the signature and overwrites `rendered_html`. So the signed snapshot, the customer's PDF (`/portal/documents/[id]/print`), and the admin preview all show the signature inline.
+- `documents.signature_data` (jsonb) still holds the canonical record (name, image, IP, UA, timestamp). The admin `DocumentPreviewModal` also renders a **signature record banner** from `signature_data` so even legacy docs signed before this change show the signature to staff.
+
+**Why re-render from template instead of string-patching the frozen html:** one source of truth (the template), no fragile HTML regex surgery, and the merge data is stable between send and sign in practice.
+
+**Sent documents now log to the sales timeline:** `/api/admin/documents/[id]/send` inserts a `communications` row (`type: 'email'`, `direction: 'outbound'`, `email_to`, `created_by`) so anything sent to the customer appears on the Sales tab.
+
+**Status sync:** `DocsSidePanel` already polls every 15s while open; added the same 15s poll for the estimate-tab document count so a customer's signature surfaces without a manual refresh.

@@ -22,6 +22,8 @@ export interface DocumentRow {
   sent_to: string | null
   document_number: string | null
   created_at: string
+  signed_at?: string | null
+  signature_data?: Record<string, string> | null
 }
 
 // ── Status pill ───────────────────────────────────────────────────────────────
