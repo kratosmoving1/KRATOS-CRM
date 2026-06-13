@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, MapPin, Clock, Phone, Truck, Users, Loader2, Navigation } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Phone, Truck, Users, Loader2, Navigation, FileText, PenLine, CheckCircle2 } from 'lucide-react'
+
+interface JobDocument {
+  id: string
+  name: string
+  category: string
+  status: string
+  signed_at: string | null
+  sent_to: string | null
+  signed_by: string | null
+}
 
 interface CrewPerson { id: string; name: string; profile_picture_url: string | null }
 interface Assignment {
@@ -39,9 +49,11 @@ function buildMapsUrl(address: string) {
 export default function CrewJobDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const [assignment, setAssignment] = useState<Assignment | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [assignment, setAssignment]   = useState<Assignment | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+  const [documents, setDocuments]     = useState<JobDocument[]>([])
+  const [docsLoading, setDocsLoading] = useState(false)
 
   useEffect(() => {
     fetch('/api/crew/jobs')
@@ -51,6 +63,13 @@ export default function CrewJobDetailPage() {
         const found = (d.assignments ?? []).find((a: Assignment) => a.id === params.id)
         if (!found) { setError('Job not found'); return }
         setAssignment(found)
+        // Load documents after assignment is found
+        setDocsLoading(true)
+        fetch(`/api/crew/jobs/${params.id}/documents`)
+          .then(r => r.json())
+          .then(dd => { setDocuments(dd.documents ?? []) })
+          .catch(() => {})
+          .finally(() => setDocsLoading(false))
       })
       .catch(() => setError('Failed to load job'))
       .finally(() => setLoading(false))
@@ -219,6 +238,68 @@ export default function CrewJobDetailPage() {
                 {assignment.notes && <p className="text-sm text-slate-300 mt-1">{assignment.notes}</p>}
               </div>
             )}
+
+            {/* Documents / Contract */}
+            <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Documents</p>
+              {docsLoading ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Loader2 size={12} className="animate-spin" /> Loading…
+                </div>
+              ) : documents.length === 0 ? (
+                <p className="text-xs text-slate-600">No documents generated for this job.</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map(doc => {
+                    const isSigned  = ['signed', 'completed'].includes(doc.status)
+                    const isContract = doc.category === 'job_contract'
+                    const needsSig  = isContract && !isSigned && ['sent', 'viewed', 'generated'].includes(doc.status)
+                    return (
+                      <div key={doc.id} className="rounded-xl bg-slate-800 px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <FileText size={14} className={isSigned ? 'text-green-400 mt-0.5 shrink-0' : 'text-slate-500 mt-0.5 shrink-0'} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-white truncate">{doc.name}</p>
+                              {isSigned && doc.signed_by && (
+                                <p className="text-[11px] text-green-400 flex items-center gap-1 mt-0.5">
+                                  <CheckCircle2 size={10} /> Signed by {doc.signed_by}
+                                </p>
+                              )}
+                              {isSigned && doc.signed_at && !doc.signed_by && (
+                                <p className="text-[11px] text-green-400 flex items-center gap-1 mt-0.5">
+                                  <CheckCircle2 size={10} /> Signed
+                                </p>
+                              )}
+                              {!isSigned && doc.status === 'sent' && doc.sent_to && (
+                                <p className="text-[11px] text-amber-400 mt-0.5">Sent · awaiting signature</p>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                            isSigned ? 'bg-green-900/50 text-green-400'
+                            : doc.status === 'sent' || doc.status === 'viewed' ? 'bg-amber-900/50 text-amber-400'
+                            : 'bg-slate-700 text-slate-400'
+                          }`}>
+                            {isSigned ? 'Signed' : doc.status === 'viewed' ? 'Viewed' : doc.status === 'sent' ? 'Sent' : doc.status}
+                          </span>
+                        </div>
+                        {needsSig && (
+                          <a
+                            href={`/portal/documents/${doc.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#ffad33] px-3 py-2 text-xs font-bold text-slate-950"
+                          >
+                            <PenLine size={12} /> Customer Sign Now
+                          </a>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Crew count badge */}
             <div className="flex items-center gap-2 text-xs text-slate-600 pb-2">

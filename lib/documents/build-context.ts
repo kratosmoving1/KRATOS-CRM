@@ -19,7 +19,6 @@ export async function buildRenderContext(opportunityId: string): Promise<RenderC
       service_type,
       service_date,
       move_size,
-      deposit_amount,
       origin_address_line1,
       origin_address_line2,
       origin_city,
@@ -63,7 +62,7 @@ export async function buildRenderContext(opportunityId: string): Promise<RenderC
     service_date: opp.service_date,
     move_size: opp.move_size,
     service_type: opp.service_type,
-    deposit_amount: opp.deposit_amount ?? null,
+    deposit_amount: null,
     customer: customer
       ? { full_name: customer.full_name, email: customer.email ?? null, phone: customer.phone ?? null }
       : null,

@@ -12,7 +12,7 @@ function PortalError({ title }: { title: string }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#0a0a0a',
+      background: '#0f172a',
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     }}>
       <div style={{ textAlign: 'center', color: '#fff', padding: '0 24px' }}>
@@ -42,7 +42,7 @@ export default async function DocumentPortalPage({ params }: { params: { id: str
 
   if (!doc) notFound()
 
-  // Mark as viewed on first open (sent → viewed); use eq guard to avoid race conditions
+  // Mark as viewed on first open (eq guard prevents race conditions)
   if (doc.status === 'sent') {
     await supabase
       .from('documents')
@@ -52,6 +52,7 @@ export default async function DocumentPortalPage({ params }: { params: { id: str
   }
 
   const isSigned = ['signed', 'completed'].includes(doc.status)
+  const sigData  = doc.signature_data as Record<string, string> | null
 
   return (
     <DocumentSignPortal
@@ -60,6 +61,8 @@ export default async function DocumentPortalPage({ params }: { params: { id: str
       renderedHtml={doc.rendered_html ?? ''}
       isSigned={isSigned}
       signedAt={isSigned ? (doc.signed_at ?? null) : null}
+      signedBy={isSigned ? (sigData?.signer_name ?? null) : null}
+      signatureImage={isSigned ? (sigData?.signature_image ?? null) : null}
     />
   )
 }

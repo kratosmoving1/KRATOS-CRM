@@ -5,9 +5,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const supabase = createAdminClient()
 
   const body = await req.json().catch(() => ({}))
-  const signerName = typeof body.signer_name === 'string' ? body.signer_name.trim() : ''
+  const signerName     = typeof body.signer_name     === 'string' ? body.signer_name.trim()     : ''
+  const signatureImage = typeof body.signature_image === 'string' ? body.signature_image.trim() : ''
+
   if (!signerName) {
-    return NextResponse.json({ error: 'Please type your full name to sign.' }, { status: 400 })
+    return NextResponse.json({ error: 'Please enter your full legal name.' }, { status: 400 })
+  }
+  if (!signatureImage || !signatureImage.startsWith('data:image/')) {
+    return NextResponse.json({ error: 'Signature drawing is required.' }, { status: 400 })
   }
 
   const { data: doc } = await supabase
@@ -22,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   if (['signed', 'completed'].includes(doc.status)) {
-    return NextResponse.json({ error: 'Document already signed.' }, { status: 409 })
+    return NextResponse.json({ error: 'This document has already been signed.' }, { status: 409 })
   }
 
   const ip =
@@ -38,16 +43,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       status: 'signed',
       signed_at: signedAt,
       signature_data: {
-        signer_name: signerName,
-        ip_address: ip,
-        user_agent: req.headers.get('user-agent') ?? '',
-        signed_at: signedAt,
+        signer_name:      signerName,
+        signature_image:  signatureImage,
+        signature_method: 'drawn',
+        ip_address:       ip,
+        user_agent:       req.headers.get('user-agent') ?? '',
+        signed_at:        signedAt,
       },
     })
     .eq('id', params.id)
 
   if (error) {
-    return NextResponse.json({ error: 'Failed to save signature.' }, { status: 500 })
+    console.error('[documents/sign]', error.message)
+    return NextResponse.json({ error: 'Failed to save signature. Please try again.' }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true, signed_at: signedAt })
