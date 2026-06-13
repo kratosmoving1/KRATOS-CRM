@@ -112,8 +112,9 @@ function buildSignatureRequestEmail({
     <tr><td align="center">
       <table width="100%" style="max-width:580px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.12)">
         <tr>
-          <td style="background:#111111;padding:22px 32px">
-            <span style="color:#ffad33;font-size:19px;font-weight:700;letter-spacing:-0.3px">KRATOS MOVING</span>
+          <td style="background:#111111;padding:18px 32px;text-align:center">
+            <img src="${APP_URL}/logo.png" alt="Kratos Moving" width="48" height="48" style="display:inline-block;vertical-align:middle;margin-right:10px;object-fit:contain">
+            <span style="color:#ffad33;font-size:18px;font-weight:700;letter-spacing:-0.3px;vertical-align:middle">KRATOS MOVING</span>
           </td>
         </tr>
         <tr>

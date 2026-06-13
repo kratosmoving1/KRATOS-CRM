@@ -137,7 +137,7 @@ const CONTRACT_HTML = `
   <!-- ── Shipper Authorization ── -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
     <tr>
-      <th colspan="2" style="background:#ffad33;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
+      <th colspan="2" style="background:#111111;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
         Shipper Authorization &mdash; Must Sign Before Loading
       </th>
     </tr>
@@ -186,7 +186,7 @@ const CONTRACT_HTML = `
   <!-- ── Payment Terms ── -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
     <tr>
-      <th colspan="2" style="background:#ffad33;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
+      <th colspan="2" style="background:#111111;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
         Payment Terms &mdash; Must Sign Before Loading
       </th>
     </tr>
@@ -205,7 +205,7 @@ const CONTRACT_HTML = `
   <!-- ── Shipper Accepts Delivery ── -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
     <tr>
-      <th colspan="2" style="background:#ffad33;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
+      <th colspan="2" style="background:#111111;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
         Shipper Accepts Delivery of Shipment &mdash; Must Sign After Unloading
       </th>
     </tr>
@@ -256,10 +256,10 @@ const CONTRACT_HTML = `
     </tr>
   </table>
 
-  <h2 style="color:#ffad33;font-size:12pt;margin:8px 0 4px 0;">Inventory Declared</h2>
-  <div style="border-top:2px solid #ffad33;margin-bottom:16px;"></div>
+  <h2 style="color:#111111;font-size:12pt;margin:8px 0 4px 0;">Inventory Declared</h2>
+  <div style="border-top:2px solid #e2e8f0;margin-bottom:16px;"></div>
 
-  <h2 style="color:#ffad33;font-size:12pt;text-align:center;margin:0 0 14px 0;">Terms &amp; Conditions</h2>
+  <h2 style="color:#111111;font-size:12pt;text-align:center;margin:0 0 14px 0;">Terms &amp; Conditions</h2>
 
   <h3 style="font-size:9.5pt;margin:0 0 6px 0;">Customer Responsibilities:</h3>
   <ol style="margin:0 0 12px 0;padding-left:20px;font-size:9pt;line-height:1.6;list-style-type:upper-roman;">
@@ -302,7 +302,7 @@ const CONTRACT_HTML = `
   <!-- ── Shipper Acknowledgement ── -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
     <tr>
-      <th colspan="2" style="background:#ffad33;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
+      <th colspan="2" style="background:#111111;color:#fff;padding:7px 10px;font-size:9pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;text-align:left;">
         Shipper Acknowledgement (Must Sign Before Loading)
       </th>
     </tr>

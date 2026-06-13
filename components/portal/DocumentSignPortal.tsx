@@ -156,7 +156,28 @@ export default function DocumentSignPortal({
         <span style={{ color: '#f8fafc', fontWeight: 700, fontSize: 15, letterSpacing: '-0.2px' }}>
           Kratos Moving
         </span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748b' }}>Secure Document</span>
+        {!signed && (
+          <a
+            href="#sign-section"
+            style={{
+              marginLeft: 'auto',
+              background: '#ffad33',
+              color: '#0f172a',
+              fontWeight: 700,
+              fontSize: 12,
+              padding: '7px 14px',
+              borderRadius: 7,
+              textDecoration: 'none',
+              letterSpacing: '-0.1px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Jump to Sign
+          </a>
+        )}
+        {signed && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748b' }}>Secure Document</span>
+        )}
       </header>
 
       {/* Document title strip */}
@@ -197,6 +218,7 @@ export default function DocumentSignPortal({
         </div>
 
         {/* Signing state */}
+        <div id="sign-section">
         {signed ? (
           <SignedConfirmation signedAt={signedAt} signedBy={signedBy} sigImage={sigImage} />
         ) : (
@@ -213,6 +235,7 @@ export default function DocumentSignPortal({
             onSign={handleSign}
           />
         )}
+        </div>
 
         {/* Footer */}
         <p style={{ margin: '28px 0 0', textAlign: 'center', fontSize: 11, color: '#94a3b8' }}>
