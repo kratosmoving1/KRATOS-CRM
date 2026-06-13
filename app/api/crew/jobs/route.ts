@@ -117,5 +117,24 @@ export async function GET(req: NextRequest) {
     return (crew.helpers ?? []).some(h => h.person?.id === personId)
   })
 
-  return NextResponse.json({ person, assignments: myAssignments })
+  // Attach this person's accept/decline status for each assignment
+  const assignmentIds = myAssignments.map(a => a.id as string)
+  const acceptanceByAssignment: Record<string, { status: string; responded_at: string | null }> = {}
+  if (assignmentIds.length > 0) {
+    const { data: acc } = await admin
+      .from('dispatch_crew_acceptances')
+      .select('assignment_id, status, responded_at')
+      .eq('person_id', personId)
+      .in('assignment_id', assignmentIds)
+    for (const r of acc ?? []) {
+      acceptanceByAssignment[r.assignment_id as string] = { status: r.status as string, responded_at: r.responded_at as string | null }
+    }
+  }
+
+  const withAcceptance = myAssignments.map(a => ({
+    ...a,
+    my_acceptance: acceptanceByAssignment[a.id as string] ?? null,
+  }))
+
+  return NextResponse.json({ person, assignments: withAcceptance })
 }

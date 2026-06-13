@@ -18,9 +18,10 @@ import {
   ArrowLeft, ChevronDown, ChevronLeft, ChevronRight,
   Truck, CalendarDays, Inbox, Package, MapPin, Plus, X, Users,
   CheckCircle, UserRound, Trash2, Hash, Send, GripVertical,
-  Printer, BarChart2, AlertCircle,
+  Printer, BarChart2, AlertCircle, Loader2,
 } from 'lucide-react'
 import { Avatar } from '@/components/admin/workforce/Avatar'
+import { DispatchSubTabs, CustomerConfirmationTab, CrewConfirmationTab } from '@/components/admin/dispatch/DispatchConfirmations'
 import { formatCurrency } from '@/lib/format'
 import type { DispatchCalendarEvent } from '@/lib/dispatch/calendar'
 import type {
@@ -331,12 +332,38 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
   const [activeTruckId, setActiveTruckId] = useState<string | null>(null)
   const [activePersonId, setActivePersonId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
+  const [view, setView] = useState<'schedule' | 'customer' | 'crew'>('schedule')
+  const [publishing, setPublishing] = useState(false)
 
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 4_000)
     return () => clearTimeout(t)
   }, [toast])
+
+  async function handlePublish() {
+    setPublishing(true)
+    try {
+      const res = await fetch('/api/admin/dispatch/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setToast({ msg: j.error ?? 'Publish failed', isError: true }); return }
+      const emailNote = j.emailConfigured
+        ? `${j.emailsSent} email${j.emailsSent === 1 ? '' : 's'} sent`
+        : 'email not configured — crew notified in-app only'
+      setToast({
+        msg: `Published ${j.publishedJobs} job${j.publishedJobs === 1 ? '' : 's'} · ${j.crewNotified} crew · ${emailNote}`,
+        isError: false,
+      })
+    } catch {
+      setToast({ msg: 'Network error — please try again', isError: true })
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   // Track the pointer X at drag-start so we can compute drop time via delta.
   // dnd-kit captures the pointer during drag, which prevents mousemove from
@@ -661,7 +688,10 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-3">
         {/* ── Top bar ── */}
-        <DayTopBar date={date} onNavigate={navigateByDays} />
+        <DayTopBar date={date} onNavigate={navigateByDays} onPublish={handlePublish} publishing={publishing} />
+
+        {/* ── Sub-tabs ── */}
+        <DispatchSubTabs view={view} onChange={setView} />
 
         {/* ── Stats strip ── */}
         <div className="grid grid-cols-3 gap-3">
@@ -670,30 +700,40 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
           <StatCard label="Revenue (day)"  value={totalRevenue > 0 ? formatCurrency(totalRevenue) : '—'} />
         </div>
 
-        {/* ── Main board ── */}
-        <div
-          className="flex border border-slate-200 rounded-lg overflow-hidden bg-white"
-          style={{ minHeight: 520 }}
-        >
-          {/* Left: resources */}
-          <ResourcesPanel trucks={trucks} crew={crewPeople} />
+        {view === 'schedule' && (
+          /* ── Main board ── */
+          <div
+            className="flex border border-slate-200 rounded-lg overflow-hidden bg-white"
+            style={{ minHeight: 520 }}
+          >
+            {/* Left: resources */}
+            <ResourcesPanel trucks={trucks} crew={crewPeople} />
 
-          {/* Center: schedule timeline */}
-          <ScheduleGrid
-            crews={crews}
-            trucks={trucks}
-            crewPeople={crewPeople}
-            onAddCrew={handleAddCrew}
-            onDeleteCrew={handleDeleteCrew}
-            onUpdateCrew={handleUpdateCrew}
-            onAddHelper={handleAddHelper}
-            onRemoveHelper={handleRemoveHelper}
-            onUnassign={handleUnassign}
-          />
+            {/* Center: schedule timeline */}
+            <ScheduleGrid
+              crews={crews}
+              trucks={trucks}
+              crewPeople={crewPeople}
+              onAddCrew={handleAddCrew}
+              onDeleteCrew={handleDeleteCrew}
+              onUpdateCrew={handleUpdateCrew}
+              onAddHelper={handleAddHelper}
+              onRemoveHelper={handleRemoveHelper}
+              onUnassign={handleUnassign}
+            />
 
-          {/* Right: jobs */}
-          <JobsPanel events={events} cancelledEvents={cancelledEvents} crews={crews} />
-        </div>
+            {/* Right: jobs */}
+            <JobsPanel events={events} cancelledEvents={cancelledEvents} crews={crews} />
+          </div>
+        )}
+
+        {view === 'customer' && (
+          <CustomerConfirmationTab dateStr={dateStr} onToast={(msg, isError) => setToast({ msg, isError })} />
+        )}
+
+        {view === 'crew' && (
+          <CrewConfirmationTab dateStr={dateStr} />
+        )}
       </div>
 
       <DragOverlay>
@@ -717,7 +757,7 @@ export function DispatchDayDetail({ dateStr, initialData }: Props) {
 
 // ─── Day top bar ──────────────────────────────────────────────────────────────
 
-function DayTopBar({ date, onNavigate }: { date: Date; onNavigate: (delta: number) => void }) {
+function DayTopBar({ date, onNavigate, onPublish, publishing }: { date: Date; onNavigate: (delta: number) => void; onPublish: () => void; publishing: boolean }) {
   const today = new Date()
   const isToday =
     date.getDate() === today.getDate() &&
@@ -771,8 +811,15 @@ function DayTopBar({ date, onNavigate }: { date: Date; onNavigate: (delta: numbe
         <button className="text-[11px] px-2.5 py-1 border border-slate-200 rounded text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 transition-colors">
           <BarChart2 className="w-3.5 h-3.5" /> Report
         </button>
-        <button className="text-[11px] px-2.5 py-1 bg-kratos hover:bg-kratos/90 rounded text-white font-medium flex items-center gap-1.5 transition-colors">
-          <Send className="w-3.5 h-3.5" /> Publish
+        <button
+          onClick={onPublish}
+          disabled={publishing}
+          className="text-[11px] px-2.5 py-1 bg-kratos hover:bg-kratos/90 rounded text-white font-medium flex items-center gap-1.5 transition-colors disabled:opacity-60"
+        >
+          {publishing
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <Send className="w-3.5 h-3.5" />}
+          {publishing ? 'Publishing…' : 'Publish'}
         </button>
       </div>
     </div>

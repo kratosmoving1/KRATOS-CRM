@@ -701,6 +701,28 @@ Links an opportunity (job) to a crew row for a specific date. Dragging a job ont
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | Auto-updated by trigger |
 | `is_deleted` | `boolean` | Soft delete flag (unassign = soft-delete, not hard-delete) |
+| `published_at` | `timestamptz \| null` | When the dispatcher published this job (crew notified). Null = unpublished. |
+| `published_by` | `uuid \| null` | FK to `profiles.id` — who published |
+| `customer_confirmed_at` | `timestamptz \| null` | When the dispatcher confirmed the move with the customer (sent confirmation email). Distinct from the sales `booked` status. |
+| `customer_confirmed_by` | `uuid \| null` | FK to `profiles.id` — who confirmed |
+
+---
+
+## Table: `dispatch_crew_acceptances`
+
+One row per crew member per published job assignment. Created (status `pending`) when the dispatcher clicks Publish; the crew member sets it to `accepted`/`declined` from the crew app.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `assignment_id` | `uuid` | FK to `dispatch_job_assignments.id` (CASCADE delete) |
+| `person_id` | `uuid` | FK to `workforce_people.id` (CASCADE delete) |
+| `role` | `text \| null` | Their role on that crew: `driver`, `dispatcher`, or `helper` |
+| `status` | `'pending' \| 'accepted' \| 'declined'` | Default `pending` |
+| `responded_at` | `timestamptz \| null` | When the crew member accepted/declined |
+| `created_at` | `timestamptz` | |
+
+**Constraint:** `UNIQUE(assignment_id, person_id)` — one acceptance row per person per job.
 | `deleted_at` | `timestamptz \| null` | When soft-deleted |
 
 ---

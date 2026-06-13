@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, MapPin, Clock, Phone, Truck, Users, Loader2, Navigation, FileText, PenLine, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Phone, Truck, Users, Loader2, Navigation, FileText, PenLine, CheckCircle2, XCircle } from 'lucide-react'
 
 interface JobDocument {
   id: string
@@ -15,8 +15,10 @@ interface JobDocument {
 }
 
 interface CrewPerson { id: string; name: string; profile_picture_url: string | null }
+interface MyAcceptance { status: string; responded_at: string | null }
 interface Assignment {
   id: string; scheduled_date: string; start_time: string; duration_hours: number; notes: string | null
+  my_acceptance?: MyAcceptance | null
   crew: {
     id: string; name: string; notes: string | null
     truck: { id: string; name: string; category: string } | null
@@ -54,6 +56,8 @@ export default function CrewJobDetailPage() {
   const [error, setError]             = useState<string | null>(null)
   const [documents, setDocuments]     = useState<JobDocument[]>([])
   const [docsLoading, setDocsLoading] = useState(false)
+  const [acceptance, setAcceptance]   = useState<MyAcceptance | null>(null)
+  const [responding, setResponding]   = useState(false)
 
   useEffect(() => {
     fetch('/api/crew/jobs')
@@ -63,6 +67,7 @@ export default function CrewJobDetailPage() {
         const found = (d.assignments ?? []).find((a: Assignment) => a.id === params.id)
         if (!found) { setError('Job not found'); return }
         setAssignment(found)
+        setAcceptance(found.my_acceptance ?? null)
         // Load documents after assignment is found
         setDocsLoading(true)
         fetch(`/api/crew/jobs/${params.id}/documents`)
@@ -74,6 +79,24 @@ export default function CrewJobDetailPage() {
       .catch(() => setError('Failed to load job'))
       .finally(() => setLoading(false))
   }, [params.id])
+
+  async function respond(action: 'accept' | 'decline') {
+    setResponding(true)
+    try {
+      const res = await fetch(`/api/crew/jobs/${params.id}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(d.error ?? 'Failed to respond'); return }
+      setAcceptance({ status: d.status, responded_at: d.responded_at })
+    } catch {
+      setError('Network error — please try again')
+    } finally {
+      setResponding(false)
+    }
+  }
 
   const opp = assignment?.opportunity
   const crew = assignment?.crew
@@ -130,6 +153,53 @@ export default function CrewJobDetailPage() {
                 <p className="text-xs text-slate-500 mt-1 ml-6">Est. {assignment.duration_hours}h</p>
               )}
             </div>
+
+            {/* Accept / Decline — only once the dispatcher has published this job */}
+            {acceptance && (
+              <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+                {acceptance.status === 'accepted' ? (
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-green-500/15 flex items-center justify-center shrink-0">
+                      <CheckCircle2 size={18} className="text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">You accepted this job</p>
+                      <p className="text-xs text-slate-500">Tap decline below if your availability changes.</p>
+                    </div>
+                  </div>
+                ) : acceptance.status === 'declined' ? (
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
+                      <XCircle size={18} className="text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">You declined this job</p>
+                      <p className="text-xs text-slate-500">Changed your mind? Tap accept below.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-white mb-3">Can you take this job?</p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <button
+                    onClick={() => respond('accept')}
+                    disabled={responding || acceptance.status === 'accepted'}
+                    className="flex items-center justify-center gap-1.5 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white active:bg-green-700 disabled:opacity-40 transition-colors"
+                  >
+                    {responding ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => respond('decline')}
+                    disabled={responding || acceptance.status === 'declined'}
+                    className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-800 border border-slate-700 py-2.5 text-sm font-bold text-slate-200 active:bg-slate-700 disabled:opacity-40 transition-colors"
+                  >
+                    <XCircle size={14} /> Decline
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Addresses */}
             {(origin || dest) && (
